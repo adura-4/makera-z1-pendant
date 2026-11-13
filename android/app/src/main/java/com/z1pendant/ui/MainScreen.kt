@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Settings
@@ -137,18 +138,33 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         Segmented(vm.steps.map { stepLabel(it) }, stepIdx) { vm.selectStep(it); vm.haptics.press() }
 
         // ---- handwheel (hidden while the hotkey grid is expanded) ----
-        if (!expanded) Handwheel(
-            degPerClick = degPerClick, axis = axis,
-            stepText = "${stepLabel(vm.steps[stepIdx])} ${if (axis == 'A') "°" else "mm"}/click",
-            enabled = connected && running == null,
-            onClick = { vm.wheelClicks(it) },
-            modifier = Modifier.fillMaxWidth(0.62f).align(Alignment.CenterHorizontally),
-        )
+        // Collapsed, the Hotkeys toggle sits in the empty corner left of the dial instead of on a
+        // row of its own, so the tiles start right under the dial.
+        if (!expanded) Box(Modifier.fillMaxWidth()) {
+            Handwheel(
+                degPerClick = degPerClick, axis = axis,
+                stepText = "${stepLabel(vm.steps[stepIdx])} ${if (axis == 'A') "°" else "mm"}/click",
+                enabled = connected && running == null,
+                onClick = { vm.wheelClicks(it) },
+                modifier = Modifier.fillMaxWidth(0.62f).align(Alignment.Center),
+            )
+            Column(
+                Modifier.align(Alignment.BottomStart).clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .clickable { vm.hotkeysExpanded.value = true; vm.haptics.press() }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(Icons.Filled.Apps, null, tint = MaterialTheme.colorScheme.primary)
+                Text("Hotkeys", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Icon(Icons.Filled.ExpandMore, "Show all hotkeys", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
 
         // ---- hotkeys ----
         // Collapsed: dial + the first 8 hotkeys. Expanded: dial hidden, all hotkeys, and Edit to
         // rearrange (drag) / add; Edit turns into Save. Hold a tile 2 s to edit it, in either view.
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        if (expanded) Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { vm.hotkeysExpanded.value = !expanded; vm.haptics.press() },
                 enabled = !editMode, contentPadding = PaddingValues(start = 0.dp, end = 8.dp)) {
                 Text("Hotkeys", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -169,7 +185,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             editMode -> {
                 val byId = hotkeys.associateBy { it.id }
                 val order = arrangeOrder ?: hotkeys.map { it.id }
-                order.mapNotNull { byId[it] } + hotkeys.filter { it.id !in order }   // new ones go last
+                (order.mapNotNull { byId[it] } + hotkeys.filter { it.id !in order })   // new ones go last
+                    .let { l -> l.filter { it.showOnMain } + l.filterNot { it.showOnMain } }   // shown first
             }
             expanded -> visible
             else -> visible.take(8)
@@ -259,11 +276,13 @@ private fun ControlsDrawer(
     }
 }
 
-/** On/off for toggle tiles (only the light so far); null = not a toggle, or state unknown. */
+/** On/off for toggle tiles (light, vacuum); null = not a toggle, or state unknown. */
 fun toggleState(h: Hotkey, outputs: Map<String, Boolean>, connected: Boolean): Boolean? {
     val isLight = h.steps.size == 1 &&
         (h.steps[0] as? com.z1pendant.hotkeys.Step.Builtin)?.action == com.z1pendant.hotkeys.BuiltIn.LIGHT_TOGGLE
-    return if (isLight && connected) outputs["light"] else null
+    val isVacuum = h.steps.size == 1 &&
+        (h.steps[0] as? com.z1pendant.hotkeys.Step.Builtin)?.action == com.z1pendant.hotkeys.BuiltIn.VACUUM_TOGGLE
+    return if (!connected) null else if (isLight) outputs["light"] else if (isVacuum) outputs["vacuum"] else null
 }
 
 fun fmtPos(v: Double?, connected: Boolean) = if (v == null || !connected) "---.---" else "%9.3f".format(Locale.US, v)

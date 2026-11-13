@@ -68,6 +68,7 @@ interface Dialect {
     fun zeroAxes(axes: String): List<String>       // e.g. "X", "XYZ"
     fun feedOverride(percent: Int): List<String>
     fun light(on: Boolean): List<String>
+    fun vacuum(on: Boolean): List<String>
     fun jogMove(axis: Char, dist: Double, feedMmMin: Double): String
     fun absoluteMode(): String
 }
@@ -79,6 +80,8 @@ object GrblishDialect : Dialect {
     override fun feedOverride(percent: Int) = listOf("M220S$percent")
     // Z1 config: switch.light.input_on_command M821 / off M822 (confirmed on the machine 2026-11-13).
     override fun light(on: Boolean) = listOf(if (on) "M821" else "M822")
+    // Z1 config: switch.extendout (P2.2, the vacuum / chip-clear output) on M851 / off M852.
+    override fun vacuum(on: Boolean) = listOf(if (on) "M851" else "M852")
     override fun jogMove(axis: Char, dist: Double, feedMmMin: Double) =
         "G91G1$axis${fmt(dist)}F${"%.0f".format(java.util.Locale.US, feedMmMin)}"
     override fun absoluteMode() = "G90"

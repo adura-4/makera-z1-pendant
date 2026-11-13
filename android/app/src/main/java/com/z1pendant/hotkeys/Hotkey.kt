@@ -16,7 +16,7 @@ enum class BuiltIn(val label: String) {
     NEXT_AXIS("Next axis"), AXIS_X("Select X"), AXIS_Y("Select Y"), AXIS_Z("Select Z"), AXIS_A("Select A"),
     STEP_UP("Bigger step"), STEP_DOWN("Smaller step"),
     FEED_UP("Feed override +10%"), FEED_DOWN("Feed override −10%"), FEED_100("Feed override 100%"),
-    LIGHT_TOGGLE("Light on/off"),
+    LIGHT_TOGGLE("Light on/off"), VACUUM_TOGGLE("Vacuum on/off"),
 }
 
 sealed class Step {
@@ -111,8 +111,7 @@ data class Hotkey(
                 steps = listOf(Step.GCode("G90\nG53 G0 Z0\nG0 X0 Y0")), confirm = true),
             Hotkey(label = "Z up", icon = "mi:VerticalAlignTop", kind = Kind.GCODE, steps = listOf(Step.GCode("G90\nG53 G0 Z0"))),
             Hotkey(label = "Light", icon = "mi:Lightbulb", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.LIGHT_TOGGLE)), onlyIdle = false),
-            Hotkey(label = "Vacuum on", icon = "mi:Air", kind = Kind.GCODE, steps = listOf(Step.GCode("M851")), onlyIdle = false, showOnMain = false),
-            Hotkey(label = "Vacuum off", icon = "mi:Block", kind = Kind.GCODE, steps = listOf(Step.GCode("M852")), onlyIdle = false, showOnMain = false),
+            Hotkey(label = "Vacuum", icon = "mi:Air", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.VACUUM_TOGGLE)), onlyIdle = false),
             Hotkey(label = "Spindle stop", icon = "mi:Stop", kind = Kind.GCODE, steps = listOf(Step.GCode("M5")), onlyIdle = false),
             Hotkey(label = "Next axis", icon = "mi:SwapHoriz", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.NEXT_AXIS)), onlyIdle = false, showOnMain = false),
         )

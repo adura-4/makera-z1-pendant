@@ -80,7 +80,9 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
         val body = text.substringAfter('{').substringBefore('}')
         val f = body.split('|').associate { it.substringBefore(':') to it.substringAfter(':').split(',') }
         val m = outputs.value.toMutableMap()
+        // G = light, beep, extendin, extendout state, extendout pwm (community SimpleShell::diagnose_command)
         f["G"]?.getOrNull(0)?.trim()?.let { m["light"] = it == "1" }
+        f["G"]?.getOrNull(3)?.trim()?.let { m["vacuum"] = it == "1" }
         outputs.value = m
     }
 

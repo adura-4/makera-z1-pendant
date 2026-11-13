@@ -44,6 +44,7 @@ class Machine:
         self.fro = 100.0
         self.spindle = 0.0
         self.light = True
+        self.vacuum = False
         self.state = "Idle"
         self.homed = False
         self.hold = False
@@ -91,6 +92,10 @@ class Machine:
                 self.light = True
             if 822 in m:
                 self.light = False
+            if 851 in m:
+                self.vacuum = True
+            if 852 in m:
+                self.vacuum = False
             if 3 in m or 4 in m:
                 self.spindle = vals.get("S", self.spindle or 10000.0)
             if 5 in m:
@@ -303,8 +308,8 @@ class Client(threading.Thread):
                         self.m.stop()
                 elif ptype == P.CTRL_MULTI and payload.strip() == b"diagnose":
                     # like the firmware: answered with 0x82, no "ok"
-                    self.tx(P.DIAG_RES, "{S:0,10000,0,0,25,23|L:0,0|V:1,28|F:0,0|G:%d,0,0,0,0|T:0|C:1|E:0,0,0,0,0,1,1,0|P:0,0|I:0|RSSI:-60}"
-                            % (1 if self.m.light else 0))
+                    self.tx(P.DIAG_RES, "{S:0,10000,0,0,25,23|L:0,0|V:1,28|F:0,0|G:%d,0,0,%d,%d|T:0|C:1|E:0,0,0,0,0,1,1,0|P:0,0|I:0|RSSI:-60}"
+                            % (1 if self.m.light else 0, 1 if self.m.vacuum else 0, 80 if self.m.vacuum else 0))
                 elif ptype == P.CTRL_MULTI:
                     line = payload.decode("ascii", "replace")
                     log(f"{self.addr} LINE {line!r}")

@@ -195,36 +195,53 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             BuiltIn.FEED_UP -> d.feedOverride((fro + 10).coerceAtMost(300))
             BuiltIn.FEED_DOWN -> d.feedOverride((fro - 10).coerceAtLeast(10))
             BuiltIn.FEED_100 -> d.feedOverride(100)
-            BuiltIn.LIGHT_TOGGLE -> {
-                val on = link.outputs.value["light"] == true
-                link.assumeOutput("light", !on)     // tile flips now; the read-backs confirm it
-                viewModelScope.launch {
-                    kotlinx.coroutines.delay(1200); link.refreshOutputs()
-                }
-                d.light(!on)              // unknown state = turn it on
-            }
+            BuiltIn.LIGHT_TOGGLE -> toggleOutput("light") { d.light(it) }
+            BuiltIn.VACUUM_TOGGLE -> toggleOutput("vacuum") { d.vacuum(it) }
         }
     }
 
-    // ---- hotkeys ------------------------------------------------------------------------------
-    private fun loadHotkeys(): List<Hotkey> = try {
-        if (hotkeyFile.exists()) migrate(HotkeyJson.import(hotkeyFile.readText())) else Hotkey.defaults()
-    } catch (_: Exception) { Hotkey.defaults() }
-
-    /** v0.1 defaults had "Light on" (M821) + "Light off" (M822); fold them into one toggle. */
-    private fun migrate(list: List<Hotkey>): List<Hotkey> {
-        fun isOnly(h: Hotkey, code: String) = h.steps.size == 1 && (h.steps[0] as? com.z1pendant.hotkeys.Step.GCode)?.text?.trim() == code
-        val on = list.indexOfFirst { it.label == "Light on" && isOnly(it, "M821") }
-        val off = list.indexOfFirst { it.label == "Light off" && isOnly(it, "M822") }
-        if (on < 0 || off < 0) return list
-        val toggle = list[on].copy(label = "Light", kind = com.z1pendant.hotkeys.Kind.BUILTIN,
-            steps = listOf(com.z1pendant.hotkeys.Step.Builtin(BuiltIn.LIGHT_TOGGLE)),
-            triggers = list[on].triggers + list[off].triggers)
-        return list.mapIndexedNotNull { i, h -> when (i) { on -> toggle; off -> null; else -> h } }
-            .also { hotkeyFile.writeText(HotkeyJson.export(it)) }
+    /** Flip an on/off output. The tile flips now; the diagnose read-back confirms it. Unknown = turn on. */
+    private fun toggleOutput(name: String, cmd: (Boolean) -> List<String>): List<String> {
+        val on = link.outputs.value[name] == true
+        link.assumeOutput(name, !on)
+        viewModelScope.launch { kotlinx.coroutines.delay(1200); link.refreshOutputs() }
+        return cmd(!on)
     }
 
-    private fun saveHotkeys(list: List<Hotkey>) {
+    // ---- hotkeys ------------------------------------------------------------------------------
+    private fun loadHotkeys(): List<Hotkey> = shownFirst(try {
+        if (hotkeyFile.exists()) migrate(HotkeyJson.import(hotkeyFile.readText())) else Hotkey.defaults()
+    } catch (_: Exception) { Hotkey.defaults() })
+
+    /** Grid order rule: hotkeys shown in the grid always come first, hidden (button-only) ones after. */
+    private fun shownFirst(l: List<Hotkey>) = l.filter { it.showOnMain } + l.filterNot { it.showOnMain }
+
+    /**
+     * Old defaults had separate on/off hotkeys: "Light on" (M821) + "Light off" (M822), and
+     * "Vacuum on" (M851) + "Vacuum off" (M852). Fold each pair into one toggle, kept where the
+     * "on" one was, with both sets of button bindings. Shown in the grid if either one was.
+     */
+    private fun migrate(list: List<Hotkey>): List<Hotkey> {
+        fun isOnly(h: Hotkey, code: String) = h.steps.size == 1 && (h.steps[0] as? com.z1pendant.hotkeys.Step.GCode)?.text?.trim() == code
+        fun fold(l: List<Hotkey>, onLabel: String, onCode: String, offLabel: String, offCode: String,
+                 label: String, action: BuiltIn): List<Hotkey> {
+            val on = l.indexOfFirst { it.label == onLabel && isOnly(it, onCode) }
+            val off = l.indexOfFirst { it.label == offLabel && isOnly(it, offCode) }
+            if (on < 0 || off < 0) return l
+            val toggle = l[on].copy(label = label, kind = com.z1pendant.hotkeys.Kind.BUILTIN,
+                steps = listOf(com.z1pendant.hotkeys.Step.Builtin(action)),
+                showOnMain = l[on].showOnMain || l[off].showOnMain,
+                triggers = l[on].triggers + l[off].triggers)
+            return l.mapIndexedNotNull { i, h -> when (i) { on -> toggle; off -> null; else -> h } }
+        }
+        val out = fold(fold(list, "Light on", "M821", "Light off", "M822", "Light", BuiltIn.LIGHT_TOGGLE),
+            "Vacuum on", "M851", "Vacuum off", "M852", "Vacuum", BuiltIn.VACUUM_TOGGLE)
+        if (out != list) hotkeyFile.writeText(HotkeyJson.export(out))
+        return out
+    }
+
+    private fun saveHotkeys(all: List<Hotkey>) {
+        val list = shownFirst(all)
         hotkeys.value = list
         viewModelScope.launch(Dispatchers.IO) { hotkeyFile.writeText(HotkeyJson.export(list)) }
     }
@@ -246,9 +263,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startArranging() { arrangeOrder.value = hotkeys.value.map { it.id }; editMode.value = true }
     fun moveInArrangement(id: String, to: Int) {
-        val l = (arrangeOrder.value ?: return).toMutableList()
+        // Same order the grid shows (shown first), so `to` means the slot under the finger.
+        // A shown tile stays among the shown ones, a hidden tile among the hidden ones.
+        val byId = hotkeys.value.associateBy { it.id }
+        val l = (arrangeOrder.value ?: return).let { ids ->
+            ids.filter { byId[it]?.showOnMain == true } + ids.filterNot { byId[it]?.showOnMain == true }
+        }.toMutableList()
         val from = l.indexOf(id); if (from < 0) return
-        l.add(to.coerceIn(0, l.lastIndex), l.removeAt(from))
+        val nShown = l.count { byId[it]?.showOnMain == true }
+        val range = if (byId[id]?.showOnMain == true) 0 until nShown else nShown..l.lastIndex
+        if (range.isEmpty()) return
+        val dest = to.coerceIn(range.first, range.last)
+        if (dest == from) return                       // dragged past the shown/hidden boundary: stays put
+        l.add(dest, l.removeAt(from))
         arrangeOrder.value = l
         haptics.tick()
     }
