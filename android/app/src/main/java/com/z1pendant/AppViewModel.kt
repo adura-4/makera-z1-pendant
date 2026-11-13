@@ -47,6 +47,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val editMode = MutableStateFlow(false)
     /** Hotkey grid expanded (dial hidden, every hotkey shown). */
     val hotkeysExpanded = MutableStateFlow(false)
+    /** Bottom drawer with feed override + Hold/Resume/Reset pulled up. */
+    val controlsOpen = MutableStateFlow(false)
     /** While arranging: the working order (ids). Saved by [saveArrangement]. */
     val arrangeOrder = MutableStateFlow<List<String>?>(null)
 

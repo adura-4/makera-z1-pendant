@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -187,15 +189,75 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         Spacer(Modifier.height(4.dp))
         }
 
-        // ---- pinned bottom: feed override + hold/resume/reset (always in reach) ----
-        FeedOverride(st?.feedOverride, connected) { vm.setFeedOverride(it) }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-            Button(onClick = vm::hold, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706), contentColor = Color.White)) { Text("Hold", fontSize = 16.sp) }
-            Button(onClick = vm::resume, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A), contentColor = Color.White)) { Text("Resume", fontSize = 16.sp) }
-            Button(onClick = vm::reset, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White)) { Text("Reset", fontSize = 16.sp) }
+        // ---- bottom drawer: feed override + hold/resume/reset ----
+        // Closed it's a slim handle. Swipe up (or tap) to open, swipe down to close. It opens by
+        // itself when the machine needs those buttons: Hold, Alarm, a hotkey running, or motion
+        // that isn't a dial jog (e.g. a job started from Studio). If it opened itself, it closes
+        // again once the machine is back to Idle.
+        val open by vm.controlsOpen.collectAsState()
+        val s = st?.state
+        val machineMoving = s.equals("Run", true) &&
+            android.os.SystemClock.elapsedRealtime() - vm.jog.lastJogAt > 1500
+        val needsControls = connected && (running != null || machineMoving ||
+            s.equals("Hold", true) || s.equals("Pause", true) || s.equals("Alarm", true))
+        var autoOpened by remember { mutableStateOf(false) }
+        LaunchedEffect(needsControls) {
+            if (needsControls && !vm.controlsOpen.value) { vm.controlsOpen.value = true; autoOpened = true }
+            if (!needsControls && autoOpened) { vm.controlsOpen.value = false; autoOpened = false }
+        }
+        ControlsDrawer(open, feed = st?.feedOverride, connected = connected,
+            onOpen = { o -> if (o != open) { vm.controlsOpen.value = o; autoOpened = false; vm.haptics.press() } },
+            onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset)
+    }
+}
+
+@Composable
+private fun ControlsDrawer(
+    open: Boolean, feed: Double?, connected: Boolean, onOpen: (Boolean) -> Unit,
+    onFeed: (Int) -> Unit, onHold: () -> Unit, onResume: () -> Unit, onReset: () -> Unit,
+) {
+    val swipeDp = 24.dp
+    val swipePx = with(androidx.compose.ui.platform.LocalDensity.current) { swipeDp.toPx() }
+    // Vertical swipe anywhere on the drawer; horizontal drags still reach the feed slider.
+    val swipe = Modifier.pointerInput(open) {
+        var dy = 0f
+        detectVerticalDragGestures(
+            onDragStart = { dy = 0f },
+            onVerticalDrag = { c, d -> dy += d; c.consume() },
+            onDragEnd = { if (dy < -swipePx) onOpen(true) else if (dy > swipePx) onOpen(false) },
+        )
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp)
+            .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 10.dp, bottomEnd = 10.dp))
+            .background(if (open) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+            .then(swipe),
+    ) {
+        // Handle: grab bar, and the current feed so you can see it without opening.
+        Box(Modifier.fillMaxWidth().height(30.dp).clickable { onOpen(!open) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)))
+            if (!open) {
+                Text("Feed ${feed?.toInt() ?: 100}%", fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp))
+                Text("Hold · Resume · Reset", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp))
+            }
+        }
+        androidx.compose.animation.AnimatedVisibility(open,
+            enter = androidx.compose.animation.expandVertically(expandFrom = Alignment.Top),
+            exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Top)) {
+            Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FeedOverride(feed, connected, onFeed)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onHold, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706), contentColor = Color.White)) { Text("Hold", fontSize = 16.sp) }
+                    Button(onClick = onResume, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A), contentColor = Color.White)) { Text("Resume", fontSize = 16.sp) }
+                    Button(onClick = onReset, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White)) { Text("Reset", fontSize = 16.sp) }
+                }
+            }
         }
     }
 }

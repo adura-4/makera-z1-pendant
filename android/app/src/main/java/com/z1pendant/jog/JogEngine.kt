@@ -72,6 +72,8 @@ class JogEngine(
     @Volatile private var targetAxis: Char = 'X'
     @Volatile private var needAbsolute = false
     @Volatile private var lastSendAt = 0L
+    /** elapsedRealtime of the last jog move sent (0 = never). */
+    val lastJogAt: Long get() = lastSendAt
     @Volatile private var lastCmdV = 0.0                 // mm/s of the last move sent
     @Volatile private var lastDropAt = 0L
     private var job: Job? = null
