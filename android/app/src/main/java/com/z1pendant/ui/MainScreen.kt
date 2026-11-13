@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Settings
@@ -138,8 +137,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         Segmented(vm.steps.map { stepLabel(it) }, stepIdx) { vm.selectStep(it); vm.haptics.press() }
 
         // ---- handwheel (hidden while the hotkey grid is expanded) ----
-        // Collapsed, the Hotkeys toggle sits in the empty corner left of the dial instead of on a
-        // row of its own, so the tiles start right under the dial.
+        // Collapsed, the hotkeys toggle is a bare down-chevron in the empty corner left of the
+        // dial, so the tiles start right under the dial. Expanded, an up-chevron brings the dial back.
         if (!expanded) Box(Modifier.fillMaxWidth()) {
             Handwheel(
                 degPerClick = degPerClick, axis = axis,
@@ -148,16 +147,9 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 onClick = { vm.wheelClicks(it) },
                 modifier = Modifier.fillMaxWidth(0.75f).align(Alignment.Center),
             )
-            Column(
-                Modifier.align(Alignment.BottomStart).clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .clickable { vm.hotkeysExpanded.value = true; vm.haptics.press() }
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Icon(Icons.Filled.Apps, null, tint = MaterialTheme.colorScheme.primary)
-                Text("Hotkeys", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                Icon(Icons.Filled.ExpandMore, "Show all hotkeys", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(onClick = { vm.hotkeysExpanded.value = true; vm.haptics.press() },
+                modifier = Modifier.align(Alignment.BottomStart)) {
+                Icon(Icons.Filled.ExpandMore, "Show all hotkeys", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -165,10 +157,9 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // Collapsed: dial + the first 8 hotkeys. Expanded: dial hidden, all hotkeys, and Edit to
         // rearrange (drag) / add; Edit turns into Save. Hold a tile 2 s to edit it, in either view.
         if (expanded) Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { vm.hotkeysExpanded.value = !expanded; vm.haptics.press() },
-                enabled = !editMode, contentPadding = PaddingValues(start = 0.dp, end = 8.dp)) {
-                Text("Hotkeys", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
-                Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, if (expanded) "Collapse" else "Expand")
+            IconButton(onClick = { vm.hotkeysExpanded.value = false; vm.haptics.press() }, enabled = !editMode) {
+                Icon(Icons.Filled.ExpandLess, "Back to the dial", Modifier.size(32.dp),
+                    tint = if (editMode) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.weight(1f))
             if (expanded) {
@@ -198,7 +189,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             onLong = { h -> vm.haptics.majorTick(); onEdit(h) },
             onMove = { id, to -> vm.moveInArrangement(id, to) },
             onLift = { vm.haptics.majorTick() })
-        if (shown.isEmpty()) Text("No hotkeys. Tap Hotkeys, then +.", fontSize = 13.sp)
+        if (shown.isEmpty()) Text("No hotkeys. Tap the arrow, then +.", fontSize = 13.sp)
 
         Spacer(Modifier.height(4.dp))
         }
