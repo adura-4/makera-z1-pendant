@@ -137,8 +137,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         Segmented(vm.steps.map { stepLabel(it) }, stepIdx) { vm.selectStep(it); vm.haptics.press() }
 
         // ---- handwheel (hidden while the hotkey grid is expanded) ----
-        // Collapsed, the hotkeys toggle is a bare down-chevron in the empty corner left of the
-        // dial, so the tiles start right under the dial. Expanded, an up-chevron brings the dial back.
+        // Collapsed, the hotkeys toggle is a bare up-chevron (the grid slides up) in the empty corner left of the
+        // dial, so the tiles start right under the dial. Expanded, a down-chevron brings the dial back.
         if (!expanded) Box(Modifier.fillMaxWidth()) {
             Handwheel(
                 degPerClick = degPerClick, axis = axis,
@@ -149,7 +149,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             )
             IconButton(onClick = { vm.hotkeysExpanded.value = true; vm.haptics.press() },
                 modifier = Modifier.align(Alignment.BottomStart)) {
-                Icon(Icons.Filled.ExpandMore, "Show all hotkeys", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Filled.ExpandLess, "Show all hotkeys", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -158,7 +158,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // rearrange (drag) / add; Edit turns into Save. Hold a tile 2 s to edit it, in either view.
         if (expanded) Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { vm.hotkeysExpanded.value = false; vm.haptics.press() }, enabled = !editMode) {
-                Icon(Icons.Filled.ExpandLess, "Back to the dial", Modifier.size(32.dp),
+                Icon(Icons.Filled.ExpandMore, "Back to the dial", Modifier.size(32.dp),
                     tint = if (editMode) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.weight(1f))
