@@ -95,11 +95,18 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Settings") }
         }
 
-        running?.let { r ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer).padding(8.dp),
+        // Long-running hotkeys (homing, multi-step sequences with waits) get a banner with the
+        // current step and Cancel. Quick ones finish before it would appear, so nothing flashes.
+        var showRunning by remember { mutableStateOf(false) }
+        LaunchedEffect(running?.label) {
+            showRunning = false
+            if (running != null) { kotlinx.coroutines.delay(1500); showRunning = true }
+        }
+        running?.takeIf { showRunning }?.let { r ->
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.secondaryContainer).padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Running: ${r.label}", fontWeight = FontWeight.SemiBold)
+                    Text("Running: ${r.label}", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     Text(r.stepText, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 TextButton(onClick = { vm.runner.cancel() }) { Text("Cancel") }
@@ -196,14 +203,22 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
 
         // ---- bottom drawer: feed override + hold/resume/reset ----
         // Closed it's a slim handle. Swipe up (or tap) to open, swipe down to close. It opens by
-        // itself when the machine needs those buttons: Hold, Alarm, a hotkey running, or motion
-        // that isn't a dial jog (e.g. a job started from Studio). If it opened itself, it closes
-        // again once the machine is back to Idle.
+        // itself only when something other than the pendant is driving the machine or it stops:
+        // Hold, Alarm, or motion the pendant didn't start (e.g. a job started from Studio). Dial
+        // jogs and hotkeys (Home, Z up, ...) don't open it. If it opened itself, it closes again
+        // once the machine is back to Idle.
         val open by vm.controlsOpen.collectAsState()
         val s = st?.state
-        val machineMoving = s.equals("Run", true) &&
+        // A hotkey's motion keeps the machine busy after the hotkey "finishes" (the firmware acks
+        // a line when it's queued, not when the move ends), so remember it until Idle again.
+        var pendantMotion by remember { mutableStateOf(false) }
+        LaunchedEffect(running != null, s) {
+            if (running != null) pendantMotion = true
+            else if (s.equals("Idle", true) || !connected) pendantMotion = false
+        }
+        val machineMoving = (s.equals("Run", true) || s.equals("Home", true)) && !pendantMotion && running == null &&
             android.os.SystemClock.elapsedRealtime() - vm.jog.lastJogAt > 1500
-        val needsControls = connected && (running != null || machineMoving ||
+        val needsControls = connected && (machineMoving ||
             s.equals("Hold", true) || s.equals("Pause", true) || s.equals("Alarm", true))
         var autoOpened by remember { mutableStateOf(false) }
         LaunchedEffect(needsControls) {

@@ -7,7 +7,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
@@ -17,6 +19,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.z1pendant.hotkeys.Hotkey
 import com.z1pendant.ui.ConsoleScreen
 import com.z1pendant.ui.HotkeyEditor
@@ -119,7 +124,20 @@ fun App(vm: AppViewModel) {
     confirm?.let { h ->
         AlertDialog(onDismissRequest = { vm.confirmFor.value = null },
             title = { Text("Run “${h.label}”?") },
-            text = { Text(h.steps.joinToString("\n") { s -> "• " + s.describe { id -> vm.hotkeys.value.firstOrNull { it.id == id }?.label } }) },
+            // G-code steps list every line as it will be sent; other steps get a one-line description.
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    h.steps.forEach { s ->
+                        if (s is com.z1pendant.hotkeys.Step.GCode) {
+                            s.text.lines().filter { it.isNotBlank() }.forEach {
+                                Text(it.trim(), fontFamily = FontFamily.Monospace, fontSize = 15.sp)
+                            }
+                        } else {
+                            Text(s.describe { id -> vm.hotkeys.value.firstOrNull { it.id == id }?.label })
+                        }
+                    }
+                }
+            },
             confirmButton = { TextButton(onClick = vm::confirmRun) { Text("Run") } },
             dismissButton = { TextButton(onClick = { vm.confirmFor.value = null }) { Text("Cancel") } })
     }
