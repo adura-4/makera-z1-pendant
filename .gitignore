@@ -1,0 +1,4 @@
+# built outputs (rebuild with gradlew assembleRelease)
+*.apk
+__pycache__/
+*.log
