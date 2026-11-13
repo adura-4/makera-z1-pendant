@@ -163,8 +163,11 @@ class JogEngine(
             .coerceIn(maxOf(config.minFeedMmMin / 60.0, vHand * 0.3), vmax)
         // Floor of 5 clicks: at the start of a slow turn the speed estimate is still tiny, and a
         // precise 0.01 mm turn must not lose clicks. The feed correction clears them quickly.
-        // The start-delay term covers clicks that pile up while the firmware holds its queue.
-        val cap = maxOf(5 * stp, vCmd * vCmd / (2 * config.accelMmS2) + vCmd * config.tickMs / 1000.0 +
+        // The floor stops at 5 mm (one click at the 5 mm step), so a big step can't leave a long
+        // move running after you stop turning. The start-delay term covers clicks that pile up
+        // while the firmware holds its queue.
+        val floorMm = maxOf(stp, min(5 * stp, 5.0))
+        val cap = maxOf(floorMm, vCmd * vCmd / (2 * config.accelMmS2) + vCmd * config.tickMs / 1000.0 +
             vHand * (config.bufferS + config.startDelayS) + stp)
         val allowed = cap - lead
 

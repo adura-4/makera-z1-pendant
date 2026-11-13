@@ -32,10 +32,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val link = MakeraLink()
 
     // ---- UI state -------------------------------------------------------------------------
-    val steps = listOf(0.001, 0.01, 0.1, 1.0)
+    val steps = listOf(0.005, 0.01, 0.1, 1.0, 5.0)
     val axes = listOf('X', 'Y', 'Z', 'A')
     val axis = MutableStateFlow(prefs.getString("axis", "X")!!.first())
-    val stepIndex = MutableStateFlow(prefs.getInt("stepIndex", 2).coerceIn(0, 3))
+    val stepIndex = MutableStateFlow(prefs.getInt("stepIndex", 2).coerceIn(0, steps.lastIndex))
     val target = MutableStateFlow(loadTarget())
     val discovered = MutableStateFlow<List<Pair<MachineTarget, Boolean>>>(emptyList())
     val scanning = MutableStateFlow(false)

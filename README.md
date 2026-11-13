@@ -36,7 +36,8 @@ Why the buffer: Smoothie holds a queue that was empty for `queue_delay_time_ms` 
 it. If the queue runs dry mid-turn, the machine stops and restarts 100 ms late (this was the "laggy,
 not smooth" feel in the first finger test). The **lead** (commanded but not yet travelled, dead-reckoned
 from the last status) plus waiting clicks is capped at
-`max(5 clicks, v²/2a + v·tick + vHand·(0.12 + 0.1) + 1 click)`. Clicks beyond that are dropped, with at
+`max(min(5 clicks, 5 mm), v²/2a + v·tick + vHand·(0.12 + 0.1) + 1 click)` (steps 0.005 · 0.01 · 0.1 · 1 · 5 mm;
+the 5 mm floor means one click at the 5 mm step). Clicks beyond that are dropped, with at
 most one thud per 150 ms. When input stops or the link drops, the axis stops within that distance.
 Simulator (with the 100 ms start delay modelled): slow and moderate turns start once and never run dry,
 with no dropped clicks. Spinning faster than 50 mm/s pins F3000 and drops the excess.
@@ -60,7 +61,7 @@ Unbound gamepad buttons are swallowed there (B would otherwise act as Back).
 
 ## Test hooks
 - `am start -n com.z1pendant/.MainActivity --es host <ip> [--ei port 2222] [--es name …]` connects.
-- `… --ei testclicks <±n> --ei testms <ms> [--ei teststep 0..3]` injects a click burst.
+- `… --ei testclicks <±n> --ei testms <ms> [--ei teststep 0..4]` injects a click burst.
 - Dell test rig (`~/z1pendant`): `simctl.sh start|stop`, `wake.sh`, `tap.sh "<text>"`, `wheel.sh`.
   The Dell's ufw blocks inbound 2222, so the Pixel reaches the sim via `adb reverse tcp:2222 tcp:2222`
   and `--es host 127.0.0.1`. Discovery over Wi-Fi works (the sim broadcasts on 192.168.1.255).
