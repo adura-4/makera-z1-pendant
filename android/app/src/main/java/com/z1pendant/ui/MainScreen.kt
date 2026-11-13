@@ -133,8 +133,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             }
         }
 
-        // ---- axis + step selectors ----
-        Segmented(vm.axes.map { it.toString() }, vm.axes.indexOf(axis)) { vm.selectAxis(vm.axes[it]); vm.haptics.press() }
+        // ---- step selector (the axis is picked by tapping its row in the readout above) ----
         Segmented(vm.steps.map { stepLabel(it) }, stepIdx) { vm.selectStep(it); vm.haptics.press() }
 
         // ---- handwheel (hidden while the hotkey grid is expanded) ----
