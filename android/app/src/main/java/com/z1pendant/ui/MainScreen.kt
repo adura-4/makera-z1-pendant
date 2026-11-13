@@ -181,8 +181,6 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             onLong = { h -> vm.haptics.majorTick(); onEdit(h) },
             onMove = { id, to -> vm.moveInArrangement(id, to) },
             onLift = { vm.haptics.majorTick() })
-        if (!expanded && visible.size > 8) Text("+${visible.size - 8} more: tap Hotkeys", fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (shown.isEmpty()) Text("No hotkeys. Tap Hotkeys, then +.", fontSize = 13.sp)
 
         Spacer(Modifier.height(4.dp))
