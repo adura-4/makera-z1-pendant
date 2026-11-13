@@ -234,8 +234,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 triggers = l[on].triggers + l[off].triggers)
             return l.mapIndexedNotNull { i, h -> when (i) { on -> toggle; off -> null; else -> h } }
         }
+        // Old "Z up" / "Go to XY0" defaults raised Z with G53 G0 Z0, which is past the soft limit
+        // (top = -1) and halts the machine. Rewrite exactly that line to the safe height.
+        val zFix = Regex("""^\s*G53\s*G0\s*Z0(\.0*)?\s*$""", RegexOption.IGNORE_CASE)
+        fun fixZ(h: Hotkey) = h.copy(steps = h.steps.map { st ->
+            if (st is com.z1pendant.hotkeys.Step.GCode)
+                st.copy(text = st.text.lines().joinToString("\n") { if (zFix.matches(it)) "G53 G0 Z${Hotkey.SAFE_Z}" else it })
+            else st
+        })
         val out = fold(fold(list, "Light on", "M821", "Light off", "M822", "Light", BuiltIn.LIGHT_TOGGLE),
-            "Vacuum on", "M851", "Vacuum off", "M852", "Vacuum", BuiltIn.VACUUM_TOGGLE)
+            "Vacuum on", "M851", "Vacuum off", "M852", "Vacuum", BuiltIn.VACUUM_TOGGLE).map(::fixZ)
         if (out != list) hotkeyFile.writeText(HotkeyJson.export(out))
         return out
     }

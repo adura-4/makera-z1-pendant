@@ -90,6 +90,11 @@ data class Hotkey(
         .put("triggers", JSONArray(triggers.map { it.toJson() }))
 
     companion object {
+        /**
+         * Machine Z for "Z up" moves. The Z1's soft limit top is homed MPos -1 (confirmed: a move
+         * past -1 alarms "Soft Endstop ... was exceeded"), so G53 Z0 halts the machine. -2 leaves 1 mm.
+         */
+        const val SAFE_Z = "-2"
         fun fromJson(o: JSONObject): Hotkey {
             val steps = o.optJSONArray("steps")?.let { a -> (0 until a.length()).mapNotNull { Step.fromJson(a.getJSONObject(it)) } } ?: emptyList()
             val trig = o.optJSONArray("triggers")?.let { a -> (0 until a.length()).map { Trigger.fromJson(a.getJSONObject(it)) } } ?: emptyList()
@@ -108,8 +113,8 @@ data class Hotkey(
             Hotkey(label = "Zero XY", icon = "mi:GpsFixed", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.ZERO_XY))),
             Hotkey(label = "Zero Z", icon = "mi:VerticalAlignBottom", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.ZERO_Z))),
             Hotkey(label = "Go to XY0", icon = "mi:CenterFocusStrong", kind = Kind.GCODE,
-                steps = listOf(Step.GCode("G90\nG53 G0 Z0\nG0 X0 Y0")), confirm = true),
-            Hotkey(label = "Z up", icon = "mi:VerticalAlignTop", kind = Kind.GCODE, steps = listOf(Step.GCode("G90\nG53 G0 Z0"))),
+                steps = listOf(Step.GCode("G90\nG53 G0 Z$SAFE_Z\nG0 X0 Y0")), confirm = true),
+            Hotkey(label = "Z up", icon = "mi:VerticalAlignTop", kind = Kind.GCODE, steps = listOf(Step.GCode("G90\nG53 G0 Z$SAFE_Z"))),
             Hotkey(label = "Light", icon = "mi:Lightbulb", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.LIGHT_TOGGLE)), onlyIdle = false),
             Hotkey(label = "Vacuum", icon = "mi:Air", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.VACUUM_TOGGLE)), onlyIdle = false),
             Hotkey(label = "Spindle stop", icon = "mi:Stop", kind = Kind.GCODE, steps = listOf(Step.GCode("M5")), onlyIdle = false),
