@@ -142,7 +142,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         if (!expanded) Box(Modifier.fillMaxWidth()) {
             Handwheel(
                 degPerClick = degPerClick, axis = axis,
-                stepText = "${stepLabel(vm.steps[stepIdx])} ${if (axis == 'A') "°" else "mm"}/click",
+                stepText = "${stepLabel(vm.steps[stepIdx])}${if (axis == 'A') "°" else "mm"}/click",
                 enabled = connected && running == null,
                 onClick = { vm.wheelClicks(it) },
                 modifier = Modifier.fillMaxWidth(0.75f).align(Alignment.Center),

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -100,24 +102,28 @@ fun Handwheel(
             drawCircle(if (active) accent.copy(alpha = 0.6f) else tick.copy(alpha = 0.25f), radius = r * 0.98f, style = Stroke(width = r * 0.025f))
             rotate(angle, c) {
                 val n = (360f / degPerClick).toInt().coerceAtLeast(6)
+                // The tick sitting at 12 o'clock is lit in the accent colour; turning the wheel one
+                // detent brings the next tick up there and it lights instead.
+                val top = Math.floorMod(Math.round(-angle * n / 360f), n)
                 for (i in 0 until n) {
                     val t = (i * 360f / n - 90f) * PI.toFloat() / 180f
                     val major = i % 5 == 0
-                    val r0 = r * (if (major) 0.78f else 0.84f); val r1 = r * 0.93f
-                    drawLine(tick.copy(alpha = (if (major) 0.9f else 0.5f) * dim),
+                    val lit = i == top
+                    val r0 = r * (if (lit) 0.74f else if (major) 0.78f else 0.84f); val r1 = r * 0.93f
+                    drawLine(if (lit) accent.copy(alpha = dim) else tick.copy(alpha = (if (major) 0.9f else 0.5f) * dim),
                         Offset(c.x + r0 * cos(t), c.y + r0 * sin(t)), Offset(c.x + r1 * cos(t), c.y + r1 * sin(t)),
-                        strokeWidth = r * (if (major) 0.022f else 0.012f), cap = StrokeCap.Round)
+                        strokeWidth = r * (if (lit) 0.03f else if (major) 0.022f else 0.012f), cap = StrokeCap.Round)
                 }
                 // finger dimple
                 val t = -90f * PI.toFloat() / 180f
                 drawCircle(accent.copy(alpha = dim), radius = r * 0.09f, center = Offset(c.x + r * 0.6f * cos(t), c.y + r * 0.6f * sin(t)))
             }
-            drawCircle(Color.Black.copy(alpha = 0.25f), radius = r * 0.3f)
+            drawCircle(Color.Black.copy(alpha = 0.25f), radius = r * 0.46f)
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(axis.toString(), fontSize = 34.sp, fontWeight = FontWeight.Bold, color = if (enabled) accent else tick)
-            Text(stepText, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = tick)
-        }
+        // Axis letter dead centre, the step underneath it, both inside the dark centre disc.
+        Text(axis.toString(), fontSize = 40.sp, fontWeight = FontWeight.Bold, color = if (enabled) accent else tick)
+        Text(stepText, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = tick,
+            modifier = Modifier.offset(y = 36.dp))
     }
 }
 
