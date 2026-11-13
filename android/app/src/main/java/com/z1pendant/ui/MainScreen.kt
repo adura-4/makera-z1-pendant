@@ -146,7 +146,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 stepText = "${stepLabel(vm.steps[stepIdx])} ${if (axis == 'A') "°" else "mm"}/click",
                 enabled = connected && running == null,
                 onClick = { vm.wheelClicks(it) },
-                modifier = Modifier.fillMaxWidth(0.62f).align(Alignment.Center),
+                modifier = Modifier.fillMaxWidth(0.75f).align(Alignment.Center),
             )
             Column(
                 Modifier.align(Alignment.BottomStart).clip(RoundedCornerShape(10.dp))
