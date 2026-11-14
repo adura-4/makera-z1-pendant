@@ -23,6 +23,17 @@ private val viewModel by lazy { AppViewModel(IosPlatform()) }
  */
 fun MainViewController(): UIViewController = ComposeUIViewController {
     val vm = viewModel
+    // Test hook (launch arguments, e.g. `xcrun simctl launch booted <bundle> -testpad X,1,2,1500,4`):
+    // axis, direction, taps, gap ms, pad step index. Runs 4 s after launch, once connected.
+    LaunchedEffect(Unit) {
+        val args = platform.Foundation.NSProcessInfo.processInfo.arguments.map { it.toString() }
+        val i = args.indexOf("-testpad")
+        if (i >= 0 && i + 1 < args.size) {
+            val p = args[i + 1].split(',')
+            kotlinx.coroutines.delay(4000)
+            vm.testPadTaps(p[0].first(), p[1].toInt(), p[2].toInt(), p[3].toLong(), p[4].toInt())
+        }
+    }
     val keepOn by vm.keepScreenOn.collectAsState()
     LaunchedEffect(keepOn) { UIApplication.sharedApplication.idleTimerDisabled = keepOn }
     PendantTheme { App(vm) }

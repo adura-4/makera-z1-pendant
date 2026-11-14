@@ -90,7 +90,7 @@ class JogEngine(
         if (job != null) return
         job = scope.launch {
             while (isActive) {
-                try { tick() } catch (_: Exception) {}
+                try { tick() } catch (e: Exception) { PLog.w("JogEngine", "tick: $e") }
                 delay(config.tickMs)
             }
         }
@@ -169,8 +169,12 @@ class JogEngine(
         val rawLead = abs(target!! - pos)
         val lead = if (st.state.equals("Run", true)) maxOf(0.0, rawLead - lastCmdV * statusAgeS) else rawLead
         // Feed: hand speed, corrected toward a lead of vHand × buffer.
-        val vCmd = (vHand + (lead - vHand * config.bufferS) / config.correctS)
-            .coerceIn(maxOf(config.minFeedMmMin / 60.0, vHand * 0.3), vmax)
+        // Floor: a waiting click always moves at least fast enough to finish its step in ~0.3 s.
+        // The hand-speed window is only 200 ms, so a click sent later than that (the first move
+        // waits for Idle and a fresh status; on iPhone that took ~0.45 s) used to fall back to
+        // the 5 mm/min minimum: a 10 mm pad tap became a two-minute crawl stuck in "Run".
+        val vFloor = maxOf(config.minFeedMmMin / 60.0, vHand * 0.3, min(stp / 0.3, vmax))
+        val vCmd = (vHand + (lead - vHand * config.bufferS) / config.correctS).coerceIn(vFloor, vmax)
         // Floor of 5 clicks: at the start of a slow turn the speed estimate is still tiny, and a
         // precise 0.01 mm turn must not lose clicks. The feed correction clears them quickly.
         // The floor stops at 5 mm (one click at the 5 mm step), so a big step can't leave a long

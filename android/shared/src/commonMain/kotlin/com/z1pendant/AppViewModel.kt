@@ -196,6 +196,15 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         if (detents % 10 == 0) haptics.majorTick() else haptics.tick()
     }
 
+    /** Test hook: [count] jog-pad taps on [a] in direction [dir], [gapMs] apart, at pad step [stepIdx]. */
+    fun testPadTaps(a: Char, dir: Int, count: Int, gapMs: Long, stepIdx: Int) {
+        viewModelScope.launch {
+            setJogPad(true); selectStep(stepIdx)
+            PLog.i("JogTest", "pad taps $a dir=$dir x$count gap=${gapMs}ms step=${steps[stepIndex.value]}")
+            repeat(count) { k -> if (k > 0) kotlinx.coroutines.delay(gapMs); padJog(a, dir) }
+        }
+    }
+
     /** Test hook: [n] clicks spread evenly over [ms] (sign = direction). */
     fun viewModelScopeLaunchBurst(n: Int, ms: Long) {
         viewModelScope.launch {
