@@ -40,11 +40,15 @@ CRC-16/XMODEM (poly 0x1021, **init 0**) over len + type + payload. Test vector: 
 - From the machine: `0x81` status `<Idle|MPos:x,y,z,a,b|WPos:…|F:feed,set,override|S:…|…>`,
   `0x90` text (`ok`, errors, alarms), `0x82` diagnose reply, `0x71` firmware version.
 - Discovery: the machine's ESP32 broadcasts `name,ip,port,busy,state` to **UDP 3333**.
-- Stock firmware has no `$J` / continuous jog, so the pendant jogs with short `G91 G1` moves and
-  restores `G90` when the input stops.
+- The pendant jogs with short moves to absolute machine positions, `G53 G1 X… F…`. G53 applies to its
+  own line only, so a jog never changes the machine's modal state: no G91 is left behind if the link
+  drops or the app dies mid-jog. (It used to send `G91 G1` and restore `G90` afterwards.)
+- The stock firmware does have `$J X… F…` (relative, F = a fraction of the axis max rate), but it sends
+  no `ok`, which the line flow control relies on, and it tops out near 1200 mm/min, so the app doesn't
+  use it. See the measurements below.
 
 ## Jog engine
-Every 40 ms the clicks collected become one `G91 G1` move. Feed = hand speed (clicks in the last
+Every 40 ms the clicks collected become one `G53 G1` move to the next machine position. Feed = hand speed (clicks in the last
 200 ms × step) plus a correction that keeps about 120 ms of motion queued:
 `feed = vHand + (lead − vHand·0.12 s) / 0.3 s`, clamped to 5 mm/min … axis max.
 
@@ -55,6 +59,13 @@ The **lead** (commanded but not yet travelled, dead-reckoned from the last statu
 is capped at `max(min(5 clicks, 5 mm), v²/2a + v·tick + vHand·(0.12 + 0.1) + 1 click)`. Clicks beyond
 that are dropped (one thud vibration per 150 ms at most), so when input stops or the link drops, the
 axis stops within that distance. Moves are clamped to the soft limits while the machine is homed.
+
+A **jog session** starts from the machine position in a status that arrived *after* the first click
+(never an older reading, which could be stale after a Wi-Fi gap), and ends once the machine is Idle and
+quiet for 0.3 s. During a session the reported position must stay on the commanded path (between the
+start and the targets sent, ±0.02 for status rounding) and the other axes must stay put. If not,
+something else moved the machine: the session ends (thud, clicks dropped) and the next click starts
+over from a fresh reading.
 
 Jog pad: a tap is one click; a held button repeats after 0.4 s at `max(120 ms, step / axis max speed)`,
 and letting go drops any clicks not yet sent.
@@ -76,8 +87,8 @@ M852 off). The app reads it every 3 s (not while jogging) for the Light and Vacu
 sends `G10 L20 P0 <axis><previous value>` instead. The Zero hotkeys (X/Y/Z/A, XY, XYZ, selected) share it.
 
 ## Typed moves
-The Move box sends `G90 G0 <axis><value>` (Go to) or `G91 G0 <axis><value>` + `G90` (Move by), and
-refuses targets past the soft limits before sending anything.
+The Move box sends `G90 G0 <axis><value>` (Go to) or `G53 G0 <axis><machine end position>` (Move by,
+computed from a status at most 1 s old), and refuses targets past the soft limits before sending anything.
 
 ## Test hooks
 - `adb shell am start -n com.z1pendant/.MainActivity --es host <ip> [--ei port 2222] [--es name …]` connects.
@@ -97,6 +108,19 @@ refuses targets past the soft limits before sending anything.
 - Dial jogs at 0.01 and 1 mm per click, M821/M822 light, M851/M852 vacuum: all confirmed.
 - Status round trip over Wi-Fi: ~30 ms median from a PC. On a Pixel, Wi-Fi power save gave 18–300 ms
   until the app held `WIFI_MODE_FULL_LOW_LATENCY` while visible (then mostly 17–42 ms).
+
+## Jog commands compared on a real Z1 (stock firmware 1.1.3)
+Same X moves, 300 mm/min, status polled every 20 ms from a PC over Wi-Fi:
+
+| Command | Start of a 5 mm move | 5 mm took | `ok` | Modal state after |
+|---|---|---|---|---|
+| `$J X-5 F0.25` | 229 ms | 1.15 s | none | unchanged (G90) |
+| `G91 G1 X-5 F300` + `G90` | 250 ms | 1.21 s | yes | G91 until the `G90` |
+| `G53 G1 X<pos> F300` | 226 ms | 1.21 s | yes | unchanged (G90) |
+
+The start delay is the same for all three (it is mostly the Wi-Fi bridge and polling), so `$J`'s
+skipped queue delay doesn't show. `$J F0.05` ran at about 60 mm/min, so its rate scale tops out near
+1200 mm/min. A burst of ten `$J X-0.05` 40 ms apart all ran (0.5 mm exactly).
 
 ## Still unverified
 - Y/Z upper soft limits (assumed −1 like X).
