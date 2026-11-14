@@ -40,9 +40,15 @@ import kotlinx.coroutines.launch
 fun JogPad(vm: AppViewModel, step: Double, enabled: Boolean, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier) {
         // 5 buttons across + gaps (6+6 in the cross, 14 to the rails, 10 between rails)
-        val cell: Dp = minOf(if (LocalWide.current) 88.dp else 68.dp, (maxWidth - 36.dp) / 5)
-        val gap = 6.dp
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Everything scales with the button size k = cell / 68 dp (the phone size, where all the
+        // gaps below come from). The pad fills the area it's given: as big as both the width
+        // (5 buttons + gaps = 5.53 cells) and the height (3 buttons + gaps = 3.18 cells, 92% of
+        // it) allow, up to 68 dp on phones and 150 dp on wide screens.
+        val cap = if (LocalWide.current) 150.dp else 68.dp
+        val cell: Dp = minOf(cap, maxWidth / 5.53f, if (maxHeight.value.isFinite()) maxHeight * 0.92f / 3.18f else cap)
+        val k = cell / 68.dp
+        val gap = 6.dp * k
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp * k)) {
             Column(verticalArrangement = Arrangement.spacedBy(gap)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
                     Spacer(Modifier.size(cell)); PadButton(vm, 'Y', -1, cell, enabled); Spacer(Modifier.size(cell))
@@ -52,8 +58,8 @@ fun JogPad(vm: AppViewModel, step: Double, enabled: Boolean, modifier: Modifier 
                     Box(Modifier.size(cell).clip(CircleShape).background(Color.Black.copy(alpha = 0.25f)),
                         contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(stepLabel(step), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            Text("mm", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stepLabel(step), fontSize = 16.sp * k, fontWeight = FontWeight.Bold)
+                            Text("mm", fontSize = 12.sp * k, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     PadButton(vm, 'X', 1, cell, enabled)
@@ -62,9 +68,9 @@ fun JogPad(vm: AppViewModel, step: Double, enabled: Boolean, modifier: Modifier 
                     Spacer(Modifier.size(cell)); PadButton(vm, 'Y', 1, cell, enabled); Spacer(Modifier.size(cell))
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp * k)) {
                 for (a in listOf('Z', 'A')) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp * k)) {
                         PadButton(vm, a, 1, cell, enabled)
                         PadButton(vm, a, -1, cell, enabled)
                     }
@@ -81,7 +87,7 @@ private fun PadButton(vm: AppViewModel, axis: Char, dir: Int, size: Dp, enabled:
     val en by rememberUpdatedState(enabled)
     val label = (if (dir > 0) "+" else "−") + axis
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(14.dp))
+        Modifier.size(size).clip(RoundedCornerShape(14.dp * (size / 68.dp)))
             .background(if (pressed) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.secondaryContainer)
             .semantics { contentDescription = label }
             .pointerInput(axis, dir) {
@@ -104,7 +110,7 @@ private fun PadButton(vm: AppViewModel, axis: Char, dir: Int, size: Dp, enabled:
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, fontSize = 20.sp, fontWeight = FontWeight.Bold,
+        Text(label, fontSize = 20.sp * (size / 68.dp), fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = if (enabled) 1f else 0.4f))
     }
 }
