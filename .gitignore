@@ -2,3 +2,8 @@
 *.apk
 __pycache__/
 *.log
+
+# Xcode per-user state
+xcuserdata/
+*.xcuserstate
+DerivedData/

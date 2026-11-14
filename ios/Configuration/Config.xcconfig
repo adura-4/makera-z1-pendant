@@ -1,0 +1,6 @@
+// Your Apple team ID (Xcode > Settings > Accounts). Left blank in the repo; pass it on the
+// command line (DEVELOPMENT_TEAM=XXXXXXXXXX) or set it here locally.
+TEAM_ID=
+// The team ID is appended to make the bundle ID unique per developer (free Apple IDs need that).
+BUNDLE_ID=com.jimmyvegas29.z1pendant
+APP_NAME=Z1 Pendant
