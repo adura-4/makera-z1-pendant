@@ -80,7 +80,7 @@ The app isn't on the Play Store, so you install the APK file yourself ("sideload
 > Prefer installing from a computer? With [adb](https://developer.android.com/tools/adb) and USB
 > debugging on: `adb install z1-pendant-<version>.apk`.
 
-## iPhone (and iPad)
+## iPhone
 There's no App Store version, so you build the app on a Mac and install it on your iPhone with your
 own (free) Apple ID. It's the same app and the same screens as on Android.
 
