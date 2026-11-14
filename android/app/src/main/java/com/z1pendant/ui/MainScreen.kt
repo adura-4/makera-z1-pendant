@@ -69,6 +69,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     val expanded by vm.hotkeysExpanded.collectAsState()
     val arrangeOrder by vm.arrangeOrder.collectAsState()
     val connected = conn == ConnState.Connected
+    var moveFor by remember { mutableStateOf<Char?>(null) }
+    moveFor?.let { a -> MoveDialog(vm, a) { moveFor = null } }
 
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -121,7 +123,10 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             vm.axes.forEachIndexed { i, a ->
                 val sel = a == axis
                 Row(
-                    Modifier.fillMaxWidth().clickable { vm.selectAxis(a); vm.haptics.press() }
+                    // Tap = select the axis. Long-press = type a position / distance to move to.
+                    Modifier.fillMaxWidth().combinedClickable(
+                        onClick = { vm.selectAxis(a); vm.haptics.press() },
+                        onLongClick = { vm.selectAxis(a); vm.haptics.majorTick(); moveFor = a })
                         .background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                         .padding(horizontal = 10.dp, vertical = 1.dp),
                     verticalAlignment = Alignment.CenterVertically,

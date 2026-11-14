@@ -179,6 +179,50 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun zero(axes: String) = link.dialect.zeroAxes(axes).forEach { link.sendLine(it) }
+
+    // ---- typed move (long-press a readout row) ------------------------------------------------
+    /** The lines a typed move would send, or why it can't run. */
+    data class MovePlan(val lines: List<String>, val error: String?, val endWork: Double? = null)
+
+    /**
+     * [relative] false = go to work position [value]; true = move by [value]. Rapid (G0).
+     * Refuses targets past the soft limits (the stock firmware halts on those) when soft-limit
+     * clamping is on, the same switch the dial uses.
+     */
+    fun planMove(axis: Char, value: Double, relative: Boolean): MovePlan {
+        val st = link.status.value ?: return MovePlan(emptyList(), "No status from the machine yet")
+        val i = axes.indexOf(axis)
+        val m = st.mpos.getOrNull(i); val w = st.wpos.getOrNull(i)
+        if (m == null || w == null) return MovePlan(emptyList(), "No $axis position from the machine")
+        val endM = if (relative) m + value else value + (m - w)
+        val endW = endM - (m - w)
+        val lim = jog.config.limits[axis]
+        if (softClamp.value && st.homed != false && lim != null) {
+            val lo = lim.softMin; val hi = lim.softMax
+            if ((lo != null && endM < lo - 1e-6) || (hi != null && endM > hi + 1e-6)) {
+                fun f(d: Double?) = d?.let { "%.3f".format(java.util.Locale.US, it) } ?: "…"
+                return MovePlan(emptyList(), "Past the soft limit: would end at machine $axis ${f(endM)} " +
+                    "(allowed ${f(lo)} to ${f(hi)})", endW)
+            }
+        }
+        val v = java.math.BigDecimal(value).setScale(4, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+        val lines = if (relative) listOf("G91 G0 $axis$v", "G90") else listOf("G90 G0 $axis$v")
+        return MovePlan(lines, null, endW)
+    }
+
+    fun runMove(axis: Char, value: Double, relative: Boolean) {
+        val st = link.status.value
+        val why = when {
+            link.conn.value != ConnState.Connected -> "not connected"
+            st == null || !st.isIdle -> "machine is ${st?.state ?: "unknown"}, not Idle"
+            runner.running.value != null -> "“${runner.running.value!!.label}” is still running"
+            else -> planMove(axis, value, relative).error
+        }
+        if (why != null) { snack.tryEmit("Move $axis: $why"); haptics.thud(); return }
+        haptics.press()
+        log("▶ move $axis: ${if (relative) "by" else "to"} $value")
+        planMove(axis, value, relative).lines.forEach { link.sendLine(it) }
+    }
     fun setFeedOverride(p: Int) = link.dialect.feedOverride(p.coerceIn(10, 300)).forEach { link.sendLine(it) }
     fun hold() { haptics.press(); link.feedHold() }
     fun resume() { haptics.press(); link.resume() }
