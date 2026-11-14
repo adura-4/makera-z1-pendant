@@ -6,6 +6,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.draw.drawBehind
+import kotlinx.coroutines.launch
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -70,6 +74,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     val arrangeOrder by vm.arrangeOrder.collectAsState()
     val connected = conn == ConnState.Connected
     var moveFor by remember { mutableStateOf<Char?>(null) }
+    val rowScope = rememberCoroutineScope()
     val zeroUndo by vm.zeroUndo.collectAsState()
     moveFor?.let { a -> MoveDialog(vm, a) { moveFor = null } }
 
@@ -123,12 +128,20 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(vertical = 4.dp)) {
             vm.axes.forEachIndexed { i, a ->
                 val sel = a == axis
+                val hold = remember { androidx.compose.animation.core.Animatable(0f) }
+                val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
                 Row(
-                    // Tap = select the axis. Long-press = type a position / distance to move to.
-                    Modifier.fillMaxWidth().combinedClickable(
-                        onClick = { vm.selectAxis(a); vm.haptics.press() },
-                        onLongClick = { vm.selectAxis(a); vm.haptics.majorTick(); moveFor = a })
+                    // Tap = select the axis. Hold 2 s (the row fills while you hold) = Move box.
+                    Modifier.fillMaxWidth()
+                        .tapOrHold(a, HOLD_MS, hold, rowScope,
+                            onTap = { vm.selectAxis(a); vm.haptics.press() },
+                            onHold = { vm.selectAxis(a); vm.haptics.majorTick(); moveFor = a })
                         .background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                        .drawBehind {
+                            // shown after a short delay so ordinary taps don't flash it
+                            val p = ((hold.value - 0.1f) / 0.9f).coerceIn(0f, 1f)
+                            if (p > 0f) drawRect(fill, size = androidx.compose.ui.geometry.Size(size.width * p, size.height))
+                        }
                         .padding(horizontal = 10.dp, vertical = 1.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -290,6 +303,56 @@ private fun ControlsDrawer(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A), contentColor = Color.White)) { Text("Resume", fontSize = 16.sp) }
                     Button(onClick = onReset, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White)) { Text("Reset", fontSize = 16.sp) }
+                }
+            }
+        }
+    }
+}
+
+/** How long to hold a readout row to open its Move box. */
+private const val HOLD_MS = 2000L
+
+/**
+ * Tap (released within 500 ms) = [onTap]; held still for [ms] = [onHold]. [progress] runs 0→1
+ * while holding (for a fill / ring). A hold let go early, or a finger that slides off (a scroll),
+ * does nothing. Child buttons keep their own taps (they consume them first).
+ */
+private fun Modifier.tapOrHold(
+    key: Any, ms: Long, progress: androidx.compose.animation.core.Animatable<Float, *>,
+    scope: kotlinx.coroutines.CoroutineScope, onTap: () -> Unit, onHold: () -> Unit,
+): Modifier = pointerInput(key) {
+    val slop = viewConfiguration.touchSlop
+    awaitEachGesture {
+        val down = awaitFirstDown()
+        val ring = scope.launch {
+            progress.snapTo(0f)
+            progress.animateTo(1f, androidx.compose.animation.core.tween(ms.toInt(), easing = androidx.compose.animation.core.LinearEasing))
+        }
+        // "up" = released, "moved" = slid off / scrolling, null = held the full time
+        val outcome: String? = withTimeoutOrNull(ms) {
+            var r = ""
+            while (r.isEmpty()) {
+                val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                r = when {
+                    c == null -> "moved"
+                    !c.pressed -> "up"
+                    (c.position - down.position).getDistance() > slop -> "moved"
+                    else -> ""
+                }
+            }
+            r
+        }
+        ring.cancel()
+        scope.launch { progress.snapTo(0f) }
+        when (outcome) {
+            "up" -> if (android.os.SystemClock.uptimeMillis() - down.uptimeMillis < 500) onTap()
+            null -> {
+                onHold()
+                // swallow the rest of this touch so lifting the finger isn't also a tap
+                while (true) {
+                    val ev = awaitPointerEvent()
+                    ev.changes.forEach { it.consume() }
+                    if (ev.changes.none { it.pressed }) break
                 }
             }
         }
