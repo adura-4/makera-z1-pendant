@@ -9,7 +9,8 @@ machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroin
   * Lines: G0/G1 (G90/G91, F), G4, G10 L20 P0, G92, G53, $H, $X, M220 S, M3/M5 S, M999, anything
     else just gets "ok". Replies are 0x90 "ok\\r\\n".
   * Motion runs in real time at the commanded feed (G0 = axis max rate) x feed override, with a
-    32-block planner queue; soft limits X -207..0, Y -206..0, Z -102..0 once homed.
+    32-block planner queue; soft limits X -207..-1, Y -206..-1, Z -102..-1 once homed;
+    $H ends at MPos -1 on X, Y and Z, like the real Z1.
 """
 from __future__ import annotations
 
@@ -168,10 +169,14 @@ class Machine:
                 if self.state != "Home":
                     return
                 done = True
-                for i in range(3):
+                for i, ax in enumerate("XYZ"):
+                    # The real Z1 homes to MPos -1.000 (the soft max); 0 would be past it,
+                    # so the next move on any axis would trip the soft limit.
+                    home = SOFT[ax][1]
                     step = 3000 / 60 * 0.01
-                    if self.mpos[i] < 0:
-                        self.mpos[i] = min(0.0, self.mpos[i] + step)
+                    if self.mpos[i] != home:
+                        d = home - self.mpos[i]
+                        self.mpos[i] = home if abs(d) <= step else self.mpos[i] + math.copysign(step, d)
                         done = False
                 if done:
                     self.homed = True
