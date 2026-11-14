@@ -1,0 +1,160 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Jog pad mock</title>
+<style>
+  :root{
+    --bg:#0B1120; --surface:#0F172A; --sv:#172033; --sc:#1E293B; --onsc:#E2E8F0;
+    --primary:#38BDF8; --onprimary:#00222F; --muted:#94A3B8; --outline:#5b6474; --text:#E6E9EF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9edf2;font-family:Roboto,"Segoe UI",Arial,sans-serif;display:flex;gap:28px;padding:24px;align-items:flex-start}
+  .col{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .cap{font:600 15px "Segoe UI",Arial;color:#1f2937}
+  .phone{width:412px;height:915px;background:var(--bg);border-radius:28px;overflow:hidden;position:relative;color:var(--text);padding:44px 12px 0}
+  .mono{font-family:"Roboto Mono",Consolas,monospace}
+  .hdr{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+  .hdr .name{flex:1}
+  .hdr .name b{font-size:17px;font-weight:600;display:block}
+  .hdr .name span{font-size:12px;color:var(--muted)}
+  .pill{background:#16A34A;color:#fff;font-weight:700;font-size:14px;border-radius:99px;padding:7px 16px}
+  .ico{width:40px;height:40px;display:flex;align-items:center;justify-content:center}
+  .dro{background:var(--sv);border-radius:12px;padding:4px 0;margin-bottom:8px}
+  .row{display:flex;align-items:center;padding:1px 10px;height:47px}
+  .row.sel{background:rgba(56,189,248,.15)}
+  .row .ax{width:26px;font-size:22px;font-weight:700;color:var(--muted)}
+  .row.sel .ax{color:var(--primary)}
+  .row .val{flex:1;text-align:right}
+  .row .val b{font-size:26px;font-weight:600;line-height:28px;display:block}
+  .row .val span{font-size:12px;color:var(--muted)}
+  .ob{border:1px solid var(--outline);border-radius:99px;color:var(--primary);font-size:13px;height:34px;display:flex;align-items:center;justify-content:center;padding:0 10px;margin-left:6px}
+  .ob.w{min-width:64px}
+  .seg{display:flex;height:40px;border:1px solid var(--outline);border-radius:10px;overflow:hidden;margin-bottom:8px}
+  .seg div{flex:1;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .seg .on{background:var(--primary);color:var(--onprimary);font-weight:700}
+  .mid{position:relative;height:300px;margin-bottom:8px}
+  .corner{position:absolute;width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:12px}
+  .corner.tl{left:0;top:0;background:var(--sc)}
+  .corner.bl{left:0;bottom:0}
+  .dial{position:absolute;left:50%;top:0;transform:translateX(-50%);width:300px;height:300px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .tile{background:var(--sc);border-radius:12px;height:78px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;color:var(--onsc)}
+  .tile.dim{color:rgba(226,232,240,.35)}
+  .drawer{position:absolute;left:12px;right:12px;bottom:26px;height:30px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted);padding:0 4px}
+  .drawer i{width:40px;height:4px;border-radius:2px;background:rgba(148,163,184,.6);display:block}
+  .navbar{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:120px;height:4px;border-radius:2px;background:#fff}
+  /* jog pad */
+  .pad{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:14px}
+  .rails{display:flex;gap:10px}
+  .cross{display:grid;grid-template-columns:68px 68px 68px;grid-template-rows:68px 68px 68px;gap:6px}
+  .jb{background:var(--sc);border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-weight:700;font-size:20px;color:var(--onsc)}
+  .jb small{font-weight:400;font-size:11px;color:var(--muted)}
+  .jb .arw{color:var(--primary);font-size:22px;line-height:20px}
+  .hub{border-radius:50%;background:rgba(0,0,0,.25);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+  .hub b{font-size:15px;color:var(--text)}
+  .rail{display:flex;flex-direction:column;justify-content:center;gap:16px;height:216px}
+  .rail .lbl{font-size:16px;font-weight:700;color:var(--primary);height:20px}
+  .rail .jb{width:68px;height:68px}
+  .note{width:412px;font:13px/1.45 "Segoe UI",Arial;color:#374151}
+</style></head>
+<body>
+
+<!-- ============ DIAL MODE (today + joystick button) ============ -->
+<div class="col">
+<div class="cap">Dial mode (today) + joystick button</div>
+<div class="phone">
+  <div class="hdr"><div class="name"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 18 ms</span></div>
+    <div class="pill">Idle</div>
+    <div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="#cbd5e1"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 14H4V8h16v10zM6 10l3 3-3 3 1 1 4-4-4-4-1 1zm5 6h6v-1.5h-6V16z"/></svg></div>
+    <div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="#cbd5e1"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.4-2.6a7 7 0 0 0 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7z"/></svg></div>
+  </div>
+  <div class="dro">
+    <div class="row"><div class="ax">X</div><div class="val mono"><b>0.000</b><span>M -116.148</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+    <div class="row sel"><div class="ax">Y</div><div class="val mono"><b>10.000</b><span>M -116.980</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+    <div class="row"><div class="ax">Z</div><div class="val mono"><b>0.000</b><span>M -2.000</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+    <div class="row"><div class="ax">A</div><div class="val mono"><b>-90.000</b><span>M 0.000</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+  </div>
+  <div class="seg mono"><div>0.005</div><div>0.01</div><div>0.1</div><div>1</div><div class="on">5</div></div>
+  <div class="mid">
+    <!-- NEW: joystick button, top-left under 0.005 -->
+    <div class="corner tl" title="Switch to jog pad">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="6" r="3.2" fill="#38BDF8" stroke="none"/><path d="M12 9.2v6"/><path d="M5 17.5c0-1.4 3.1-2.5 7-2.5s7 1.1 7 2.5v1.5c0 1.4-3.1 2.5-7 2.5s-7-1.1-7-2.5z"/></svg>
+    </div>
+    <svg class="dial" viewBox="0 0 300 300">
+      <circle cx="150" cy="150" r="147" fill="#172033" stroke="rgba(148,163,184,.25)" stroke-width="3.5"/>
+      <g id="ticks"></g>
+      <circle cx="150" cy="60" r="13" fill="#38BDF8"/>
+      <line x1="150" y1="7" x2="150" y2="42" stroke="#38BDF8" stroke-width="4.5" stroke-linecap="round"/>
+      <circle cx="150" cy="150" r="69" fill="rgba(0,0,0,.25)"/>
+      <text x="150" y="160" text-anchor="middle" font-size="40" font-weight="700" fill="#38BDF8" font-family="Roboto,Arial">Y</text>
+      <text x="150" y="190" text-anchor="middle" font-size="13" fill="#94A3B8" font-family="Consolas,monospace">5mm/click</text>
+    </svg>
+    <div class="corner bl"><svg width="32" height="32" viewBox="0 0 24 24" fill="#38BDF8"><path d="M7.4 15.4 12 10.8l4.6 4.6L18 14l-6-6-6 6z"/></svg></div>
+  </div>
+  <div class="grid">
+    <div class="tile">⤓<span>Zero Z</span></div><div class="tile">⤒<span>Z up</span></div><div class="tile">◎<span>Go to XY0</span></div><div class="tile" style="font-weight:600;color:#fff">💡<span>Light</span></div>
+    <div class="tile">⌖<span>Zero XY</span></div><div class="tile">🔓<span>Unlock</span></div><div class="tile">⌂<span>Home</span></div><div class="tile dim">≋<span>Vacuum</span></div>
+  </div>
+  <div class="drawer"><span class="mono">Feed 100%</span><i></i><span>Hold · Resume · Reset</span></div>
+  <div class="navbar"></div>
+</div>
+</div>
+
+<!-- ============ JOG PAD MODE ============ -->
+<div class="col">
+<div class="cap">Jog-pad mode (tap the dial icon to go back)</div>
+<div class="phone">
+  <div class="hdr"><div class="name"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 18 ms</span></div>
+    <div class="pill">Idle</div>
+    <div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="#cbd5e1"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 14H4V8h16v10zM6 10l3 3-3 3 1 1 4-4-4-4-1 1zm5 6h6v-1.5h-6V16z"/></svg></div>
+    <div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="#cbd5e1"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7 7 0 0 0-1.7-1L15 3h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7 7 0 0 0 1.7 1L11 21h4l.4-2.6a7 7 0 0 0 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7z"/></svg></div>
+  </div>
+  <!-- no axis highlighted: the buttons name their own axis -->
+  <div class="dro">
+    <div class="row"><div class="ax">X</div><div class="val mono"><b>0.000</b><span>M -116.148</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+    <div class="row"><div class="ax">Y</div><div class="val mono"><b>10.000</b><span>M -116.980</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+    <div class="row"><div class="ax">Z</div><div class="val mono"><b>0.000</b><span>M -2.000</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+    <div class="row"><div class="ax">A</div><div class="val mono"><b>-90.000</b><span>M 0.000</span></div><div class="ob">move</div><div class="ob w">zero</div></div>
+  </div>
+  <!-- 0.005 dropped, 10 and 25 added -->
+  <div class="seg mono"><div>0.01</div><div>0.1</div><div>1</div><div class="on">5</div><div>10</div><div>25</div></div>
+  <div class="mid">
+    <div class="corner tl" title="Back to the dial">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38BDF8" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="7" r="1.8" fill="#38BDF8" stroke="none"/><path d="M12 2.8v2" stroke-linecap="round"/></svg>
+    </div>
+    <div class="pad">
+      <div class="cross">
+        <div></div>
+        <div class="jb">−Y</div>
+        <div></div>
+        <div class="jb">−X</div>
+        <div class="hub"><b>5</b>mm</div>
+        <div class="jb">+X</div>
+        <div></div>
+        <div class="jb">+Y</div>
+        <div></div>
+      </div>
+      <div class="rails"><div class="rail"><div class="jb">+Z</div><div class="jb">−Z</div></div>
+      <div class="rail"><div class="jb">+A</div><div class="jb">−A</div></div></div>
+    </div>
+    <div class="corner bl"><svg width="32" height="32" viewBox="0 0 24 24" fill="#38BDF8"><path d="M7.4 15.4 12 10.8l4.6 4.6L18 14l-6-6-6 6z"/></svg></div>
+  </div>
+  <div class="grid">
+    <div class="tile">⤓<span>Zero Z</span></div><div class="tile">⤒<span>Z up</span></div><div class="tile">◎<span>Go to XY0</span></div><div class="tile" style="font-weight:600;color:#fff">💡<span>Light</span></div>
+    <div class="tile">⌖<span>Zero XY</span></div><div class="tile">🔓<span>Unlock</span></div><div class="tile">⌂<span>Home</span></div><div class="tile dim">≋<span>Vacuum</span></div>
+  </div>
+  <div class="drawer"><span class="mono">Feed 100%</span><i></i><span>Hold · Resume · Reset</span></div>
+  <div class="navbar"></div>
+</div>
+</div>
+
+<script>
+  // dial ticks: 30 detents, major every 5th
+  const g=document.getElementById('ticks'); const c=150, r=150;
+  for(let i=0;i<30;i++){const t=(i*12-90)*Math.PI/180, maj=i%5==0;
+    const r0=r*(maj?0.78:0.84), r1=r*0.93;
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',c+r0*Math.cos(t));l.setAttribute('y1',c+r0*Math.sin(t));
+    l.setAttribute('x2',c+r1*Math.cos(t));l.setAttribute('y2',c+r1*Math.sin(t));
+    l.setAttribute('stroke',maj?'rgba(148,163,184,.9)':'rgba(148,163,184,.5)');
+    l.setAttribute('stroke-width',maj?3.3:1.8);l.setAttribute('stroke-linecap','round');g.appendChild(l);}
+</script>
+</body></html>

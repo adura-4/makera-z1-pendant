@@ -33,10 +33,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val link = MakeraLink()
 
     // ---- UI state -------------------------------------------------------------------------
-    val steps = listOf(0.005, 0.01, 0.1, 1.0, 5.0)
+    /** Dial mode steps, and jog-pad mode steps (single presses, so bigger ones are useful). */
+    val dialSteps = listOf(0.005, 0.01, 0.1, 1.0, 5.0)
+    val padSteps = listOf(0.01, 0.1, 1.0, 5.0, 10.0, 25.0)
+    /** Jog pad (−X/+X/−Y/+Y, Z and A buttons) shown instead of the dial. */
+    val jogPad = MutableStateFlow(prefs.getBoolean("jogPad", false))
+    /** The step list of the current mode; each mode remembers its own selected step. */
+    val steps: List<Double> get() = if (jogPad.value) padSteps else dialSteps
+    private fun stepKey() = if (jogPad.value) "padStepIndex" else "stepIndex"
     val axes = listOf('X', 'Y', 'Z', 'A')
     val axis = MutableStateFlow(prefs.getString("axis", "X")!!.first())
-    val stepIndex = MutableStateFlow(prefs.getInt("stepIndex", 2).coerceIn(0, steps.lastIndex))
+    val stepIndex = MutableStateFlow(prefs.getInt(stepKey(), 2).coerceIn(0, steps.lastIndex))
     val target = MutableStateFlow(loadTarget())
     val discovered = MutableStateFlow<List<Pair<MachineTarget, Boolean>>>(emptyList())
     val scanning = MutableStateFlow(false)
@@ -70,7 +77,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val jog = JogEngine(link, viewModelScope, onDrop = { haptics.thud() }, onLimit = { haptics.limit() },
         onJogDone = { moved ->
             moved.forEach { (a, d) ->
-                log("↕ jog $a ${"%+.3f".format(java.util.Locale.US, d)} ${if (a == 'A') "°" else "mm"} (dial)")
+                log("↕ jog $a ${"%+.3f".format(java.util.Locale.US, d)} ${if (a == 'A') "°" else "mm"} (${if (jogPad.value) "pad" else "dial"})")
             }
         })
 
@@ -141,8 +148,40 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun selectAxis(a: Char) { axis.value = a; jog.axis = a; prefs.edit().putString("axis", a.toString()).apply() }
     fun selectStep(i: Int) {
         val j = i.coerceIn(0, steps.lastIndex)
-        stepIndex.value = j; jog.step = steps[j]; prefs.edit().putInt("stepIndex", j).apply()
+        stepIndex.value = j; jog.step = steps[j]; prefs.edit().putInt(stepKey(), j).apply()
     }
+
+    // ---- jog pad ------------------------------------------------------------------------------
+    fun setJogPad(on: Boolean) {
+        if (jogPad.value == on) return
+        jog.cancelPending()
+        jogPad.value = on
+        prefs.edit().putBoolean("jogPad", on).apply()
+        val j = prefs.getInt(stepKey(), 2).coerceIn(0, steps.lastIndex)
+        stepIndex.value = j; jog.step = steps[j]
+        if (!on) jog.axis = axis.value            // the dial jogs the selected axis again
+        haptics.press()
+    }
+
+    /** One pad press (or one repeat while held): one step on [a] in direction [dir]. */
+    fun padJog(a: Char, dir: Int) {
+        if (jog.axis != a) jog.axis = a
+        jog.step = steps[stepIndex.value]
+        wheelClicks(dir)
+    }
+
+    /**
+     * While a pad button is held it repeats. The repeat rate keeps the speed at or below the
+     * axis's max rate (step / max speed), and no faster than every 120 ms, so the jog engine
+     * never has to throw clicks away.
+     */
+    fun padRepeatMs(a: Char): Long {
+        val vmax = (jog.config.limits[a]?.maxRateMmMin ?: 1000.0) / 60.0          // mm/s (°/s for A)
+        return maxOf(120L, (steps[stepIndex.value] / vmax * 1000.0).toLong())
+    }
+
+    /** Button let go after it had started repeating: drop clicks not yet sent, so it stops. */
+    fun padReleased() = jog.cancelPending()
     private var detents = 0
     /** One handwheel detent: tick, with a firmer click every 10th. */
     fun wheelClicks(n: Int) {

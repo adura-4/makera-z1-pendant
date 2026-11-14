@@ -74,6 +74,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     val arrangeOrder by vm.arrangeOrder.collectAsState()
     val connected = conn == ConnState.Connected
     var moveFor by remember { mutableStateOf<Char?>(null) }
+    val padMode by vm.jogPad.collectAsState()
     val rowScope = rememberCoroutineScope()
     val zeroUndo by vm.zeroUndo.collectAsState()
     moveFor?.let { a -> MoveDialog(vm, a) { moveFor = null } }
@@ -127,7 +128,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // ---- DRO ----
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(vertical = 4.dp)) {
             vm.axes.forEachIndexed { i, a ->
-                val sel = a == axis
+                val sel = a == axis && !padMode           // the pad's buttons name their own axis
                 val hold = remember { androidx.compose.animation.core.Animatable(0f) }
                 val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
                 Row(
@@ -168,22 +169,31 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         }
 
         // ---- step selector (the axis is picked by tapping its row in the readout above) ----
-        Segmented(vm.steps.map { stepLabel(it) }, stepIdx) { vm.selectStep(it); vm.haptics.press() }
+        // Dial and jog pad have their own step lists; indices are clamped for the frame where the
+        // mode has switched but the step index hasn't caught up yet.
+        val stepList = vm.steps
+        val si = stepIdx.coerceIn(0, stepList.lastIndex)
+        Segmented(stepList.map { stepLabel(it) }, si) { vm.selectStep(it); vm.haptics.press() }
 
-        // ---- handwheel (hidden while the hotkey grid is expanded) ----
-        // Collapsed, the hotkeys toggle is a bare up-chevron (the grid slides up) in the empty corner left of the
-        // dial, so the tiles start right under the dial. Expanded, a down-chevron brings the dial back.
-        if (!expanded) Box(Modifier.fillMaxWidth()) {
-            Handwheel(
-                degPerClick = degPerClick, axis = axis,
-                stepText = "${stepLabel(vm.steps[stepIdx])}${if (axis == 'A') "°" else "mm"}/click",
-                enabled = connected && running == null,
-                onClick = { vm.wheelClicks(it) },
-                modifier = Modifier.fillMaxWidth(0.75f).align(Alignment.Center),
-            )
-            IconButton(onClick = { vm.hotkeysExpanded.value = true; vm.haptics.press() },
-                modifier = Modifier.align(Alignment.BottomStart)) {
-                Icon(Icons.Filled.ExpandLess, "Show all hotkeys", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+        // ---- handwheel or jog pad (hidden while the hotkey grid is expanded) ----
+        // Top-left: switch dial <-> jog pad. Bottom-left: up-chevron opens the hotkey grid (the
+        // grid slides up); expanded, a down-chevron brings the dial back.
+        if (!expanded) BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val box = maxWidth * 0.75f                 // same height in both modes: nothing below jumps
+            Box(Modifier.fillMaxWidth().height(box)) {
+                if (!padMode) Handwheel(
+                    degPerClick = degPerClick, axis = axis,
+                    stepText = "${stepLabel(stepList[si])}${if (axis == 'A') "°" else "mm"}/click",
+                    enabled = connected && running == null,
+                    onClick = { vm.wheelClicks(it) },
+                    modifier = Modifier.size(box).align(Alignment.Center),
+                ) else JogPad(vm, step = stepList[si], enabled = connected && running == null,
+                    modifier = Modifier.align(Alignment.Center))
+                ModeButton(padMode, Modifier.align(Alignment.TopStart)) { vm.setJogPad(!padMode) }
+                IconButton(onClick = { vm.hotkeysExpanded.value = true; vm.haptics.press() },
+                    modifier = Modifier.align(Alignment.BottomStart)) {
+                    Icon(Icons.Filled.ExpandLess, "Show all hotkeys", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                }
             }
         }
 
