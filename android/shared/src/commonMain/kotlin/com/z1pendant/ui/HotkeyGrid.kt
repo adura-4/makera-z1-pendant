@@ -40,7 +40,6 @@ import androidx.compose.ui.zIndex
 import com.z1pendant.hotkeys.Hotkey
 import kotlinx.coroutines.launch
 
-private const val COLS = 4
 private val TILE_H = 78.dp
 private val GAP = 8.dp
 /** Hold this long on a tile to open its editor (a ring fills while you hold). */
@@ -55,6 +54,7 @@ private const val LONG_PRESS_MS = 2000L
 @Composable
 fun HotkeyGrid(
     items: List<Hotkey>,
+    cols: Int = 4,
     arranging: Boolean,
     toggleOf: (Hotkey) -> Boolean?,
     onTap: (Hotkey) -> Unit,
@@ -66,13 +66,13 @@ fun HotkeyGrid(
     val gapPx = with(density) { GAP.toPx() }
     val tileHPx = with(density) { TILE_H.toPx() }
     var widthPx by remember { mutableFloatStateOf(0f) }
-    val cellW = ((widthPx - gapPx * (COLS - 1)) / COLS).coerceAtLeast(1f)
-    fun topLeft(i: Int) = Offset((i % COLS) * (cellW + gapPx), (i / COLS) * (tileHPx + gapPx))
+    val cellW = ((widthPx - gapPx * (cols - 1)) / cols).coerceAtLeast(1f)
+    fun topLeft(i: Int) = Offset((i % cols) * (cellW + gapPx), (i / cols) * (tileHPx + gapPx))
     fun indexAt(p: Offset): Int? {
         if (p.x < 0 || p.y < 0) return null
         val c = (p.x / (cellW + gapPx)).toInt(); val r = (p.y / (tileHPx + gapPx)).toInt()
-        if (c >= COLS) return null
-        val i = r * COLS + c
+        if (c >= cols) return null
+        val i = r * cols + c
         return i.takeIf { it in items.indices }
     }
 
@@ -181,10 +181,10 @@ fun HotkeyGrid(
         modifier = Modifier.fillMaxWidth().then(gestures),
     ) { measurables, constraints ->
         widthPx = constraints.maxWidth.toFloat()
-        val w = ((constraints.maxWidth - gapPx * (COLS - 1)) / COLS).toInt().coerceAtLeast(1)
+        val w = ((constraints.maxWidth - gapPx * (cols - 1)) / cols).toInt().coerceAtLeast(1)
         val h = tileHPx.toInt()
         val placeables = measurables.map { it.measure(androidx.compose.ui.unit.Constraints.fixed(w, h)) }
-        val rows = (placeables.size + COLS - 1) / COLS
+        val rows = (placeables.size + cols - 1) / cols
         val height = if (rows == 0) 0 else (rows * h + (rows - 1) * gapPx).toInt()
         layout(constraints.maxWidth, height) {
             placeables.forEachIndexed { i, p ->

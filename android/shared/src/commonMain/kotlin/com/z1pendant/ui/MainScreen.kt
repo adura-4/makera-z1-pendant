@@ -57,6 +57,9 @@ fun stepLabel(s: Double) = when {
     else -> Fmt.plain(s)
 }
 
+/** True when the window is at least 600 dp wide (iPad, Android tablet): bigger readout, smaller dial, 5×3 hotkeys. */
+val LocalWide = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, onEdit: (Hotkey?) -> Unit,
@@ -76,6 +79,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     val arrangeOrder by vm.arrangeOrder.collectAsState()
     val connected = conn == ConnState.Connected
     var moveFor by remember { mutableStateOf<Char?>(null) }
+    val wide = LocalWide.current
     val padMode by vm.jogPad.collectAsState()
     val rowScope = rememberCoroutineScope()
     val zeroUndo by vm.zeroUndo.collectAsState()
@@ -148,23 +152,23 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                         .padding(horizontal = 10.dp, vertical = 1.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(a.toString(), fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(26.dp),
+                    Text(a.toString(), fontSize = if (wide) 34.sp else 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(if (wide) 44.dp else 26.dp),
                         color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                        Text(fmtPos(st?.wpos?.getOrNull(i), connected), fontSize = 26.sp, lineHeight = 28.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-                        Text("M " + fmtPos(st?.mpos?.getOrNull(i), connected), fontSize = 12.sp, lineHeight = 13.sp, fontFamily = FontFamily.Monospace,
+                        Text(fmtPos(st?.wpos?.getOrNull(i), connected), fontSize = if (wide) 42.sp else 26.sp, lineHeight = if (wide) 44.sp else 28.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                        Text("M " + fmtPos(st?.mpos?.getOrNull(i), connected), fontSize = if (wide) 16.sp else 12.sp, lineHeight = if (wide) 18.sp else 13.sp, fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(8.dp))
                     PendantOutlinedButton(onClick = { vm.selectAxis(a); vm.haptics.press(); moveFor = a }, enabled = connected,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(34.dp)) { Text("move", fontSize = 13.sp) }
+                        contentPadding = PaddingValues(horizontal = if (wide) 16.dp else 10.dp, vertical = 0.dp), modifier = Modifier.height(if (wide) 46.dp else 34.dp)) { Text("move", fontSize = if (wide) 17.sp else 13.sp) }
                     Spacer(Modifier.width(6.dp))
                     // "zero" sets this axis to 0; pressed again while it still reads 0 (nothing moved)
                     // it puts the previous value back, like a DRO's zero/recall. Label shows which.
                     val undo = zeroUndo.containsKey(a) && vm.canRestoreZero(a, st)
                     PendantOutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = connected && st?.isIdle == true,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(34.dp).widthIn(min = 64.dp)) {
-                        Text(if (undo) "undo" else "zero", fontSize = 13.sp)
+                        contentPadding = PaddingValues(horizontal = if (wide) 16.dp else 10.dp, vertical = 0.dp), modifier = Modifier.height(if (wide) 46.dp else 34.dp).widthIn(min = if (wide) 88.dp else 64.dp)) {
+                        Text(if (undo) "undo" else "zero", fontSize = if (wide) 17.sp else 13.sp)
                     }
                 }
             }
@@ -181,7 +185,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // Top-left: switch dial <-> jog pad. Bottom-left: up-chevron opens the hotkey grid (the
         // grid slides up); expanded, a down-chevron brings the dial back.
         if (!expanded) BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val box = maxWidth * 0.75f                 // same height in both modes: nothing below jumps
+            // same height in both modes, so nothing below jumps; tablets: half the width (the readout gets the room)
+            val box = if (wide) minOf(maxWidth * 0.5f, 440.dp) else maxWidth * 0.75f
             Box(Modifier.fillMaxWidth().height(box)) {
                 if (!padMode) Handwheel(
                     degPerClick = degPerClick, axis = axis,
@@ -226,11 +231,11 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                     .let { l -> l.filter { it.showOnMain } + l.filterNot { it.showOnMain } }   // shown first
             }
             expanded -> visible
-            else -> visible.take(8)
+            else -> visible.take(if (wide) 15 else 8)
         }
         if (editMode) Text("Drag tiles to rearrange · tap one to edit · Save when done", fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        HotkeyGrid(shown, arranging = editMode, toggleOf = { toggleState(it, outputs, connected) },
+        HotkeyGrid(shown, cols = if (wide) 5 else 4, arranging = editMode, toggleOf = { toggleState(it, outputs, connected) },
             onTap = { h -> if (editMode) onEdit(h) else vm.requestRun(h) },
             onLong = { h -> vm.haptics.majorTick(); onEdit(h) },
             onMove = { id, to -> vm.moveInArrangement(id, to) },

@@ -40,7 +40,7 @@ import kotlinx.coroutines.launch
 fun JogPad(vm: AppViewModel, step: Double, enabled: Boolean, modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier) {
         // 5 buttons across + gaps (6+6 in the cross, 14 to the rails, 10 between rails)
-        val cell: Dp = minOf(68.dp, (maxWidth - 36.dp) / 5)
+        val cell: Dp = minOf(if (LocalWide.current) 88.dp else 68.dp, (maxWidth - 36.dp) / 5)
         val gap = 6.dp
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(gap)) {

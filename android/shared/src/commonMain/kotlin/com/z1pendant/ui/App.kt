@@ -55,16 +55,19 @@ fun App(vm: AppViewModel) {
     val mainScroll = rememberScrollState()
     LaunchedEffect(Unit) { vm.snack.collect { snackHost.currentSnackbarData?.dismiss(); snackHost.showSnackbar(it) } }
 
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { Box(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         // Full-screen pages live in the activity window (not Dialogs) so dispatchKeyEvent sees
         // every button press, which the "press any button to bind" flow relies on.
         vm.onMainScreen = !(editorOpen || settings || console)
-        when {
-            editorOpen -> HotkeyEditor(vm, editing) { editorOpen = false; editing = null; vm.capture.value = null }
-            settings -> SettingsScreen(vm) { settings = false }
-            console -> ConsoleScreen(vm) { console = false }
-            else -> MainScreen(vm, onSettings = { settings = true }, onConsole = { console = true },
-                onEdit = { editing = it; editorOpen = true }, scroll = mainScroll)
+        // Windows 600 dp or wider (iPad, Android tablet) get the wide layout; see LocalWide.
+        androidx.compose.runtime.CompositionLocalProvider(LocalWide provides (maxWidth >= 600.dp)) {
+            when {
+                editorOpen -> HotkeyEditor(vm, editing) { editorOpen = false; editing = null; vm.capture.value = null }
+                settings -> SettingsScreen(vm) { settings = false }
+                console -> ConsoleScreen(vm) { console = false }
+                else -> MainScreen(vm, onSettings = { settings = true }, onConsole = { console = true },
+                    onEdit = { editing = it; editorOpen = true }, scroll = mainScroll)
+            }
         }
         SnackbarHost(snackHost, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing))
     } }
