@@ -30,6 +30,11 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   Import/export the whole set as a file.
 - **Feed override, Hold, Resume, Reset** in a drawer at the bottom (swipe up). It opens by itself
   when the machine holds, alarms, or starts moving from somewhere else (e.g. a job from Makera Studio).
+  The buttons stay quiet while idle and light up when they matter: Hold and Reset while moving,
+  Resume on hold, Reset in an alarm.
+- **Tablets** (iPad, Android tablets): a bigger readout, and the dial / jog pad resize around your
+  hotkeys. Turn the tablet sideways for a side-by-side layout with everything on screen at once:
+  readout, hotkeys and the stop buttons on the left, steps and a big dial or jog pad on the right.
 - **Soft-limit protection**: jogs are clamped and typed moves refused before they reach the
   machine's soft limits, so they don't trip an alarm.
 - **Console**: every command sent and every reply, with time stamps, plus a box to type commands.
@@ -44,10 +49,15 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   <img src="docs/screenshots/07_console.png" width="200" alt="Console">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/09_tablet_dial.png" width="420" alt="Tablet, landscape, dial">
+  <img src="docs/screenshots/10_tablet_jogpad.png" width="420" alt="Tablet, landscape, jog pad">
+</p>
+
 ## Requirements
-- An Android phone on **Android 12 or newer** (developed on a Pixel 10, Android 16), or an
-  **iPhone on iOS 16 or newer** that you build and install yourself from a Mac (see
-  [iPhone](#iphone); tested on an iPhone 16, iOS 27).
+- An Android phone or tablet on **Android 12 or newer** (developed on a Pixel 10, Android 16), or an
+  **iPhone / iPad on iOS 16 or newer** that you build and install yourself from a Mac (see
+  [iPhone](#iphone); tested on an iPhone 16 with iOS 27 and an iPad Pro 11" with iPadOS 18).
 - A **Makera Z1** (developed on a Z1 Pro) on stock firmware, already set up on your Wi-Fi with the
   Makera app.
 - Phone and machine on the **same Wi-Fi network**.
@@ -70,11 +80,11 @@ The app isn't on the Play Store, so you install the APK file yourself ("sideload
 > Prefer installing from a computer? With [adb](https://developer.android.com/tools/adb) and USB
 > debugging on: `adb install z1-pendant-<version>.apk`.
 
-## iPhone
+## iPhone (and iPad)
 There's no App Store version, so you build the app on a Mac and install it on your iPhone with your
 own (free) Apple ID. It's the same app and the same screens as on Android.
 
-You need a Mac with **Xcode** (free, Mac App Store) and **Java 21** (e.g. [Temurin](https://adoptium.net)),
+The same steps install it on an iPad. You need a Mac with **Xcode** (free, Mac App Store) and **Java 21** (e.g. [Temurin](https://adoptium.net)),
 and a USB cable for the first install.
 
 1. Get the source: `git clone https://github.com/jimmyvegas29/makera-z1-pendant`
