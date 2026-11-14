@@ -20,9 +20,8 @@ class IosPlatform : Platform {
     override val prefs: Prefs = UserDefaultsPrefs(NSUserDefaults.standardUserDefaults)
     override val hotkeyFile: TextFile = DocumentsFile("hotkeys.json")
     override val haptics: Haptics = IosHaptics()
-    // Receiving the UDP 3333 broadcasts needs no lock on iOS, but it does need the Local Network
-    // permission (NSLocalNetworkUsageDescription) and Apple's multicast entitlement
-    // (com.apple.developer.networking.multicast) in the app.
+    // Receiving the UDP 3333 broadcasts needs no lock on iOS, only the Local Network permission
+    // (NSLocalNetworkUsageDescription). No multicast entitlement needed: confirmed on an iPhone 16.
 }
 
 private class UserDefaultsPrefs(private val d: NSUserDefaults) : Prefs {

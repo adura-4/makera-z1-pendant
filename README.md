@@ -91,16 +91,15 @@ and a USB cable for the first install.
 With a **free Apple ID the app stops opening after 7 days**: plug the phone in and run step 5 again
 (your settings and hotkeys are kept). A paid Apple Developer account makes it a year.
 
-Differences on iPhone: **Scan network** can't find the machine (iOS needs a special Apple permission
-for that), so type its IP once in Settings; the volume buttons can't jog (iOS doesn't let apps use
-them); hotkey export/import is Android-only for now.
+Differences on iPhone: the volume buttons can't jog (iOS doesn't let apps use them), and hotkey
+export/import is Android-only for now. **Scan network** works once you've allowed local network access.
 
 ## Connect to your machine
 1. Turn the Z1 on and let it finish homing.
 2. In the app, tap the **⚙ settings** icon (top right) → **Scan network**. Your machine appears as
    `Makera_Z1P_…`; tap it.
-3. If it isn't found (some routers block broadcasts, and iPhone can't scan), type the machine's IP
-   address and tap **Connect**.
+3. If it isn't found (some routers block broadcasts; on iPhone, check local network access is allowed
+   under Settings → Privacy & Security → Local Network), type the machine's IP address and tap **Connect**.
    The IP is in the Makera app or your router's device list. The port is 2222.
 
 The app remembers the machine and reconnects by itself. The name, IP and round-trip time show at the

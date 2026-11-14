@@ -17,8 +17,9 @@ private val viewModel by lazy { AppViewModel(IosPlatform()) }
  * Entry point for the iOS app (Swift: `MainViewControllerKt.MainViewController()`).
  *
  * The app's Info.plist needs `CADisableMinimumFrameDurationOnPhone` = YES (Compose checks it) and
- * `NSLocalNetworkUsageDescription` (TCP 2222 and UDP 3333 on the LAN); discovery also needs the
- * `com.apple.developer.networking.multicast` entitlement to receive broadcasts.
+ * `NSLocalNetworkUsageDescription` (TCP 2222 and UDP 3333 on the LAN). Receiving the UDP 3333
+ * discovery broadcasts works without Apple's multicast entitlement (confirmed on an iPhone 16,
+ * iOS 27, free-provisioning build), once the user allows local network access.
  * Hardware keys (bound buttons, volume jog) aren't wired up on iOS yet.
  */
 fun MainViewController(): UIViewController = ComposeUIViewController {
