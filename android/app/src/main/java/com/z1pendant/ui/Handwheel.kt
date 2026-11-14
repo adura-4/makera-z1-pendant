@@ -12,7 +12,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -50,8 +54,12 @@ fun Handwheel(
     onClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var angle by remember { mutableFloatStateOf(0f) }        // visual rotation, degrees
+    // The wheel is drawn turned by whole detents, not by the raw finger angle: one tick = one
+    // click = one move, so a tick always sits exactly under the fixed marker at 12 o'clock.
+    var detents by remember { mutableIntStateOf(0) }
     var active by remember { mutableStateOf(false) }
+    val flash = remember { Animatable(0f) }                   // marker brightens briefly on each click
+    val scope = rememberCoroutineScope()
     val click by rememberUpdatedState(onClick)
     val deg by rememberUpdatedState(degPerClick)
     val en by rememberUpdatedState(enabled)
@@ -87,10 +95,11 @@ fun Handwheel(
                         if (delta > 180) delta -= 360f
                         if (delta < -180) delta += 360f
                         last = a
-                        angle += delta
                         acc += delta
-                        while (acc >= deg) { acc -= deg; if (en) click(1) }
-                        while (acc <= -deg) { acc += deg; if (en) click(-1) }
+                        var turned = false
+                        while (acc >= deg) { acc -= deg; detents++; turned = true; if (en) click(1) }
+                        while (acc <= -deg) { acc += deg; detents--; turned = true; if (en) click(-1) }
+                        if (turned) scope.launch { flash.snapTo(1f); flash.animateTo(0f, tween(220)) }
                     }
                     active = false
                 }
@@ -100,24 +109,25 @@ fun Handwheel(
             val c = center
             drawCircle(ring.copy(alpha = dim), radius = r * 0.98f)
             drawCircle(if (active) accent.copy(alpha = 0.6f) else tick.copy(alpha = 0.25f), radius = r * 0.98f, style = Stroke(width = r * 0.025f))
-            rotate(angle, c) {
-                val n = (360f / degPerClick).toInt().coerceAtLeast(6)
-                // The tick sitting at 12 o'clock is lit in the accent colour; turning the wheel one
-                // detent brings the next tick up there and it lights instead.
-                val top = Math.floorMod(Math.round(-angle * n / 360f), n)
+            val n = (360f / degPerClick).toInt().coerceAtLeast(6)
+            rotate(detents * 360f / n, c) {
                 for (i in 0 until n) {
                     val t = (i * 360f / n - 90f) * PI.toFloat() / 180f
                     val major = i % 5 == 0
-                    val lit = i == top
-                    val r0 = r * (if (lit) 0.74f else if (major) 0.78f else 0.84f); val r1 = r * 0.93f
-                    drawLine(if (lit) accent.copy(alpha = dim) else tick.copy(alpha = (if (major) 0.9f else 0.5f) * dim),
+                    val r0 = r * (if (major) 0.78f else 0.84f); val r1 = r * 0.93f
+                    drawLine(tick.copy(alpha = (if (major) 0.9f else 0.5f) * dim),
                         Offset(c.x + r0 * cos(t), c.y + r0 * sin(t)), Offset(c.x + r1 * cos(t), c.y + r1 * sin(t)),
-                        strokeWidth = r * (if (lit) 0.03f else if (major) 0.022f else 0.012f), cap = StrokeCap.Round)
+                        strokeWidth = r * (if (major) 0.022f else 0.012f), cap = StrokeCap.Round)
                 }
                 // finger dimple
                 val t = -90f * PI.toFloat() / 180f
                 drawCircle(accent.copy(alpha = dim), radius = r * 0.09f, center = Offset(c.x + r * 0.6f * cos(t), c.y + r * 0.6f * sin(t)))
             }
+            // Fixed marker at 12 o'clock (doesn't turn), drawn over the tick under it; flashes per click.
+            val f = flash.value
+            drawLine(accent.copy(alpha = (0.85f + 0.15f * f) * dim),
+                Offset(c.x, c.y - r * 0.95f), Offset(c.x, c.y - r * 0.72f),
+                strokeWidth = r * (0.03f + 0.02f * f), cap = StrokeCap.Round)
             drawCircle(Color.Black.copy(alpha = 0.25f), radius = r * 0.46f)
         }
         // Axis letter dead centre, the step underneath it, both inside the dark centre disc.

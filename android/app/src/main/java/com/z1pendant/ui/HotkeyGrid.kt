@@ -226,8 +226,8 @@ private fun HotkeyTileView(h: Hotkey, arranging: Boolean, toggle: Boolean?, ring
         }
         Text(h.label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = fg,
             fontWeight = if (toggle == true) FontWeight.SemiBold else FontWeight.Normal)
-        if (h.triggers.isNotEmpty() || h.confirm) {
-            Text((if (h.confirm) "ask " else "") + (if (h.triggers.isNotEmpty()) "⌨${h.triggers.size}" else ""),
+        if (h.triggers.isNotEmpty()) {
+            Text("⌨${h.triggers.size}",
                 fontSize = 9.sp, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f))
         }
     }
