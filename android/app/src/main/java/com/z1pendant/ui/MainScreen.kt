@@ -131,7 +131,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 val hold = remember { androidx.compose.animation.core.Animatable(0f) }
                 val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
                 Row(
-                    // Tap = select the axis. Hold 2 s (the row fills while you hold) = Move box.
+                    // Tap = select the axis. Hold 1.5 s (the row fills while you hold) = Move box.
                     Modifier.fillMaxWidth()
                         .tapOrHold(a, HOLD_MS, hold, rowScope,
                             onTap = { vm.selectAxis(a); vm.haptics.press() },
@@ -310,7 +310,7 @@ private fun ControlsDrawer(
 }
 
 /** How long to hold a readout row to open its Move box. */
-private const val HOLD_MS = 2000L
+private const val HOLD_MS = 1500L
 
 /**
  * Tap (released within 500 ms) = [onTap]; held still for [ms] = [onHold]. [progress] runs 0→1

@@ -25,7 +25,7 @@ import com.z1pendant.AppViewModel
 import java.util.Locale
 
 /**
- * Typed move for one axis, opened from its readout row (move button, or a 2 s hold).
+ * Typed move for one axis, opened from its readout row (move button, or a 1.5 s hold).
  * "Go to" = work position, "Move by" = relative. Shows the exact line(s) it will send; Go sends
  * them (rapid, G0). ± flips the sign. A plain panel rather than AlertDialog, whose fixed title /
  * body / button spacing was too loose.
@@ -78,10 +78,9 @@ fun MoveDialog(vm: AppViewModel, axis: Char, onDismiss: () -> Unit) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Go),
                             keyboardActions = KeyboardActions(onGo = { go() }))
                     }
-                    // What Go will send (or why it can't). Fixed minimum height so the box doesn't jump.
-                    Column(Modifier.heightIn(min = 40.dp)) {
+                    // What Go will send (or why it can't). Only there once a number is typed; the box grows.
+                    if (plan != null) Column {
                         when {
-                            plan == null -> {}
                             plan.error != null -> Text(plan.error, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
                             else -> {
                                 plan.lines.forEach { Text(it, fontFamily = FontFamily.Monospace, fontSize = 15.sp) }
