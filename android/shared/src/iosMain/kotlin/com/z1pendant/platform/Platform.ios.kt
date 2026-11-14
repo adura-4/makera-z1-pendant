@@ -6,7 +6,6 @@ import com.z1pendant.AppViewModel
 import platform.Foundation.NSDate
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSLocale
-import platform.Foundation.NSLog
 import platform.Foundation.NSProcessInfo
 
 /** Seconds since boot (not counting sleep), as ms: monotonic, like Android's elapsedRealtime for our use. */
@@ -20,8 +19,10 @@ private val hms = NSDateFormatter().apply {
 actual fun wallClockHms(): String = hms.stringFromDate(NSDate())
 
 actual fun platformLog(level: Char, tag: String, msg: String) {
-    // NSLog takes a format string: pass the text as an argument so a '%' in it is harmless.
-    NSLog("%@", "$level/$tag: $msg")
+    // Not NSLog: a Kotlin String passed through its C varargs isn't an Objective-C object, and the
+    // %@ formatting crashed the app (SIGTRAP in objc_opt_respondsToSelector). stdout reaches the
+    // Xcode / devicectl console all the same.
+    println("$level/$tag: $msg")
 }
 
 /** iPhone has no system back button; screens close with their close (X) button. */
