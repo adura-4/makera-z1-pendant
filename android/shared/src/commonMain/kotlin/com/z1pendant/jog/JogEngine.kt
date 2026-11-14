@@ -33,6 +33,20 @@ data class JogConfig(
     val bufferS: Double = 0.12,
     /** How fast the feed corrects toward that buffer (s). */
     val correctS: Double = 0.3,
+    /**
+     * While a jog-pad button is held ([JogEngine.holdRate]) the feed is this fraction of the
+     * button's speed, constant, with no lead correction. A little slower than the clicks arrive, the
+     * queue slowly fills (up to the cap, where a dropped click costs nothing: moves are still queued)
+     * and never runs dry. Any feed change from move to move is audible on the Z1, and a feed even a
+     * few % above the supply empties the queue and stops the machine for a moment.
+     */
+    val holdFeedFactor: Double = 0.97,
+    /**
+     * The Z1 refreshes the position in its status only every 250–370 ms and repeats it in between.
+     * A repeated position is taken to be as old as the first status that carried it, up to this age;
+     * older than that the machine is standing still at it, so the latest status's age is used.
+     */
+    val positionMaxAgeMs: Long = 400,
     /** Smoothie's queue_delay_time_ms: the machine sits still this long when a jog starts. */
     val startDelayS: Double = 0.1,
     val accelMmS2: Double = 150.0,            // live M503: XYZ 150 mm/s²
@@ -74,6 +88,12 @@ class JogEngine(
         set(v) { if (v != field) { pending.store(0); target = null }; field = v }
     @Volatile var step: Double = 0.1
     @Volatile var enabled = true
+    /**
+     * While a jog-pad button is held and repeating: its exact click rate (clicks/s). It is used as
+     * the hand speed, and the feed is a constant [JogConfig.holdFeedFactor] of it. null = measure the
+     * hand (dial, taps, keys).
+     */
+    @Volatile var holdRate: Double? = null
 
     private val pending = AtomicInt(0)
     @Volatile private var target: Double? = null
@@ -84,6 +104,9 @@ class JogEngine(
     val lastJogAt: Long get() = lastSendAt
     @Volatile private var lastCmdV = 0.0                 // mm/s of the last move sent
     @Volatile private var lastDropAt = 0L
+    /** The last reported machine position and the arrival time of the first status that carried it. */
+    private var lastMpos: List<Double> = emptyList()
+    private var mposSince = 0L
     private var job: Job? = null
 
     fun start() {
@@ -112,8 +135,8 @@ class JogEngine(
         }
     }
 
-    /** Detents per second over the last [JogConfig.handWindowMs]. */
-    private fun handRate(now: Long): Double = synchronized(clickLock) {
+    /** Detents per second: the held button's repeat rate, or the clicks over the last [JogConfig.handWindowMs]. */
+    private fun handRate(now: Long): Double = holdRate ?: synchronized(clickLock) {
         while (clickTimes.isNotEmpty() && now - clickTimes.first() > config.handWindowMs) clickTimes.removeFirst()
         clickTimes.size / (config.handWindowMs / 1000.0)
     }
@@ -123,7 +146,7 @@ class JogEngine(
 
     private fun axisIndex(a: Char) = "XYZA".indexOf(a)
 
-    private fun tick() {
+    internal fun tick() {
         val now = nowMs()
         val st = link.status.value
         val connected = link.conn.value == ConnState.Connected
@@ -163,9 +186,14 @@ class JogEngine(
         val stp = step
         val vmax = lim.maxRateMmMin / 60.0                        // mm/s
         val vHand = min(handRate(now) * stp, vmax)
-        // Lead = commanded minus reported, minus what the machine has travelled since that status
-        // (dead reckoning), so stale status doesn't inflate it.
-        val statusAgeS = (now - st.atMs + (link.latencyMs.value ?: 30) / 2) / 1000.0
+        // Lead = commanded minus reported, minus what the machine has travelled since that position
+        // was read (dead reckoning), so stale status doesn't inflate it. The Z1 refreshes the position
+        // it reports only every 250–370 ms and repeats it in between, so the reading is as old as the
+        // first status that carried it, not the latest one. Counting from the latest made the lead look
+        // up to ~0.3 s of travel too long: the feed swung ±10 % and clicks hit the cap and were dropped.
+        if (st.mpos != lastMpos) { lastMpos = st.mpos; mposSince = st.atMs }
+        val readAt = if (now - mposSince <= config.positionMaxAgeMs) mposSince else st.atMs
+        val statusAgeS = (now - readAt + (link.latencyMs.value ?: 30) / 2) / 1000.0
         val rawLead = abs(target!! - pos)
         val lead = if (st.state.equals("Run", true)) maxOf(0.0, rawLead - lastCmdV * statusAgeS) else rawLead
         // Feed: hand speed, corrected toward a lead of vHand × buffer.
@@ -174,7 +202,8 @@ class JogEngine(
         // waits for Idle and a fresh status; on iPhone that took ~0.45 s) used to fall back to
         // the 5 mm/min minimum: a 10 mm pad tap became a two-minute crawl stuck in "Run".
         val vFloor = maxOf(config.minFeedMmMin / 60.0, vHand * 0.3, min(stp / 0.3, vmax))
-        val vCmd = (vHand + (lead - vHand * config.bufferS) / config.correctS).coerceIn(vFloor, vmax)
+        val vCmd = if (holdRate != null) (vHand * config.holdFeedFactor).coerceIn(config.minFeedMmMin / 60.0, vmax)
+            else (vHand + (lead - vHand * config.bufferS) / config.correctS).coerceIn(vFloor, vmax)
         // Floor of 5 clicks: at the start of a slow turn the speed estimate is still tiny, and a
         // precise 0.01 mm turn must not lose clicks. The feed correction clears them quickly.
         // The floor stops at 5 mm (one click at the 5 mm step), so a big step can't leave a long

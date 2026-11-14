@@ -186,8 +186,11 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         return maxOf(120L, (steps[stepIndex.value] / vmax * 1000.0).toLong())
     }
 
+    /** A held pad button starts repeating: its speed is known exactly, one step per [padRepeatMs]. */
+    fun padHoldStarted(a: Char) { jog.holdRate = 1000.0 / padRepeatMs(a) }
+
     /** Button let go after it had started repeating: drop clicks not yet sent, so it stops. */
-    fun padReleased() = jog.cancelPending()
+    fun padReleased() { jog.holdRate = null; jog.cancelPending() }
     private var detents = 0
     /** One handwheel detent: tick, with a firmer click every 10th. */
     fun wheelClicks(n: Int) {
