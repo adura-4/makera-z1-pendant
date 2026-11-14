@@ -70,6 +70,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     val arrangeOrder by vm.arrangeOrder.collectAsState()
     val connected = conn == ConnState.Connected
     var moveFor by remember { mutableStateOf<Char?>(null) }
+    val zeroUndo by vm.zeroUndo.collectAsState()
     moveFor?.let { a -> MoveDialog(vm, a) { moveFor = null } }
 
     Column(
@@ -139,8 +140,16 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { vm.selectAxis(a); vm.haptics.press(); moveFor = a }, enabled = connected,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(34.dp)) { Text("move", fontSize = 13.sp) }
+                    Spacer(Modifier.width(6.dp))
+                    // "zero" sets this axis to 0; pressed again while it still reads 0 (nothing moved)
+                    // it puts the previous value back, like a DRO's zero/recall. Label shows which.
+                    val undo = zeroUndo.containsKey(a) && vm.canRestoreZero(a, st)
                     OutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = connected && st?.isIdle == true,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(34.dp)) { Text("zero", fontSize = 13.sp) }
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(34.dp).widthIn(min = 64.dp)) {
+                        Text(if (undo) "undo" else "zero", fontSize = 13.sp)
+                    }
                 }
             }
         }

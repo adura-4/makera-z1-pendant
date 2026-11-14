@@ -71,6 +71,8 @@ interface Dialect {
     fun home(): List<String>
     fun unlock(): List<String>
     fun zeroAxes(axes: String): List<String>       // e.g. "X", "XYZ"
+    /** Make the current position read [values] in work coordinates (undo of a zero). */
+    fun setWorkPosition(values: Map<Char, Double>): List<String>
     fun feedOverride(percent: Int): List<String>
     fun light(on: Boolean): List<String>
     fun vacuum(on: Boolean): List<String>
@@ -82,6 +84,8 @@ object GrblishDialect : Dialect {
     override fun home() = listOf("\$H")
     override fun unlock() = listOf("\$X")
     override fun zeroAxes(axes: String) = listOf("G10L20P0" + axes.map { "${it}0" }.joinToString(""))
+    override fun setWorkPosition(values: Map<Char, Double>) =
+        listOf("G10L20P0" + values.entries.joinToString("") { (a, v) -> a + fmt(v) })
     override fun feedOverride(percent: Int) = listOf("M220S$percent")
     // Z1 config: switch.light.input_on_command M821 / off M822 (confirmed on the machine 2026-11-13).
     override fun light(on: Boolean) = listOf(if (on) "M821" else "M822")

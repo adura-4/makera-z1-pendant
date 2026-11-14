@@ -4,12 +4,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
@@ -41,7 +43,18 @@ fun MoveDialog(vm: AppViewModel, axis: Char, onDismiss: () -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Move $axis") },
+        // Title: blue axis letter + "Move"; ✕ top-right closes. Go is the one big button at the bottom.
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(axis.toString(), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+                Spacer(Modifier.width(10.dp))
+                Text("Move", fontSize = 24.sp)
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onDismiss, modifier = Modifier.offset(x = 12.dp)) {
+                    Icon(androidx.compose.material.icons.Icons.Filled.Close, "Cancel")
+                }
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Now: $axis ${st?.wpos?.getOrNull(i)?.let { "%.3f".format(Locale.US, it) } ?: "—"} $unit (work)",
@@ -74,9 +87,12 @@ fun MoveDialog(vm: AppViewModel, axis: Char, onDismiss: () -> Unit) {
                         }
                     }
                 }
+                Button(onClick = go, enabled = plan != null && plan.error == null && st?.isIdle == true,
+                    modifier = Modifier.align(Alignment.CenterHorizontally).fillMaxWidth(0.6f).height(52.dp)) {
+                    Text("Go", fontSize = 18.sp)
+                }
             }
         },
-        confirmButton = { TextButton(onClick = go, enabled = plan != null && plan.error == null && st?.isIdle == true) { Text("Go") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = {},
     )
 }

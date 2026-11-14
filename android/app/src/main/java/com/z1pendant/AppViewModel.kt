@@ -15,6 +15,7 @@ import com.z1pendant.hotkeys.HotkeyRunner
 import com.z1pendant.hotkeys.Trigger
 import com.z1pendant.jog.JogEngine
 import com.z1pendant.link.ConnState
+import com.z1pendant.link.MachineStatus
 import com.z1pendant.link.MachineTarget
 import com.z1pendant.link.makera.Discovery
 import com.z1pendant.link.makera.MakeraLink
@@ -178,7 +179,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         synchronized(console) { console.value = (console.value + line).takeLast(500) }
     }
 
-    fun zero(axes: String) = link.dialect.zeroAxes(axes).forEach { link.sendLine(it) }
+    fun zero(axes: String) = zeroLines(axes).forEach { link.sendLine(it) }
+
+    // ---- zero / undo (like a DRO's zero + recall) ---------------------------------------------
+    /** Work value an axis had before it was zeroed, and the machine position it was zeroed at. */
+    data class ZeroUndo(val prevWork: Double, val machineAt: Double)
+    val zeroUndo = MutableStateFlow<Map<Char, ZeroUndo>>(emptyMap())
+
+    /** Undo is offered while the axis still reads 0.000 and hasn't moved since it was zeroed. */
+    fun canRestoreZero(a: Char, st: MachineStatus?): Boolean {
+        val u = zeroUndo.value[a] ?: return false
+        val i = axes.indexOf(a)
+        val w = st?.wpos?.getOrNull(i) ?: return false
+        val m = st.mpos.getOrNull(i) ?: return false
+        return kotlin.math.abs(w) < 0.0005 && kotlin.math.abs(m - u.machineAt) < 0.0015
+    }
+
+    /**
+     * Zero [which] (e.g. "XY"), or, if every one of them can be restored (pressed again with nothing moved),
+     * put their previous work values back with G10 L20. Used by the zero buttons and the Zero
+     * hotkeys alike.
+     */
+    private fun zeroLines(which: String): List<String> {
+        val st = link.status.value
+        val list = which.toList()
+        if (list.isNotEmpty() && list.all { canRestoreZero(it, st) }) {
+            val prev = list.associateWith { zeroUndo.value.getValue(it).prevWork }
+            zeroUndo.value = zeroUndo.value - list.toSet()
+            log("↺ restore " + prev.entries.joinToString(" ") { (a, v) -> "$a ${"%.3f".format(java.util.Locale.US, v)}" })
+            return link.dialect.setWorkPosition(prev)
+        }
+        val m = zeroUndo.value.toMutableMap()
+        for (a in list) {
+            val i = axes.indexOf(a)          // the X/Y/Z/A list, not [which]
+            val w = st?.wpos?.getOrNull(i); val mp = st?.mpos?.getOrNull(i)
+            if (w != null && mp != null) m[a] = ZeroUndo(w, mp) else m.remove(a)
+        }
+        zeroUndo.value = m
+        return link.dialect.zeroAxes(which)
+    }
 
     // ---- typed move (long-press a readout row) ------------------------------------------------
     /** The lines a typed move would send, or why it can't run. */
@@ -234,10 +273,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return when (b) {
             BuiltIn.HOME -> d.home()
             BuiltIn.UNLOCK -> d.unlock()
-            BuiltIn.ZERO_SELECTED -> d.zeroAxes(axis.value.toString())
-            BuiltIn.ZERO_X -> d.zeroAxes("X"); BuiltIn.ZERO_Y -> d.zeroAxes("Y")
-            BuiltIn.ZERO_Z -> d.zeroAxes("Z"); BuiltIn.ZERO_A -> d.zeroAxes("A")
-            BuiltIn.ZERO_XY -> d.zeroAxes("XY"); BuiltIn.ZERO_XYZ -> d.zeroAxes("XYZ")
+            // Zero hotkeys toggle like the zero buttons: pressed again with nothing moved = undo.
+            BuiltIn.ZERO_SELECTED -> zeroLines(axis.value.toString())
+            BuiltIn.ZERO_X -> zeroLines("X"); BuiltIn.ZERO_Y -> zeroLines("Y")
+            BuiltIn.ZERO_Z -> zeroLines("Z"); BuiltIn.ZERO_A -> zeroLines("A")
+            BuiltIn.ZERO_XY -> zeroLines("XY"); BuiltIn.ZERO_XYZ -> zeroLines("XYZ")
             BuiltIn.HOLD -> { link.feedHold(); null }
             BuiltIn.RESUME -> { link.resume(); null }
             BuiltIn.RESET -> { reset(); null }
