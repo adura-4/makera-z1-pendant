@@ -61,7 +61,10 @@ class JogEngine(
     var config: JogConfig = JogConfig(),
     private val onDrop: () -> Unit = {},
     private val onLimit: () -> Unit = {},
+    /** A jog ended (the wheel stopped): total distance moved per axis, for the console. */
+    private val onJogDone: (Map<Char, Double>) -> Unit = {},
 ) {
+    private val burst = LinkedHashMap<Char, Double>()
     @Volatile var axis: Char = 'X'
         set(v) { if (v != field) { pending.set(0); target = null }; field = v }
     @Volatile var step: Double = 0.1
@@ -134,7 +137,8 @@ class JogEngine(
 
         if (n == 0) {
             if (needAbsolute && now - lastSendAt > 250 && link.pendingLines == 0) {
-                link.sendLine(link.dialect.absoluteMode()); needAbsolute = false
+                link.sendLine(link.dialect.absoluteMode(), quiet = true); needAbsolute = false
+                if (burst.isNotEmpty()) { onJogDone(LinkedHashMap(burst)); burst.clear() }
             }
             if (st.isIdle && link.pendingLines == 0 && now - lastSendAt > 300) target = null
             return
@@ -203,7 +207,8 @@ class JogEngine(
         val feed = (vCmd * 60.0).coerceIn(config.minFeedMmMin, lim.maxRateMmMin)
         lastCmdV = feed / 60.0
         pending.addAndGet(-(dir * clicks).toInt().let { if (it == 0) 0 else it })
-        link.sendLine(link.dialect.jogMove(a, dist, feed))
+        link.sendLine(link.dialect.jogMove(a, dist, feed), quiet = true)
+        burst[a] = (burst[a] ?: 0.0) + dist
         target = target!! + dist
         lastSendAt = now
         needAbsolute = true

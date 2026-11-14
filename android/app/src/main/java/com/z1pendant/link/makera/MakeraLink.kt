@@ -34,13 +34,14 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
     override val conn = MutableStateFlow(ConnState.Disconnected)
     override val status = MutableStateFlow<MachineStatus?>(null)
     override val messages = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    override val sent = MutableSharedFlow<String>(extraBufferCapacity = 64)
     override val latencyMs = MutableStateFlow<Int?>(null)
     override val outputs = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     @Volatile private var lastDiagAt = 0L
     override val dialect: Dialect = GrblishDialect
     val firmware = MutableStateFlow<String?>(null)
 
-    private class Pending(val line: String, val onAck: ((Boolean, String) -> Unit)?, var sentAt: Long = 0)
+    private class Pending(val line: String, val quiet: Boolean, val onAck: ((Boolean, String) -> Unit)?, var sentAt: Long = 0)
 
     private val lock = Object()
     private val queue = ArrayDeque<Pending>()
@@ -171,6 +172,7 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             toSend?.let {
                 Log.d(TAG, "-> ${it.line}")
                 sendRaw(MakeraFrame.line(it.line))
+                if (!it.quiet) sent.tryEmit(it.line)
             }
             delay(if (toSend != null) 1 else 5)
         }
@@ -211,7 +213,7 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
                         acksSeen = true
                         val p = synchronized(lock) { inFlight.removeFirstOrNull() }
                         p?.onAck?.invoke(isOk, line)
-                        if (isOk && line.length <= 3) continue
+                        if (isOk && p?.quiet == true) continue      // a jog move's "ok"
                     }
                     messages.tryEmit(line)
                 }
@@ -219,16 +221,19 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
         }
     }
 
-    override fun sendLine(line: String, onAck: ((ok: Boolean, reply: String) -> Unit)?) {
-        if (conn.value != ConnState.Connected) { onAck?.invoke(false, "not connected"); return }
-        synchronized(lock) { queue.addLast(Pending(line, onAck)) }
+    override fun sendLine(line: String, quiet: Boolean, onAck: ((ok: Boolean, reply: String) -> Unit)?) {
+        if (conn.value != ConnState.Connected) {
+            if (!quiet) messages.tryEmit("not sent (not connected): $line")
+            onAck?.invoke(false, "not connected"); return
+        }
+        synchronized(lock) { queue.addLast(Pending(line, quiet, onAck)) }
     }
 
-    override fun feedHold() = rt('!'.code)
-    override fun resume() = rt('~'.code)
+    override fun feedHold() { rt('!'.code); sent.tryEmit("! (feed hold)") }
+    override fun resume() { rt('~'.code); sent.tryEmit("~ (resume)") }
     override fun reset() {
         synchronized(lock) { queue.clear() }
-        rt(0x18)
+        rt(0x18); sent.tryEmit("Ctrl-X (reset)")
     }
 
     private fun rt(c: Int) { scope.launch { sendRaw(MakeraFrame.rt(c)) } }

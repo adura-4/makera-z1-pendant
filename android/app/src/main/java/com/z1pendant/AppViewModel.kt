@@ -66,7 +66,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Non-null while the binding dialog waits for a button press. */
     val capture = MutableStateFlow<((Trigger) -> Unit)?>(null)
 
-    val jog = JogEngine(link, viewModelScope, onDrop = { haptics.thud() }, onLimit = { haptics.limit() })
+    val jog = JogEngine(link, viewModelScope, onDrop = { haptics.thud() }, onLimit = { haptics.limit() },
+        onJogDone = { moved ->
+            moved.forEach { (a, d) ->
+                log("↕ jog $a ${"%+.3f".format(java.util.Locale.US, d)} ${if (a == 'A') "°" else "mm"} (dial)")
+            }
+        })
 
     private val host = object : BuiltinHost {
         override fun runBuiltin(b: BuiltIn): List<String>? = builtin(b)
@@ -82,12 +87,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         applyJogConfig()
         jog.start()
         viewModelScope.launch {
-            link.messages.collect { m -> console.value = (console.value + "← $m").takeLast(200) }
+            link.messages.collect { m -> log("← $m") }
         }
+        viewModelScope.launch { link.sent.collect { m -> log("→ $m") } }
         viewModelScope.launch { runner.lastError.collect { it?.let { e -> snack.tryEmit(e); runner.lastError.value = null } } }
         viewModelScope.launch {
             link.conn.collectLatest { c ->
-                console.value = (console.value + "· link $c").takeLast(200)
+                log("· link $c")
                 if (c != ConnState.Connected) jog.cancelPending()
             }
         }
@@ -162,8 +168,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun sendConsole(line: String) {
         if (line.isBlank()) return
-        console.value = (console.value + "→ $line").takeLast(200)
-        link.sendLine(line.trim())
+        link.sendLine(line.trim())          // the link logs it when it actually goes out
+    }
+
+    /** Console line with a time stamp. Everything sent (except dial jogs) and every reply. */
+    private fun log(s: String) {
+        // Formatter made here, not as a field: log() already runs from init, before later fields exist.
+        val line = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + " " + s
+        synchronized(console) { console.value = (console.value + line).takeLast(500) }
     }
 
     fun zero(axes: String) = link.dialect.zeroAxes(axes).forEach { link.sendLine(it) }
@@ -308,9 +320,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         runner.blockReason(h)?.let { snack.tryEmit("${h.label}: $it"); haptics.thud(); return }
         if (h.confirm && !test) { confirmFor.value = h; return }
         haptics.press()
-        runner.run(h)
+        runNow(h)
     }
-    fun confirmRun() { confirmFor.value?.let { haptics.press(); runner.run(it) }; confirmFor.value = null }
+    fun confirmRun() { confirmFor.value?.let { haptics.press(); runNow(it) }; confirmFor.value = null }
+    /** Console marks which hotkey the commands that follow belong to. */
+    private fun runNow(h: Hotkey) { log("▶ hotkey: ${h.label}"); runner.run(h) }
 
     // ---- settings -----------------------------------------------------------------------------
     fun setHaptic(v: Float) { hapticStrength.value = v; haptics.strength = v; prefs.edit().putFloat("haptic", v).apply() }

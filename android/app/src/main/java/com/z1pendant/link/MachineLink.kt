@@ -13,14 +13,19 @@ interface MachineLink {
     val status: StateFlow<MachineStatus?>
     /** Text the machine sends that isn't a status reply ("ok", errors, alarms, version). */
     val messages: SharedFlow<String>
+    /** What went out, as it was sent: command lines and real-time commands (hold, resume, reset). */
+    val sent: SharedFlow<String>
     /** Round-trip time of the last status query, ms. */
     val latencyMs: StateFlow<Int?>
 
     fun connect(target: MachineTarget)
     fun disconnect()
 
-    /** Queue one command line. Lines go out in order; [onAck] runs when the machine answers it. */
-    fun sendLine(line: String, onAck: ((ok: Boolean, reply: String) -> Unit)? = null)
+    /**
+     * Queue one command line. Lines go out in order; [onAck] runs when the machine answers it.
+     * [quiet] lines (the dial's jog moves, ~25 a second) and their "ok"s stay out of [sent]/[messages].
+     */
+    fun sendLine(line: String, quiet: Boolean = false, onAck: ((ok: Boolean, reply: String) -> Unit)? = null)
     /** Lines sent but not yet answered. */
     val pendingLines: Int
 

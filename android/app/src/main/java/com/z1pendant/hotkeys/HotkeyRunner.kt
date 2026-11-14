@@ -92,7 +92,7 @@ class HotkeyRunner(
     private suspend fun sendAll(lines: List<String>) {
         for (l in lines) {
             val done = CompletableDeferred<Pair<Boolean, String>>()
-            link.sendLine(l) { ok, reply -> done.complete(ok to reply) }
+            link.sendLine(l, onAck = { ok, reply -> done.complete(ok to reply) })
             val (ok, reply) = withTimeout(120_000) { done.await() }
             if (!ok) error("“$l” → ${reply.ifEmpty { "failed" }}")
         }
