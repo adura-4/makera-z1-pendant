@@ -1,5 +1,7 @@
 package com.z1pendant.ui
 
+import androidx.compose.ui.layout.onSizeChanged
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -130,7 +132,14 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
 
         // Header + running banner pinned on top, feed + Hold/Resume/Reset pinned at the bottom;
         // everything between scrolls.
-        Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Wide screens: the dial takes whatever height the rest leaves (it grows when there are
+        // only 1-2 hotkey rows, shrinks for 3). viewH = visible height, otherH = content minus dial.
+        var viewH by remember { mutableIntStateOf(0) }
+        var otherH by remember { mutableIntStateOf(-1) }
+        val placedDial = remember { IntArray(1) }               // dial height used in the last layout, px
+        if (expanded) placedDial[0] = 0
+        Column(Modifier.weight(1f).onSizeChanged { viewH = it.height }.verticalScroll(scroll)) {
+        Column(Modifier.onSizeChanged { otherH = it.height - placedDial[0] }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // ---- DRO ----
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(vertical = 4.dp)) {
             vm.axes.forEachIndexed { i, a ->
@@ -152,11 +161,11 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                         .padding(horizontal = 10.dp, vertical = 1.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(a.toString(), fontSize = if (wide) 34.sp else 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(if (wide) 44.dp else 26.dp),
+                    Text(a.toString(), fontSize = if (wide) 40.sp else 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(if (wide) 50.dp else 26.dp),
                         color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                        Text(fmtPos(st?.wpos?.getOrNull(i), connected), fontSize = if (wide) 42.sp else 26.sp, lineHeight = if (wide) 44.sp else 28.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-                        Text("M " + fmtPos(st?.mpos?.getOrNull(i), connected), fontSize = if (wide) 16.sp else 12.sp, lineHeight = if (wide) 18.sp else 13.sp, fontFamily = FontFamily.Monospace,
+                        Text(fmtPos(st?.wpos?.getOrNull(i), connected), fontSize = if (wide) 52.sp else 26.sp, lineHeight = if (wide) 54.sp else 28.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                        Text("M " + fmtPos(st?.mpos?.getOrNull(i), connected), fontSize = if (wide) 18.sp else 12.sp, lineHeight = if (wide) 20.sp else 13.sp, fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(8.dp))
@@ -185,8 +194,14 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // Top-left: switch dial <-> jog pad. Bottom-left: up-chevron opens the hotkey grid (the
         // grid slides up); expanded, a down-chevron brings the dial back.
         if (!expanded) BoxWithConstraints(Modifier.fillMaxWidth()) {
-            // same height in both modes, so nothing below jumps; tablets: half the width (the readout gets the room)
-            val box = if (wide) minOf(maxWidth * 0.5f, 440.dp) else maxWidth * 0.75f
+            // Same height in both modes, so nothing below jumps. Phones: 75% of the width.
+            // Wide: fill the leftover height, between 260 dp and 80% of the width.
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val box = if (!wide) maxWidth * 0.75f else {
+                val left = if (viewH > 0 && otherH >= 0) with(density) { (viewH - otherH).toDp() } else maxWidth * 0.5f
+                left.coerceIn(260.dp, maxWidth * 0.8f)
+            }
+            placedDial[0] = with(density) { box.roundToPx() }
             Box(Modifier.fillMaxWidth().height(box)) {
                 if (!padMode) Handwheel(
                     degPerClick = degPerClick, axis = axis,
@@ -243,6 +258,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         if (shown.isEmpty()) Text("No hotkeys. Tap the arrow, then +.", fontSize = 13.sp)
 
         Spacer(Modifier.height(4.dp))
+        }
         }
 
         // ---- bottom drawer: feed override + hold/resume/reset ----
