@@ -89,6 +89,7 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
 
     override fun connect(target: MachineTarget) {
         disconnect()
+        firmware.value = null              // belongs to the previous machine
         this.target = target
         job = scope.launch { runLoop(target) }
     }

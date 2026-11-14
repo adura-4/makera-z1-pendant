@@ -1,93 +1,137 @@
 # Z1 Pendant
 
-Android "digital pendant" for the Makera Z1 Pro on **stock firmware** over Wi-Fi. Nothing on the
-machine is modified. APK: `z1-pendant-0.1.0.apk` (release build, debug-signed, minSdk 31).
+A wireless jog pendant for the **Makera Z1** CNC, as an Android app. Turn a handwheel on your phone,
+tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with the machine on its
+**stock firmware**. Nothing on the machine is changed or installed.
 
-## Layout
-- `python/z1proto.py`: wire protocol (frames, CRC, status parser, discovery parser), with self-test.
-- `python/z1client.py`: PC test client: `discover`, `probe` (read-only), `second` (two TCP clients),
-  `send`, `jog`. Anything that moves needs `--motion`.
-- `python/z1sim.py`: machine simulator (discovery broadcast, TCP 2222, G0/G1/G90/G91/G10 L20/$H/$X,
-  M220, hold/resume/halt, 32-block queue, live soft limits X −207..0, Y −206..0, Z −102..0).
-- `android/`: Kotlin + Jetpack Compose app. Build: `gradlew.bat assembleRelease`.
-  - `link/MachineLink.kt`: the transport interface (+ `Dialect` for backend-specific G-code).
-    `link/makera/*` is the stock-firmware backend. A LinuxCNC backend implements the same interface.
-  - `jog/JogEngine.kt`: click batching and the lead cap (below).
-  - `hotkeys/*`: model, JSON import/export, runner with guards.
+<p align="center">
+  <img src="docs/screenshots/01_dial.png" width="240" alt="Dial mode">
+  <img src="docs/screenshots/02_jogpad.png" width="240" alt="Jog pad mode">
+  <img src="docs/screenshots/03_drawer.png" width="240" alt="Feed override, Hold, Resume, Reset">
+</p>
 
-## Protocol (confirmed: Makera app decompile + community firmware `MakeraFrame.h`)
-`86 68 | len u16 BE | type | payload | CRC u16 BE | 55 AA`, len = 1 + payload + 2,
-CRC-16/XMODEM (poly 0x1021, **init 0**) over len + type + payload. Firmware test vector:
-`86 68 00 03 71 3b e5 55 aa`.
-- To machine: `0xA1` one real-time byte (`?` status, `!` hold, `~` resume, `0x18` halt, `0x19` stop,
-  `0x1A` keep-alive); `0xA2` one command line (no newline needed).
-- From machine: `0x81` status `<Idle|MPos:x,y,z,a,b|WPos:…|F:feed,set,override|S:…|…>`,
-  `0x90` text (`ok`, errors, alarms), `0x71` firmware version (periodic), `0x82` diagnose.
-- Discovery: the ESP32 broadcasts `name,ip,port,busy,…` to **UDP 3333** (port read from the app's
-  `discover()` at 0x780e80; format string `%s,%s,%d,%d,%s` in the ESP32 dump).
-- Stock firmware has no `$J` / continuous jog (only a `test jog` shell command), so the pendant jogs
-  with short `G91 G1` moves and restores `G90` when the wheel stops.
+> **Not affiliated with Makera.** This is an independent, community project. It moves a real machine:
+> keep your hand near the machine's own stop button, and use it at your own risk.
 
-## Jog engine
-Every 40 ms, the clicks collected become one `G91 G1` move. Feed = hand speed (clicks in the last 200 ms
-× step) plus a correction that keeps about 120 ms of motion queued:
-`feed = vHand + (lead − vHand·0.12 s) / 0.3 s`, clamped to 5 mm/min … axis max.
-Why the buffer: Smoothie holds a queue that was empty for `queue_delay_time_ms` (100 ms) before running
-it. If the queue runs dry mid-turn, the machine stops and restarts 100 ms late (this was the "laggy,
-not smooth" feel in the first finger test). The **lead** (commanded but not yet travelled, dead-reckoned
-from the last status) plus waiting clicks is capped at
-`max(min(5 clicks, 5 mm), v²/2a + v·tick + vHand·(0.12 + 0.1) + 1 click)` (steps 0.005 · 0.01 · 0.1 · 1 · 5 mm;
-the 5 mm floor means one click at the 5 mm step). Clicks beyond that are dropped, with at
-most one thud per 150 ms. When input stops or the link drops, the axis stops within that distance.
-Simulator (with the 100 ms start delay modelled): slow and moderate turns start once and never run dry,
-with no dropped clicks. Spinning faster than 50 mm/s pins F3000 and drops the excess.
+## Features
+- **Handwheel**: drag around the dial; every click (12° by default) moves one step, with a vibration
+  "detent" you can feel. The wheel turns in whole clicks under a fixed marker.
+- **Jog pad**: tap the joystick button to swap the dial for a −X/+X/−Y/+Y pad with Z and A up/down.
+  Tap for one step, hold to keep moving; it stops when you let go.
+- **Step sizes**: 0.005 · 0.01 · 0.1 · 1 · 5 mm on the dial; 0.01 · 0.1 · 1 · 5 · 10 · 25 mm on the pad.
+  Each mode remembers its own step.
+- **Live readout**: work position (large) and machine position (small) for X, Y, Z and A.
+  - **move**: type a position (*Go to*) or a distance (*Move by*) and send it, with the exact G-code shown first.
+  - **zero**: set the axis to 0. Press again before moving (it reads **undo**) to get the old value back,
+    like a DRO's zero/recall.
+- **Hotkeys**: your own buttons for built-in actions (home, unlock, zero, light, vacuum, feed…),
+  G-code, or multi-step sequences. Optional "ask before running" and "only when Idle" guards.
+  Bind any hotkey to a physical button: volume keys, Bluetooth remotes and gamepads, USB keyboards.
+  Import/export the whole set as a file.
+- **Feed override, Hold, Resume, Reset** in a drawer at the bottom (swipe up). It opens by itself
+  when the machine holds, alarms, or starts moving from somewhere else (e.g. a job from Makera Studio).
+- **Soft-limit protection**: jogs are clamped and typed moves refused before they reach the
+  machine's soft limits, so they don't trip an alarm.
+- **Console**: every command sent and every reply, with time stamps, plus a box to type commands.
+- **Toggles that show state**: the Light and Vacuum tiles are bright when on, dim when off (read back
+  from the machine).
+- Works alongside Makera Studio: both can be connected at the same time.
 
-## Haptics
-Vibration primitives (Pixel 10 and S24 Ultra support them): TICK per detent, CLICK every 10th,
-THUD when clicks are dropped or blocked, double click at a soft limit. Strength is in Settings.
+<p align="center">
+  <img src="docs/screenshots/04_move.png" width="200" alt="Move box">
+  <img src="docs/screenshots/05_hotkeys.png" width="200" alt="All hotkeys">
+  <img src="docs/screenshots/06_editor.png" width="200" alt="Hotkey editor">
+  <img src="docs/screenshots/07_console.png" width="200" alt="Console">
+</p>
 
-## Hotkey grid
-Collapsed: the dial plus the first 8 hotkeys (those with "Show in hotkey grid" on). Tap **Hotkeys ▾** to
-expand: the dial hides and every hotkey shows. **Edit** (expanded only) shows all hotkeys, including
-button-only ones dimmed, adds **+ New**, and lets you drag tiles anywhere (others slide live). It turns
-into **Save**, which commits the order. Hold a tile **2 s** to edit it (a ring fills). A quick tap runs it.
-A hold released early does nothing.
+## Requirements
+- An Android phone on **Android 12 or newer**. Developed on a Pixel 10 (Android 16).
+- A **Makera Z1** (developed on a Z1 Pro) on stock firmware, already set up on your Wi-Fi with the
+  Makera app.
+- Phone and machine on the **same Wi-Fi network**.
 
-## Buttons
-Volume up/down = ±1 click (hold to repeat). Any key event can be bound to a hotkey, short or long
-press (long = 0.5 s), optionally per device: volume keys, Bluetooth remotes and gamepads, USB
-keyboards, a Pico acting as a USB HID keyboard. Bindings only act on the main screen.
-Unbound gamepad buttons are swallowed there (B would otherwise act as Back).
+## Install
+The app isn't on the Play Store, so you install the APK file yourself ("sideloading"). It only takes a minute.
 
-## Test hooks
-- `am start -n com.z1pendant/.MainActivity --es host <ip> [--ei port 2222] [--es name …]` connects.
-- `… --ei testclicks <±n> --ei testms <ms> [--ei teststep 0..4]` injects a click burst.
-- Dell test rig (`~/z1pendant`): `simctl.sh start|stop`, `wake.sh`, `tap.sh "<text>"`, `wheel.sh`.
-  The Dell's ufw blocks inbound 2222, so the Pixel reaches the sim via `adb reverse tcp:2222 tcp:2222`
-  and `--es host 127.0.0.1`. Discovery over Wi-Fi works (the sim broadcasts on 192.168.1.255).
+1. **Download the APK** on your phone: open the [latest release](../../releases/latest) and tap
+   `z1-pendant-<version>.apk` under **Assets**.
+2. **Open the downloaded file**: tap the download notification, or find it in **Files → Downloads**.
+3. **Allow the install.** The first time, Android says your browser (or Files) isn't allowed to install
+   apps. Tap **Settings**, turn on **Allow from this source**, then go back.
+4. Tap **Install**. If Google Play Protect says the app is unknown, tap **More details → Install anyway**
+   (it's unknown only because it isn't from the Play Store).
+5. Open **Z1 Pendant**. No permissions to grant: everything it needs is allowed at install.
 
-## Confirmed on the real Z1 (2026-11-13, fw `version = 1.1.3.0.1.13`, IP 192.168.1.48)
-- Discovery broadcast: `Makera_Z1P_024816,192.168.1.48,2222,0,Idle`. The 5th field is the machine state,
-  and "busy" stayed 0 with Makera Studio connected.
-- Status: `<Idle|MPos:x,y,z,a,b|WPos:…|F:feed,set,ovr|S:…|T:tool,tlo,…|L:…|C:…|E:…|OTA:…>`. No `H:` field
-  and no periodic 0x71 version packets.
-- G-code lines get `ok` (0x90). Shell commands (`version`) reply with text only, so the app waits for an
-  `ok` only on G-code / `$` lines. Errors can arrive split across packets (`error:` then the message).
-- Several TCP clients at once: Makera Studio, the app and two test clients each got only their own replies.
-- **Upper soft limit = the homed position, MPos −1.000** (X+0.1 from −1.000 → "Soft Endstop X was exceeded",
-  Alarm; cleared from Studio). The machine homes at power-on. The app caps X/Y/Z at −1 (Y/Z assumed) and
-  clamps unless the status says "not homed".
-- First real move: `G91G1X-0.1F300` + `G90` → both `ok`, MPos X −1.000 → −1.100.
-- App dial on the Pixel 10: 5 clicks at 0.01 → 5× `G91G1X-0.01F30` + `G90`, all acked, MPos X −1.100 → −1.150 (too small to see or hear).
-- App dial, 10 clicks at 1 mm: 10× `G91G1X-1.0F1500` + `G90`, MPos X −1.150 → −11.150; **confirmed by eye: the axis moved.**
-- Status RTT over Wi-Fi: PC median ~30 ms. On the Pixel, Wi-Fi power save gave 18–300 ms until the app held
-  `WIFI_MODE_FULL_LOW_LATENCY` while visible (now mostly 17–42 ms).
+**Updating:** install the newer APK the same way; your hotkeys and settings are kept.
+**Removing:** long-press the app icon → **Uninstall**.
 
-- `diagnose` (sent as an 0xA2 line; the `*` real-time byte gets no reply) returns a 0x82 frame
-  `{S:…|L:…|V:…|F:…|G:light,…|T:…|C:…|E:…|P:…|I:…|RSSI:…}` with no `ok`. **G[0] = light** (M822 → 0, M821 → 1,
-  confirmed). The app reads it every 3 s for the Light toggle tile (white = on, dimmed = off).
+> Prefer installing from a computer? With [adb](https://developer.android.com/tools/adb) and USB
+> debugging on: `adb install z1-pendant-<version>.apk`.
 
-## Still unverified
-1. Vacuum M851/M852.
-2. Y/Z upper soft limits (assumed −1 like X).
-3. Real acceleration feel of the dial (the sim moves at constant speed; the machine accelerates at 150 mm/s²).
+## Connect to your machine
+1. Turn the Z1 on and let it finish homing.
+2. In the app, tap the **⚙ settings** icon (top right) → **Scan network**. Your machine appears as
+   `Makera_Z1P_…`; tap it.
+3. If it isn't found (some routers block broadcasts), type the machine's IP address and tap **Connect**.
+   The IP is in the Makera app or your router's device list. The port is 2222.
+
+The app remembers the machine and reconnects by itself. The name, IP and round-trip time show at the
+top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
+
+<p align="center"><img src="docs/screenshots/08_settings.png" width="240" alt="Settings"></p>
+
+## Using it
+**Readout**
+- Tap an axis row to pick it for the dial (it highlights). Hold a row for 1.5 s, or tap **move**, to type a move.
+- **zero** sets that axis's work position to 0; **undo** puts it back if nothing has moved since.
+
+**Dial**
+- Drag your finger around the ring. Clockwise is +, counter-clockwise is −. Speed follows your hand.
+- Volume keys jog ±1 click on the selected axis (can be turned off in Settings).
+
+**Jog pad**
+- Tap the joystick button (top-left of the dial). Tap the dial icon in the same spot to go back.
+- Tap a button for one step; hold it to keep moving.
+
+**Hotkeys**
+- Tap a tile to run it. Hold a tile for 2 s to edit it.
+- The **⌃** chevron (bottom-left of the dial) shows every hotkey. There, **+** adds one and **Edit**
+  lets you drag tiles into a new order; tap **Save** when done. Hotkeys you've hidden from the grid
+  (button-only) always sort after the visible ones.
+- In the editor: pick a built-in action, write G-code (one command per line), or build a sequence
+  (G-code, wait until Idle, delay, run another hotkey). **Bind a button…** then press any button on
+  your phone, remote or gamepad. **Test run** tries it out.
+
+**Bottom drawer**
+- Swipe up on the handle at the bottom for Feed override, **Hold**, **Resume** and **Reset**.
+
+**Console** (icon next to the state pill)
+- Shows what was sent (→), the machine's replies (←), hotkeys run (▶) and a one-line summary of each
+  jog. Type any command at the bottom.
+
+**Settings**
+- Machine connection, vibration strength, degrees per click, volume-key jogging, soft-limit clamping,
+  keep screen on, and hotkey export/import/reset.
+
+## Build from source
+The full source is here. Make it your own.
+
+- **Android app** (`android/`): Kotlin + Jetpack Compose. Open the folder in Android Studio, or with
+  JDK 17 and the Android SDK installed:
+  ```bash
+  cd android
+  ./gradlew assembleRelease        # Windows: gradlew.bat assembleRelease
+  ```
+  The APK lands in `android/app/build/outputs/apk/release/`. Builds are signed with your local debug
+  key, so an APK you build can't update one installed from the releases page (uninstall that first).
+- **Python tools** (`python/`, Python 3, no extra packages):
+  - `z1sim.py`: a machine simulator. Point the app at your computer's IP to try everything with no machine.
+  - `z1client.py`: a command-line client (discover, read status, send a line).
+  - `z1proto.py`: the protocol code, with a self-test.
+
+How it works under the hood (protocol, jog engine, what's been confirmed on a real Z1):
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+## License
+[MIT](LICENSE): use it, change it, share it, even sell it. Just keep the copyright notice and
+license with it, so the original work gets credit.
