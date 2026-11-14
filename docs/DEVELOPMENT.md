@@ -62,6 +62,11 @@ and letting go drops any clicks not yet sent.
 ## Haptics
 VibrationEffect composition primitives: TICK per detent, CLICK every 10th, THUD when clicks are dropped
 or blocked, a double click at a soft limit. Strength is in Settings.
+On Android 13+ they play as `USAGE_PHYSICAL_EMULATION` (vibrations that stand in for a hardware part,
+here the handwheel's detents). Without attributes Android files short primitives as touch feedback, and
+the phone's **Touch feedback** switch then silences them; many people turn that off to quiet the
+keyboard. Android's master **Use vibration & haptics** switch still applies, and the strength slider
+(0 = off) is the app's own off switch. Android 12 has no such usage and keeps the default (touch).
 iOS (not tested yet): light / medium / heavy impacts for tick / every 10th / thud, two rigid knocks
 for a soft limit, a selection click for button presses.
 

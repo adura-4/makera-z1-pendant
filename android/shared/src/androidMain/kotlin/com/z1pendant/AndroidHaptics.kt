@@ -1,6 +1,8 @@
 package com.z1pendant
 
 import android.content.Context
+import android.os.Build
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.VibrationEffect.Composition
 import android.os.Vibrator
@@ -18,6 +20,19 @@ class AndroidHaptics(ctx: Context) : Haptics {
     /** 0 = off, 1 = full. */
     @Volatile override var strength: Float = 0.7f
 
+    /**
+     * Plays as a "physical emulation" vibration (Android 13+): the detents stand in for a real
+     * handwheel. Without attributes Android files short primitives as touch feedback, so turning
+     * off the phone's Touch feedback (a common choice, it also silences the keyboard) silenced
+     * the dial too.
+     */
+    private val attrs: VibrationAttributes? =
+        if (Build.VERSION.SDK_INT >= 33) VibrationAttributes.createForUsage(VibrationAttributes.USAGE_PHYSICAL_EMULATION) else null
+
+    private fun play(effect: VibrationEffect) {
+        if (attrs != null) vib.vibrate(effect, attrs) else vib.vibrate(effect)
+    }
+
     private val hasTick = vib.areAllPrimitivesSupported(Composition.PRIMITIVE_TICK)
     private val hasClick = vib.areAllPrimitivesSupported(Composition.PRIMITIVE_CLICK)
     private val hasThud = vib.areAllPrimitivesSupported(Composition.PRIMITIVE_THUD)
@@ -30,7 +45,7 @@ class AndroidHaptics(ctx: Context) : Haptics {
         val s = (scale * strength).coerceIn(0.05f, 1f)
         val effect = if (supported) VibrationEffect.startComposition().addPrimitive(p, s).compose()
         else VibrationEffect.createPredefined(fallback)
-        vib.vibrate(effect)
+        play(effect)
     }
 
     /** One detent. */
@@ -43,10 +58,10 @@ class AndroidHaptics(ctx: Context) : Haptics {
     /** Soft-limit reached: a double knock. */
     override fun limit() {
         if (strength <= 0f) return
-        if (hasClick) vib.vibrate(VibrationEffect.startComposition()
+        if (hasClick) play(VibrationEffect.startComposition()
             .addPrimitive(Composition.PRIMITIVE_CLICK, strength)
             .addPrimitive(Composition.PRIMITIVE_CLICK, strength, 60).compose())
-        else vib.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK))
+        else play(VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK))
     }
     /** Button press confirmation. */
     override fun press() = prim(if (hasLowTick) Composition.PRIMITIVE_LOW_TICK else Composition.PRIMITIVE_TICK,
