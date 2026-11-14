@@ -1,0 +1,73 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+/**
+ * Everything except the Android shell: protocol, link, jog engine, hotkeys, view model and the
+ * whole Compose UI (Compose Multiplatform). Android and iOS supply the few platform pieces
+ * (preferences, files, haptics, clock, back button, hotkey file import/export) in androidMain /
+ * iosMain. iOS framework: `Shared` (static), built on a Mac; the Xcode project isn't in the repo yet.
+ */
+plugins {
+    id("org.jetbrains.kotlin.multiplatform")
+    id("com.android.library")
+    id("org.jetbrains.compose")
+    id("org.jetbrains.kotlin.plugin.compose")
+}
+
+kotlin {
+    jvmToolchain(21)
+    androidTarget {
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    }
+    listOf(iosArm64(), iosSimulatorArm64()).forEach {
+        it.binaries.framework {
+            baseName = "Shared"
+            isStatic = true
+        }
+    }
+
+    compilerOptions {
+        optIn.addAll(
+            "kotlin.uuid.ExperimentalUuidApi",
+            "kotlin.concurrent.atomics.ExperimentalAtomicApi",
+        )
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
+    sourceSets {
+        commonMain.dependencies {
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.material3)
+            implementation(compose.ui)
+            // Not versioned with Compose Multiplatform any more; 1.7.3 is the last (and current) release.
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+            implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.9.6")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
+            implementation("org.jetbrains.kotlinx:atomicfu:0.29.0")
+            implementation("io.ktor:ktor-network:3.3.3")
+        }
+        androidMain.dependencies {
+            implementation("androidx.activity:activity-compose:1.10.1")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+        }
+        val androidUnitTest by getting {
+            dependencies {
+                implementation("junit:junit:4.13.2")
+                implementation("org.json:json:20240303")      // the original org.json format, to check compatibility
+                implementation("io.mockk:mockk:1.14.6")       // SystemClock on the host JVM (link test vs z1sim.py)
+            }
+        }
+    }
+}
+
+android {
+    namespace = "com.z1pendant.shared"
+    compileSdk = 35
+    defaultConfig { minSdk = 31 }
+    testOptions { unitTests.isReturnDefaultValues = true }   // android.util.Log in host tests
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}

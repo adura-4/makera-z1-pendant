@@ -40,6 +40,9 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
 
+/** Same constant as java.lang.Math.toDegrees. */
+private const val RAD_TO_DEG = 57.29577951308232
+
 /**
  * Drag-to-turn handwheel. Every [degPerClick] of rotation around the centre is one detent:
  * clockwise = +, counter-clockwise = −. [onClick] gets ±1 per detent (the caller does haptics).
@@ -91,7 +94,7 @@ fun Handwheel(
                         val d = hypot(p.position.x - c.x, p.position.y - c.y)
                         val a = atan2(p.position.y - c.y, p.position.x - c.x)
                         if (d < r * 0.15f) { last = a; continue }
-                        var delta = Math.toDegrees((a - last).toDouble()).toFloat()
+                        var delta = ((a - last).toDouble() * RAD_TO_DEG).toFloat()
                         if (delta > 180) delta -= 360f
                         if (delta < -180) delta += 360f
                         last = a

@@ -37,7 +37,9 @@ import androidx.compose.ui.unit.sp
 import com.z1pendant.AppViewModel
 import com.z1pendant.hotkeys.Hotkey
 import com.z1pendant.link.ConnState
-import java.util.Locale
+import com.z1pendant.platform.nowMs
+import com.z1pendant.util.Fmt
+import kotlin.math.roundToInt
 
 fun stateColor(state: String?, conn: ConnState): Color = when {
     conn != ConnState.Connected -> Color(0xFF6B7280)
@@ -51,8 +53,8 @@ fun stateColor(state: String?, conn: ConnState): Color = when {
 }
 
 fun stepLabel(s: Double) = when {
-    s >= 1 -> "%.0f".format(Locale.US, s)
-    else -> "%s".format(Locale.US, s.toBigDecimal().stripTrailingZeros().toPlainString())
+    s >= 1 -> Fmt.fixed(s, 0)
+    else -> Fmt.plain(s)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -154,13 +156,13 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { vm.selectAxis(a); vm.haptics.press(); moveFor = a }, enabled = connected,
+                    PendantOutlinedButton(onClick = { vm.selectAxis(a); vm.haptics.press(); moveFor = a }, enabled = connected,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(34.dp)) { Text("move", fontSize = 13.sp) }
                     Spacer(Modifier.width(6.dp))
                     // "zero" sets this axis to 0; pressed again while it still reads 0 (nothing moved)
                     // it puts the previous value back, like a DRO's zero/recall. Label shows which.
                     val undo = zeroUndo.containsKey(a) && vm.canRestoreZero(a, st)
-                    OutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = connected && st?.isIdle == true,
+                    PendantOutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = connected && st?.isIdle == true,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(34.dp).widthIn(min = 64.dp)) {
                         Text(if (undo) "undo" else "zero", fontSize = 13.sp)
                     }
@@ -254,7 +256,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             else if (s.equals("Idle", true) || !connected) pendantMotion = false
         }
         val machineMoving = (s.equals("Run", true) || s.equals("Home", true)) && !pendantMotion && running == null &&
-            android.os.SystemClock.elapsedRealtime() - vm.jog.lastJogAt > 1500
+            nowMs() - vm.jog.lastJogAt > 1500
         val needsControls = connected && (machineMoving ||
             s.equals("Hold", true) || s.equals("Pause", true) || s.equals("Alarm", true))
         var autoOpened by remember { mutableStateOf(false) }
@@ -339,13 +341,14 @@ private fun Modifier.tapOrHold(
             progress.animateTo(1f, androidx.compose.animation.core.tween(ms.toInt(), easing = androidx.compose.animation.core.LinearEasing))
         }
         // "up" = released, "moved" = slid off / scrolling, null = held the full time
+        var upAt = 0L
         val outcome: String? = withTimeoutOrNull(ms) {
             var r = ""
             while (r.isEmpty()) {
                 val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
                 r = when {
                     c == null -> "moved"
-                    !c.pressed -> "up"
+                    !c.pressed -> { upAt = c.uptimeMillis; "up" }
                     (c.position - down.position).getDistance() > slop -> "moved"
                     else -> ""
                 }
@@ -355,7 +358,8 @@ private fun Modifier.tapOrHold(
         ring.cancel()
         scope.launch { progress.snapTo(0f) }
         when (outcome) {
-            "up" -> if (android.os.SystemClock.uptimeMillis() - down.uptimeMillis < 500) onTap()
+            // Event times (same clock as down.uptimeMillis on every platform).
+            "up" -> if (upAt - down.uptimeMillis < 500) onTap()
             null -> {
                 onHold()
                 // swallow the rest of this touch so lifting the finger isn't also a tap
@@ -378,7 +382,7 @@ fun toggleState(h: Hotkey, outputs: Map<String, Boolean>, connected: Boolean): B
     return if (!connected) null else if (isLight) outputs["light"] else if (isVacuum) outputs["vacuum"] else null
 }
 
-fun fmtPos(v: Double?, connected: Boolean) = if (v == null || !connected) "---.---" else "%9.3f".format(Locale.US, v)
+fun fmtPos(v: Double?, connected: Boolean) = if (v == null || !connected) "---.---" else Fmt.fixed(v, 3, width = 9)
 
 @Composable
 fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
@@ -403,7 +407,7 @@ fun FeedOverride(current: Double?, enabled: Boolean, onSet: (Int) -> Unit) {
     val shown = drag ?: (current?.toFloat() ?: 100f)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Feed", modifier = Modifier.width(44.dp))
-        Slider(value = shown.coerceIn(10f, 200f), onValueChange = { drag = (Math.round(it / 5f) * 5).toFloat() },
+        Slider(value = shown.coerceIn(10f, 200f), onValueChange = { drag = ((it / 5f).roundToInt() * 5).toFloat() },
             onValueChangeFinished = { drag?.let { onSet(it.toInt()) }; drag = null },
             valueRange = 10f..200f, enabled = enabled, modifier = Modifier.weight(1f))
         Text("${shown.toInt()}%", fontFamily = FontFamily.Monospace, modifier = Modifier.width(54.dp))

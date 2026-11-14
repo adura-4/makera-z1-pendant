@@ -1,7 +1,5 @@
 package com.z1pendant.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -30,10 +27,11 @@ import androidx.compose.ui.unit.sp
 import com.z1pendant.AppViewModel
 import com.z1pendant.link.ConnState
 import com.z1pendant.link.MachineTarget
+import com.z1pendant.platform.PlatformBackHandler
+import com.z1pendant.platform.rememberHotkeyFileActions
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
-    val ctx = LocalContext.current
     val conn by vm.link.conn.collectAsState()
     val target by vm.target.collectAsState()
     val found by vm.discovered.collectAsState()
@@ -48,20 +46,13 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
     var host by remember { mutableStateOf(target?.host ?: "") }
     var port by remember { mutableStateOf((target?.port ?: 2222).toString()) }
 
-    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
-        ctx.contentResolver.openOutputStream(uri)?.use { it.write(vm.exportHotkeys().toByteArray()) }
-        vm.snack.tryEmit("Hotkeys exported")
-    }
-    val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@rememberLauncherForActivityResult
-        ctx.contentResolver.openInputStream(uri)?.use { vm.importHotkeys(it.readBytes().decodeToString()) }
-    }
+    // Android: system file picker (save / open). iOS: not there yet (says so).
+    val files = rememberHotkeyFileActions(vm)
     var confirmReset by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { if (conn != ConnState.Connected) vm.scan() }
 
-    androidx.activity.compose.BackHandler(onBack = onClose)
+    PlatformBackHandler(onBack = onClose)
     Box(Modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp).verticalScroll(rememberScrollState()),
@@ -74,8 +65,8 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                 Section("Machine")
                 Text("Status: $conn" + (target?.let { " · ${it.name} ${it.host}:${it.port}" } ?: "") + (fw?.let { " · fw $it" } ?: ""), fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = vm::scan, enabled = !scanning) { Text(if (scanning) "Scanning…" else "Scan network") }
-                    if (conn != ConnState.Disconnected) OutlinedButton(onClick = vm::disconnect) { Text("Disconnect") }
+                    PendantOutlinedButton(onClick = vm::scan, enabled = !scanning) { Text(if (scanning) "Scanning…" else "Scan network") }
+                    if (conn != ConnState.Disconnected) PendantOutlinedButton(onClick = vm::disconnect) { Text("Disconnect") }
                 }
                 found.forEach { (t, busy) ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
@@ -107,8 +98,8 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
 
                 Section("Hotkeys")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { exporter.launch("z1-hotkeys.json") }) { Text("Export…") }
-                    OutlinedButton(onClick = { importer.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text("Import…") }
+                    PendantOutlinedButton(onClick = { files.export() }) { Text("Export…") }
+                    PendantOutlinedButton(onClick = { files.import() }) { Text("Import…") }
                     TextButton(onClick = { confirmReset = true }) { Text("Reset to defaults") }
                 }
                 Text("Import replaces the whole set.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -139,7 +130,7 @@ fun ConsoleScreen(vm: AppViewModel, onClose: () -> Unit) {
     var input by remember { mutableStateOf("") }
     val list = rememberLazyListState()
     LaunchedEffect(lines.size) { if (lines.isNotEmpty()) list.scrollToItem(lines.lastIndex) }
-    androidx.activity.compose.BackHandler(onBack = onClose)
+    PlatformBackHandler(onBack = onClose)
     Box(Modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp)) {

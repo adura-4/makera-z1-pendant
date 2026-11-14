@@ -1,7 +1,5 @@
 package com.z1pendant.link.makera
 
-import java.io.ByteArrayOutputStream
-
 /**
  * Stock Makera wire format (confirmed from the Makera app decompile and the community firmware):
  *   86 68 | len u16 BE | type | payload | CRC u16 BE | 55 AA
@@ -33,13 +31,28 @@ object MakeraFrame {
         body[0] = (len ushr 8).toByte(); body[1] = len.toByte(); body[2] = type.toByte()
         payload.copyInto(body, 3)
         val crc = crc16(body)
-        val out = ByteArrayOutputStream(body.size + 6)
-        out.write(0x86); out.write(0x68); out.write(body)
-        out.write(crc ushr 8); out.write(crc and 0xFF); out.write(0x55); out.write(0xAA)
-        return out.toByteArray()
+        val out = ByteArray(body.size + 6)
+        out[0] = 0x86.toByte(); out[1] = 0x68
+        body.copyInto(out, 2)
+        val t = 2 + body.size
+        out[t] = (crc ushr 8).toByte(); out[t + 1] = crc.toByte(); out[t + 2] = 0x55; out[t + 3] = 0xAA.toByte()
+        return out
     }
 
-    fun line(text: String) = build(CTRL_MULTI, text.toByteArray(Charsets.US_ASCII))
+    fun line(text: String) = build(CTRL_MULTI, ascii(text))
+
+    /** US-ASCII bytes, '?' for anything else (one per character / surrogate pair), like Java's encoder. */
+    fun ascii(text: String): ByteArray {
+        val out = ArrayList<Byte>(text.length)
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            if (c.isHighSurrogate() && i + 1 < text.length && text[i + 1].isLowSurrogate()) i++
+            out.add(if (c.code < 0x80) c.code.toByte() else '?'.code.toByte())
+            i++
+        }
+        return out.toByteArray()
+    }
     fun rt(ch: Int) = build(CTRL_SINGLE, byteArrayOf(ch.toByte()))
 
     class Decoder {
@@ -49,7 +62,7 @@ object MakeraFrame {
 
         fun feed(data: ByteArray, len: Int, out: (type: Int, payload: ByteArray) -> Unit) {
             if (n + len > buf.size) buf = buf.copyOf(maxOf(buf.size * 2, n + len))
-            System.arraycopy(data, 0, buf, n, len); n += len
+            data.copyInto(buf, n, 0, len); n += len
             var i = 0
             while (true) {
                 while (i + 1 < n && !(buf[i] == 0x86.toByte() && buf[i + 1] == 0x68.toByte())) i++
@@ -65,7 +78,7 @@ object MakeraFrame {
                 out(buf[i + 4].toInt() and 0xFF, buf.copyOfRange(i + 5, crcAt))
                 i += total
             }
-            if (i > 0) { System.arraycopy(buf, i, buf, 0, n - i); n -= i }
+            if (i > 0) { buf.copyInto(buf, 0, i, n); n -= i }
         }
     }
 }

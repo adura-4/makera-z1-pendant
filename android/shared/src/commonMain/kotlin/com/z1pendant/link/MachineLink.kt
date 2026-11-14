@@ -1,5 +1,6 @@
 package com.z1pendant.link
 
+import com.z1pendant.util.Fmt
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -61,7 +62,7 @@ data class MachineStatus(
     /** Homed state if the backend reports one; null on stock Makera firmware (it doesn't). */
     val homed: Boolean?,
     val raw: String,
-    val atMs: Long,                    // SystemClock.elapsedRealtime() when received
+    val atMs: Long,                    // nowMs() when received
 ) {
     val isIdle get() = state.equals("Idle", ignoreCase = true)
     val isAlarm get() = state.equals("Alarm", ignoreCase = true)
@@ -92,8 +93,8 @@ object GrblishDialect : Dialect {
     // Z1 config: switch.extendout (P2.2, the vacuum / chip-clear output) on M851 / off M852.
     override fun vacuum(on: Boolean) = listOf(if (on) "M851" else "M852")
     override fun jogMove(axis: Char, dist: Double, feedMmMin: Double) =
-        "G91G1$axis${fmt(dist)}F${"%.0f".format(java.util.Locale.US, feedMmMin)}"
+        "G91G1$axis${fmt(dist)}F${Fmt.fixed(feedMmMin, 0)}"
     override fun absoluteMode() = "G90"
 
-    fun fmt(v: Double) = "%.4f".format(java.util.Locale.US, v).trimEnd('0').let { if (it.endsWith(".")) it + "0" else it }
+    fun fmt(v: Double) = Fmt.trimmed4(v)
 }

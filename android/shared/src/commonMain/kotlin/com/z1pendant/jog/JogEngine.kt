@@ -1,14 +1,19 @@
 package com.z1pendant.jog
 
-import android.os.SystemClock
 import com.z1pendant.link.ConnState
 import com.z1pendant.link.MachineLink
+import com.z1pendant.platform.PLog
+import com.z1pendant.platform.nowMs
+import com.z1pendant.util.Fmt
+import kotlin.concurrent.Volatile
+import kotlin.concurrent.atomics.AtomicInt
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.min
@@ -66,16 +71,16 @@ class JogEngine(
 ) {
     private val burst = LinkedHashMap<Char, Double>()
     @Volatile var axis: Char = 'X'
-        set(v) { if (v != field) { pending.set(0); target = null }; field = v }
+        set(v) { if (v != field) { pending.store(0); target = null }; field = v }
     @Volatile var step: Double = 0.1
     @Volatile var enabled = true
 
-    private val pending = AtomicInteger(0)
+    private val pending = AtomicInt(0)
     @Volatile private var target: Double? = null
     @Volatile private var targetAxis: Char = 'X'
     @Volatile private var needAbsolute = false
     @Volatile private var lastSendAt = 0L
-    /** elapsedRealtime of the last jog move sent (0 = never). */
+    /** nowMs() of the last jog move sent (0 = never). */
     val lastJogAt: Long get() = lastSendAt
     @Volatile private var lastCmdV = 0.0                 // mm/s of the last move sent
     @Volatile private var lastDropAt = 0L
@@ -94,39 +99,40 @@ class JogEngine(
     fun stop() { job?.cancel(); job = null }
 
     private val clickTimes = ArrayDeque<Long>()
+    private val clickLock = SynchronizedObject()
 
     /** Signed number of detents. */
     fun click(n: Int) {
         if (!enabled) return
-        pending.addAndGet(n)
-        val t = SystemClock.elapsedRealtime()
-        synchronized(clickTimes) {
+        pending.addAndFetch(n)
+        val t = nowMs()
+        synchronized(clickLock) {
             repeat(abs(n).coerceAtMost(100)) { clickTimes.addLast(t) }
             while (clickTimes.size > 400) clickTimes.removeFirst()
         }
     }
 
     /** Detents per second over the last [JogConfig.handWindowMs]. */
-    private fun handRate(now: Long): Double = synchronized(clickTimes) {
+    private fun handRate(now: Long): Double = synchronized(clickLock) {
         while (clickTimes.isNotEmpty() && now - clickTimes.first() > config.handWindowMs) clickTimes.removeFirst()
         clickTimes.size / (config.handWindowMs / 1000.0)
     }
 
     /** Drop whatever is pending (e.g. app backgrounded, finger lifted with "stop on release"). */
-    fun cancelPending() { pending.set(0) }
+    fun cancelPending() { pending.store(0) }
 
     private fun axisIndex(a: Char) = "XYZA".indexOf(a)
 
     private fun tick() {
-        val now = SystemClock.elapsedRealtime()
+        val now = nowMs()
         val st = link.status.value
         val connected = link.conn.value == ConnState.Connected
-        val n = pending.get()
+        val n = pending.load()
 
         if (!connected || st == null || st.isAlarm || st.state in setOf("Hold", "Home", "Pause", "Tool", "Sleep")) {
             if (n != 0) {
-                pending.set(0); onDrop()
-                android.util.Log.i("JogEngine", "dropped $n clicks: conn=$connected state=${st?.state}")
+                pending.store(0); onDrop()
+                PLog.i("JogEngine", "dropped $n clicks: conn=$connected state=${st?.state}")
             }
             target = null
             return
@@ -180,15 +186,15 @@ class JogEngine(
         val maxClicks = floor(maxOf(0.0, allowed) / stp + 1e-9).toInt()
         if (abs(n) > maxClicks) {
             val drop = abs(n) - maxClicks
-            pending.addAndGet(-sign(n.toDouble()).toInt() * drop)
+            pending.addAndFetch(-sign(n.toDouble()).toInt() * drop)
             if (now - lastDropAt > 150) { onDrop(); lastDropAt = now }     // one thud per 150 ms, not a buzz
-            android.util.Log.i("JogEngine", "dropped $drop clicks (cap ${"%.2f".format(cap)} lead ${"%.2f".format(lead)})")
+            PLog.i("JogEngine", "dropped $drop clicks (cap ${Fmt.fixed(cap, 2)} lead ${Fmt.fixed(lead, 2)})")
         }
         if (allowed < stp * 0.999) return
 
-        var clicks = min(abs(pending.get()), floor(allowed / stp + 1e-9).toInt())
+        var clicks = min(abs(pending.load()), floor(allowed / stp + 1e-9).toInt())
         if (clicks <= 0) return
-        val dir = sign(pending.get().toDouble())
+        val dir = sign(pending.load().toDouble())
         var dist = dir * clicks * stp
 
         // Soft limits: clamp, and buzz when we hit one (the stock firmware alarms on a soft-limit hit).
@@ -198,15 +204,15 @@ class JogEngine(
             val clamped = t.coerceIn(lo ?: Double.NEGATIVE_INFINITY, hi ?: Double.POSITIVE_INFINITY)
             if (clamped != t) {
                 dist = clamped - target!!
-                pending.set(0); onLimit()
+                pending.store(0); onLimit()
                 if (abs(dist) < 1e-4) return
-                clicks = abs(pending.get())
+                clicks = abs(pending.load())
             }
         }
 
         val feed = (vCmd * 60.0).coerceIn(config.minFeedMmMin, lim.maxRateMmMin)
         lastCmdV = feed / 60.0
-        pending.addAndGet(-(dir * clicks).toInt().let { if (it == 0) 0 else it })
+        pending.addAndFetch(-(dir * clicks).toInt().let { if (it == 0) 0 else it })
         link.sendLine(link.dialect.jogMove(a, dist, feed), quiet = true)
         burst[a] = (burst[a] ?: 0.0) + dist
         target = target!! + dist

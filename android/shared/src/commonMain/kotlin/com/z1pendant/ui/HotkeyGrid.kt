@@ -122,6 +122,7 @@ fun HotkeyGrid(
                 }
                 // "up" = tap, "moved" = a scroll or a slip off the tile, null = held the full time.
                 // (AwaitPointerEventScope's own withTimeoutOrNull: allowed inside a pointer gesture.)
+                var upAt = 0L
                 val outcome: String? = withTimeoutOrNull(LONG_PRESS_MS) {
                     var r = ""
                     while (r.isEmpty()) {
@@ -129,7 +130,7 @@ fun HotkeyGrid(
                         val c = ev.changes.firstOrNull { it.id == down.id }
                         r = when {
                             c == null -> "moved"
-                            !c.pressed -> "up"
+                            !c.pressed -> { upAt = c.uptimeMillis; "up" }
                             (c.position - down.position).getDistance() > slop -> "moved"
                             else -> ""
                         }
@@ -141,7 +142,8 @@ fun HotkeyGrid(
                 pressId = null
                 when (outcome) {
                     // A hold abandoned before 2 s does nothing: only a quick tap runs the hotkey.
-                    "up" -> if (android.os.SystemClock.uptimeMillis() - down.uptimeMillis < 500) { down.consume(); onTap(h) }
+                    // Event times (same clock as down.uptimeMillis on every platform).
+                    "up" -> if (upAt - down.uptimeMillis < 500) { down.consume(); onTap(h) }
                     null -> {
                         onLong(h)
                         // swallow the rest of this touch so lifting the finger isn't a tap

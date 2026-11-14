@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.compose")
 }
 
 android {
@@ -38,15 +39,13 @@ kotlin {
 }
 
 dependencies {
-    val bom = platform("androidx.compose:compose-bom:2024.12.01")
-    implementation(bom)
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    testImplementation("junit:junit:4.13.2")
+    // All the app's code and UI live in :shared (Kotlin Multiplatform); this module is the Android shell.
+    implementation(project(":shared"))
+    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.9.6")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation(compose.runtime)
+    implementation(compose.foundation)
+    implementation(compose.material3)
+    implementation(compose.ui)
 }

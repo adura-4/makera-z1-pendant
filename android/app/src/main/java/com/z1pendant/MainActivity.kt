@@ -1,35 +1,33 @@
 package com.z1pendant
 
 import android.os.Bundle
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.z1pendant.hotkeys.Hotkey
-import com.z1pendant.ui.ConsoleScreen
-import com.z1pendant.ui.HotkeyEditor
-import com.z1pendant.ui.MainScreen
-import com.z1pendant.ui.SettingsScreen
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import com.z1pendant.platform.AndroidPlatform
+import com.z1pendant.ui.App
+import com.z1pendant.ui.PendantTheme
 
+/**
+ * The Android shell: everything else (UI, view model, link, jog engine, hotkeys) is in :shared.
+ * Here: window flags, the Wi-Fi low-latency lock, hardware keys and the adb test hooks.
+ */
 class MainActivity : ComponentActivity() {
-    private val vm: AppViewModel by viewModels()
+    private val vm: AppViewModel by viewModels {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = AppViewModel(AndroidPlatform(application)) as T
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,14 +39,7 @@ class MainActivity : ComponentActivity() {
                 if (keepOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                 else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
-            MaterialTheme(colorScheme = darkColorScheme(
-                primary = Color(0xFF38BDF8), onPrimary = Color(0xFF00222F),
-                secondaryContainer = Color(0xFF1E293B), onSecondaryContainer = Color(0xFFE2E8F0),
-                surfaceVariant = Color(0xFF172033), onSurfaceVariant = Color(0xFF94A3B8),
-                background = Color(0xFF0B1120), surface = Color(0xFF0F172A),
-            )) {
-                App(vm)
-            }
+            PendantTheme { App(vm) }
         }
     }
 
@@ -86,7 +77,7 @@ class MainActivity : ComponentActivity() {
     override fun onPause() { wifiLock.release(); super.onPause() }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (vm.onKey(event)) return true
+        if (vm.onKey(event.toKeyInput())) return true
         return super.dispatchKeyEvent(event)
     }
 
@@ -96,49 +87,22 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable
-fun App(vm: AppViewModel) {
-    var settings by remember { mutableStateOf(false) }
-    var console by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Hotkey?>(null) }
-    var editorOpen by remember { mutableStateOf(false) }
-    val confirm by vm.confirmFor.collectAsState()
-    val snackHost = remember { SnackbarHostState() }
-    // Kept here so returning from the editor/settings doesn't jump the main screen back to the top.
-    val mainScroll = androidx.compose.foundation.rememberScrollState()
-    LaunchedEffect(Unit) { vm.snack.collect { snackHost.currentSnackbarData?.dismiss(); snackHost.showSnackbar(it) } }
-
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { Box(Modifier.fillMaxSize()) {
-        // Full-screen pages live in the activity window (not Dialogs) so dispatchKeyEvent sees
-        // every button press, which the "press any button to bind" flow relies on.
-        vm.onMainScreen = !(editorOpen || settings || console)
-        when {
-            editorOpen -> HotkeyEditor(vm, editing) { editorOpen = false; editing = null; vm.capture.value = null }
-            settings -> SettingsScreen(vm) { settings = false }
-            console -> ConsoleScreen(vm) { console = false }
-            else -> MainScreen(vm, onSettings = { settings = true }, onConsole = { console = true },
-                onEdit = { editing = it; editorOpen = true }, scroll = mainScroll)
-        }
-        SnackbarHost(snackHost, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing))
-    } }
-    confirm?.let { h ->
-        AlertDialog(onDismissRequest = { vm.confirmFor.value = null },
-            title = { Text("Run “${h.label}”?") },
-            // G-code steps list every line as it will be sent; other steps get a one-line description.
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    h.steps.forEach { s ->
-                        if (s is com.z1pendant.hotkeys.Step.GCode) {
-                            s.text.lines().filter { it.isNotBlank() }.forEach {
-                                Text(it.trim(), fontFamily = FontFamily.Monospace, fontSize = 15.sp)
-                            }
-                        } else {
-                            Text(s.describe { id -> vm.hotkeys.value.firstOrNull { it.id == id }?.label })
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = vm::confirmRun) { Text("Run") } },
-            dismissButton = { TextButton(onClick = { vm.confirmFor.value = null }) { Text("Cancel") } })
-    }
+/** Android key event → the shared, platform-neutral [KeyInput] (key codes stay Android's). */
+private fun KeyEvent.toKeyInput(): KeyInput {
+    val name = KeyEvent.keyCodeToString(keyCode).removePrefix("KEYCODE_").lowercase().replace('_', ' ')
+    return KeyInput(
+        keyCode = keyCode,
+        action = when (action) {
+            KeyEvent.ACTION_DOWN -> KeyAction.Down
+            KeyEvent.ACTION_UP -> KeyAction.Up
+            else -> KeyAction.Other
+        },
+        repeatCount = repeatCount,
+        downTime = downTime,
+        eventTime = eventTime,
+        isLongPress = isLongPress,
+        deviceName = device?.name ?: InputDevice.getDevice(deviceId)?.name,
+        label = name.replaceFirstChar { it.uppercase() },
+        isGamepadButton = KeyEvent.isGamepadButton(keyCode),
+    )
 }

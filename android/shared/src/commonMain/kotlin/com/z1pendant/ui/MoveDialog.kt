@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.z1pendant.AppViewModel
-import java.util.Locale
+import com.z1pendant.util.Fmt
 
 /**
  * Typed move for one axis, opened from its readout row (move button, or a 1.5 s hold).
@@ -58,11 +58,11 @@ fun MoveDialog(vm: AppViewModel, axis: Char, onDismiss: () -> Unit) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Cancel") }
                 }
                 Column(Modifier.padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Now: $axis ${st?.wpos?.getOrNull(i)?.let { "%.3f".format(Locale.US, it) } ?: "—"} $unit",
+                    Text("Now: $axis ${st?.wpos?.getOrNull(i)?.let { Fmt.fixed(it, 3) } ?: "—"} $unit",
                         fontFamily = FontFamily.Monospace, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Segmented(listOf("Go to", "Move by"), if (relative) 1 else 0) { relative = it == 1 }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = {
+                        PendantOutlinedButton(onClick = {
                             set(when {
                                 text.startsWith("-") -> text.drop(1)
                                 text.startsWith("+") -> "-" + text.drop(1)
@@ -85,7 +85,7 @@ fun MoveDialog(vm: AppViewModel, axis: Char, onDismiss: () -> Unit) {
                             else -> {
                                 plan.lines.forEach { Text(it, fontFamily = FontFamily.Monospace, fontSize = 15.sp) }
                                 if (relative) plan.endWork?.let {
-                                    Text("ends at $axis ${"%.3f".format(Locale.US, it)} $unit", fontSize = 12.sp,
+                                    Text("ends at $axis ${Fmt.fixed(it, 3)} $unit", fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }

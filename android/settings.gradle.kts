@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "z1-pendant"
-include(":app")
+include(":app", ":shared")

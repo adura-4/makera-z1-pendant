@@ -1,11 +1,6 @@
 package com.z1pendant
 
-import android.app.Application
-import android.content.Context
-import android.os.SystemClock
-import android.view.InputDevice
-import android.view.KeyEvent
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.z1pendant.hotkeys.BuiltIn
 import com.z1pendant.hotkeys.BuiltinHost
@@ -19,17 +14,28 @@ import com.z1pendant.link.MachineStatus
 import com.z1pendant.link.MachineTarget
 import com.z1pendant.link.makera.Discovery
 import com.z1pendant.link.makera.MakeraLink
+import com.z1pendant.platform.PLog
+import com.z1pendant.platform.Platform
+import com.z1pendant.platform.nowMs
+import com.z1pendant.platform.wallClockHms
+import com.z1pendant.util.Fmt
+import kotlin.concurrent.Volatile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 
-class AppViewModel(app: Application) : AndroidViewModel(app) {
-    private val prefs = app.getSharedPreferences("z1pendant", Context.MODE_PRIVATE)
-    val haptics = Haptics(app)
+/**
+ * The app's state and actions, shared by Android and iOS. [platform] supplies preferences
+ * (Android: SharedPreferences "z1pendant"), the hotkeys.json file, haptics and the discovery lock.
+ */
+class AppViewModel(private val platform: Platform) : ViewModel() {
+    private val prefs = platform.prefs
+    val haptics: Haptics = platform.haptics
     val link = MakeraLink()
 
     // ---- UI state -------------------------------------------------------------------------
@@ -69,7 +75,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val softClamp = MutableStateFlow(prefs.getBoolean("softClamp", true))
 
     // hotkeys
-    private val hotkeyFile = File(app.filesDir, "hotkeys.json")
+    private val hotkeyFile = platform.hotkeyFile
     val hotkeys = MutableStateFlow(loadHotkeys())
     /** Non-null while the binding dialog waits for a button press. */
     val capture = MutableStateFlow<((Trigger) -> Unit)?>(null)
@@ -77,7 +83,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val jog = JogEngine(link, viewModelScope, onDrop = { haptics.thud() }, onLimit = { haptics.limit() },
         onJogDone = { moved ->
             moved.forEach { (a, d) ->
-                log("↕ jog $a ${"%+.3f".format(java.util.Locale.US, d)} ${if (a == 'A') "°" else "mm"} (${if (jogPad.value) "pad" else "dial"})")
+                log("↕ jog $a ${Fmt.fixed(d, 3, plus = true)} ${if (a == 'A') "°" else "mm"} (${if (jogPad.value) "pad" else "dial"})")
             }
         })
 
@@ -119,14 +125,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun connect(t: MachineTarget) {
-        prefs.edit().putString("host", t.host).putInt("port", t.port).putString("name", t.name)
-            .putBoolean("autoConnect", true).apply()
+        prefs.edit { putString("host", t.host); putInt("port", t.port); putString("name", t.name)
+            putBoolean("autoConnect", true) }
         target.value = t
         link.connect(t)
     }
 
     fun disconnect() {
-        prefs.edit().putBoolean("autoConnect", false).apply()
+        prefs.edit { putBoolean("autoConnect", false) }
         link.disconnect()
     }
 
@@ -137,7 +143,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         scanning.value = true
         scanJob = viewModelScope.launch {
             try {
-                Discovery.scan(getApplication(), 3500) { t, busy -> discovered.value = discovered.value + (t to busy) }
+                Discovery.scan(3500, platform::holdDiscoveryLock) { t, busy -> discovered.value = discovered.value + (t to busy) }
             } catch (e: Exception) {
                 snack.tryEmit("Scan failed: ${e.message}")
             } finally { scanning.value = false }
@@ -145,10 +151,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- jog --------------------------------------------------------------------------------
-    fun selectAxis(a: Char) { axis.value = a; jog.axis = a; prefs.edit().putString("axis", a.toString()).apply() }
+    fun selectAxis(a: Char) { axis.value = a; jog.axis = a; prefs.edit { putString("axis", a.toString()) } }
     fun selectStep(i: Int) {
         val j = i.coerceIn(0, steps.lastIndex)
-        stepIndex.value = j; jog.step = steps[j]; prefs.edit().putInt(stepKey(), j).apply()
+        stepIndex.value = j; jog.step = steps[j]; prefs.edit { putInt(stepKey(), j) }
     }
 
     // ---- jog pad ------------------------------------------------------------------------------
@@ -156,7 +162,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (jogPad.value == on) return
         jog.cancelPending()
         jogPad.value = on
-        prefs.edit().putBoolean("jogPad", on).apply()
+        prefs.edit { putBoolean("jogPad", on) }
         val j = prefs.getInt(stepKey(), 2).coerceIn(0, steps.lastIndex)
         stepIndex.value = j; jog.step = steps[j]
         if (!on) jog.axis = axis.value            // the dial jogs the selected axis again
@@ -194,15 +200,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun viewModelScopeLaunchBurst(n: Int, ms: Long) {
         viewModelScope.launch {
             val count = kotlin.math.abs(n); val dir = if (n < 0) -1 else 1
-            val start = SystemClock.elapsedRealtime()
-            android.util.Log.i("JogTest", "burst start n=$n ms=$ms step=${steps[stepIndex.value]}")
+            val start = nowMs()
+            PLog.i("JogTest", "burst start n=$n ms=$ms step=${steps[stepIndex.value]}")
             for (k in 1..count) {
                 val due = start + ms * k / count
-                val wait = due - SystemClock.elapsedRealtime()
+                val wait = due - nowMs()
                 if (wait > 0) kotlinx.coroutines.delay(wait)
                 wheelClicks(dir)
             }
-            android.util.Log.i("JogTest", "burst end")
+            PLog.i("JogTest", "burst end")
         }
     }
 
@@ -213,9 +219,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Console line with a time stamp. Everything sent (except dial jogs) and every reply. */
     private fun log(s: String) {
-        // Formatter made here, not as a field: log() already runs from init, before later fields exist.
-        val line = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date()) + " " + s
-        synchronized(console) { console.value = (console.value + line).takeLast(500) }
+        val line = wallClockHms() + " " + s
+        console.update { (it + line).takeLast(500) }
     }
 
     fun zero(axes: String) = zeroLines(axes).forEach { link.sendLine(it) }
@@ -245,7 +250,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (list.isNotEmpty() && list.all { canRestoreZero(it, st) }) {
             val prev = list.associateWith { zeroUndo.value.getValue(it).prevWork }
             zeroUndo.value = zeroUndo.value - list.toSet()
-            log("↺ restore " + prev.entries.joinToString(" ") { (a, v) -> "$a ${"%.3f".format(java.util.Locale.US, v)}" })
+            log("↺ restore " + prev.entries.joinToString(" ") { (a, v) -> "$a ${Fmt.fixed(v, 3)}" })
             return link.dialect.setWorkPosition(prev)
         }
         val m = zeroUndo.value.toMutableMap()
@@ -278,12 +283,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (softClamp.value && st.homed != false && lim != null) {
             val lo = lim.softMin; val hi = lim.softMax
             if ((lo != null && endM < lo - 1e-6) || (hi != null && endM > hi + 1e-6)) {
-                fun f(d: Double?) = d?.let { "%.3f".format(java.util.Locale.US, it) } ?: "…"
+                fun f(d: Double?) = d?.let { Fmt.fixed(it, 3) } ?: "…"
                 return MovePlan(emptyList(), "Past the soft limit: would end at machine $axis ${f(endM)} " +
                     "(allowed ${f(lo)} to ${f(hi)})", endW)
             }
         }
-        val v = java.math.BigDecimal(value).setScale(4, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
+        val v = Fmt.scaledPlain(value, 4)            // = BigDecimal(value).setScale(4, HALF_UP).stripTrailingZeros()
         val lines = if (relative) listOf("G91 G0 $axis$v", "G90") else listOf("G90 G0 $axis$v")
         return MovePlan(lines, null, endW)
     }
@@ -450,39 +455,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun runNow(h: Hotkey) { log("▶ hotkey: ${h.label}"); runner.run(h) }
 
     // ---- settings -----------------------------------------------------------------------------
-    fun setHaptic(v: Float) { hapticStrength.value = v; haptics.strength = v; prefs.edit().putFloat("haptic", v).apply() }
-    fun setVolumeJog(v: Boolean) { volumeJog.value = v; prefs.edit().putBoolean("volumeJog", v).apply() }
-    fun setKeepScreenOn(v: Boolean) { keepScreenOn.value = v; prefs.edit().putBoolean("keepScreenOn", v).apply() }
-    fun setTickMs(v: Long) { tickMs.value = v; prefs.edit().putLong("tickMs", v).apply(); applyJogConfig() }
-    fun setDegPerClick(v: Float) { degPerClick.value = v; prefs.edit().putFloat("degPerClick", v).apply() }
-    fun setSoftClamp(v: Boolean) { softClamp.value = v; prefs.edit().putBoolean("softClamp", v).apply(); applyJogConfig() }
+    fun setHaptic(v: Float) { hapticStrength.value = v; haptics.strength = v; prefs.edit { putFloat("haptic", v) } }
+    fun setVolumeJog(v: Boolean) { volumeJog.value = v; prefs.edit { putBoolean("volumeJog", v) } }
+    fun setKeepScreenOn(v: Boolean) { keepScreenOn.value = v; prefs.edit { putBoolean("keepScreenOn", v) } }
+    fun setTickMs(v: Long) { tickMs.value = v; prefs.edit { putLong("tickMs", v) }; applyJogConfig() }
+    fun setDegPerClick(v: Float) { degPerClick.value = v; prefs.edit { putFloat("degPerClick", v) } }
+    fun setSoftClamp(v: Boolean) { softClamp.value = v; prefs.edit { putBoolean("softClamp", v) }; applyJogConfig() }
 
     // ---- physical buttons -------------------------------------------------------------------------
     private class Held(val downAt: Long, var longFired: Boolean = false)
     private val held = HashMap<Int, Held>()
     private val longMs = 500L
 
-    private fun deviceName(e: KeyEvent): String? = e.device?.name ?: InputDevice.getDevice(e.deviceId)?.name
+    private fun deviceName(e: KeyInput): String? = e.deviceName
 
-    private fun keyLabel(e: KeyEvent): String {
-        val k = KeyEvent.keyCodeToString(e.keyCode).removePrefix("KEYCODE_").lowercase().replace('_', ' ')
-        return k.replaceFirstChar { it.uppercase() }
-    }
+    private fun keyLabel(e: KeyInput): String = e.label
 
-    private fun matches(t: Trigger, e: KeyEvent) = t.keyCode == e.keyCode && (t.device == null || t.device == deviceName(e))
+    private fun matches(t: Trigger, e: KeyInput) = t.keyCode == e.keyCode && (t.device == null || t.device == deviceName(e))
 
-    private fun bindings(e: KeyEvent, long: Boolean) =
+    private fun bindings(e: KeyInput, long: Boolean) =
         hotkeys.value.filter { h -> h.triggers.any { it.longPress == long && matches(it, e) } }
 
-    /** Called from Activity.dispatchKeyEvent. Returns true if consumed. */
-    fun onKey(e: KeyEvent): Boolean {
+    /** Called for every hardware key event (Android: Activity.dispatchKeyEvent). Returns true if consumed. */
+    fun onKey(e: KeyInput): Boolean {
         val code = e.keyCode
-        if (code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_HOME || code == KeyEvent.KEYCODE_POWER) return false
+        if (code == KeyCodes.BACK || code == KeyCodes.HOME || code == KeyCodes.POWER) return false
         val cap = capture.value
         if (cap != null) {
             when (e.action) {
-                KeyEvent.ACTION_DOWN -> if (e.repeatCount == 0) held[code] = Held(e.downTime) else if (e.isLongPress) held[code]?.longFired = true
-                KeyEvent.ACTION_UP -> {
+                KeyAction.Down -> if (e.repeatCount == 0) held[code] = Held(e.downTime) else if (e.isLongPress) held[code]?.longFired = true
+                KeyAction.Up -> {
                     val h = held.remove(code)
                     // Event timestamps, not the wall clock: works for injected events and laggy BT remotes.
                     val long = h != null && (h.longFired || e.eventTime - e.downTime >= longMs)
@@ -492,6 +494,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     capture.value = null
                     haptics.press()
                 }
+                KeyAction.Other -> {}
             }
             return true
         }
@@ -503,16 +506,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val volumeDefault = volume && volumeJog.value && shorts.isEmpty()
         if (longs.isEmpty() && shorts.isEmpty() && !volumeDefault) {
             // Swallow unbound gamepad buttons on the main screen: B would otherwise act as Back.
-            return KeyEvent.isGamepadButton(code)
+            return e.isGamepadButton
         }
 
         fun fireShort() {
             if (shorts.isNotEmpty()) shorts.forEach { requestRun(it) }
-            else if (volumeDefault) { jog.click(if (code == KeyEvent.KEYCODE_VOLUME_UP) 1 else -1); haptics.tick() }
+            else if (volumeDefault) { jog.click(if (code == KeyCodes.VOLUME_UP) 1 else -1); haptics.tick() }
         }
 
         when (e.action) {
-            KeyEvent.ACTION_DOWN -> {
+            KeyAction.Down -> {
                 if (e.repeatCount == 0) {
                     held[code] = Held(e.downTime)
                     if (longs.isEmpty()) fireShort()
@@ -523,15 +526,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     } else if (volumeDefault) fireShort()          // holding a volume key keeps jogging, one click per repeat
                 }
             }
-            KeyEvent.ACTION_UP -> {
+            KeyAction.Up -> {
                 val h = held.remove(code)
                 if (longs.isNotEmpty() && h != null && !h.longFired) fireShort()
             }
+            KeyAction.Other -> {}
         }
         return true
     }
 
-    private fun isVolume(c: Int) = c == KeyEvent.KEYCODE_VOLUME_UP || c == KeyEvent.KEYCODE_VOLUME_DOWN
+    private fun isVolume(c: Int) = c == KeyCodes.VOLUME_UP || c == KeyCodes.VOLUME_DOWN
 
     override fun onCleared() { jog.stop(); link.disconnect() }
 }

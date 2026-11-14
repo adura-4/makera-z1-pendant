@@ -29,6 +29,7 @@ import com.z1pendant.hotkeys.BuiltIn
 import com.z1pendant.hotkeys.Hotkey
 import com.z1pendant.hotkeys.Kind
 import com.z1pendant.hotkeys.Step
+import com.z1pendant.platform.PlatformBackHandler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,7 +43,7 @@ fun HotkeyEditor(vm: AppViewModel, initial: Hotkey?, onClose: () -> Unit) {
     var binding by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    androidx.activity.compose.BackHandler(onBack = onClose)
+    PlatformBackHandler(onBack = onClose)
     Box(Modifier.fillMaxSize()) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp).verticalScroll(rememberScrollState()),
@@ -105,14 +106,14 @@ fun HotkeyEditor(vm: AppViewModel, initial: Hotkey?, onClose: () -> Unit) {
                     Text("Press the button to bind now…", fontWeight = FontWeight.SemiBold)
                     Text("Hold it for half a second or more to bind a long-press instead.", fontSize = 12.sp)
                     TextButton(onClick = { vm.capture.value = null; binding = false }) { Text("Cancel") }
-                } else OutlinedButton(onClick = {
+                } else PendantOutlinedButton(onClick = {
                     binding = true
                     vm.capture.value = { t -> h = h.copy(triggers = h.triggers + t); binding = false }
                 }) { Text("Bind a button…") }
 
                 // actions
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { vm.requestRun(h, test = true) }) { Text("Test run") }
+                    PendantOutlinedButton(onClick = { vm.requestRun(h, test = true) }) { Text("Test run") }
                     if (!isNew) {
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { confirmDelete = true }, colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFDC2626))) { Text("Delete") }
@@ -149,7 +150,7 @@ fun BuiltinPicker(value: BuiltIn, onPick: (BuiltIn) -> Unit) {
     ExposedDropdownMenuBox(open, { open = it }) {
         OutlinedTextField(value.label, {}, readOnly = true, label = { Text("Built-in action") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(open) },
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth())
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth())
         ExposedDropdownMenu(open, { open = false }) {
             BuiltIn.entries.forEach { b -> DropdownMenuItem(text = { Text(b.label) }, onClick = { onPick(b); open = false }) }
         }
@@ -172,7 +173,7 @@ fun SequenceEditor(vm: AppViewModel, h: Hotkey, onChange: (List<Step>) -> Unit) 
                 IconButton(onClick = { onChange(steps.filterIndexed { j, _ -> j != i }) }) { Icon(Icons.Filled.Close, "Remove") }
             }
         }
-        OutlinedButton(onClick = { adding = true }) { Text("Add step…") }
+        PendantOutlinedButton(onClick = { adding = true }) { Text("Add step…") }
     }
     if (adding) AlertDialog(
         onDismissRequest = { adding = false }, title = { Text("Add step") },
