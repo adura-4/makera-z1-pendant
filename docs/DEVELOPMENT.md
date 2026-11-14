@@ -4,13 +4,27 @@ How the app talks to the machine, how jogging works, and what has been confirmed
 For installing and using the app, see the [README](../README.md).
 
 ## Source layout
-- `android/`: the app (Kotlin + Jetpack Compose, minSdk 31). Build with `gradlew assembleRelease`.
-  - `link/MachineLink.kt`: the transport interface plus `Dialect` (backend-specific G-code).
-    `link/makera/*` is the stock-firmware backend (TCP frames, discovery). Another controller (e.g.
-    LinuxCNC) would implement the same interface.
-  - `jog/JogEngine.kt`: turns dial/pad/volume clicks into short relative moves (below).
-  - `hotkeys/*`: hotkey model, JSON import/export, runner with guards (ask first, Idle only).
-  - `ui/*`: main screen, handwheel, jog pad, hotkey grid and editor, Move box, settings, console.
+- `android/`: the Gradle project (Kotlin 2.2, Compose Multiplatform 1.9, minSdk 31). Build the
+  Android app with `gradlew assembleRelease`.
+  - `shared/`: Kotlin Multiplatform module with nearly all the code, for Android and iOS
+    (`iosArm64`, `iosSimulatorArm64`; static framework `Shared`). In `src/commonMain/kotlin/com/z1pendant/`:
+    - `link/MachineLink.kt`: the transport interface plus `Dialect` (backend-specific G-code).
+      `link/makera/*` is the stock-firmware backend (TCP frames, discovery; sockets are ktor-network).
+      Another controller (e.g. LinuxCNC) would implement the same interface.
+    - `jog/JogEngine.kt`: turns dial/pad/volume clicks into short relative moves (below).
+    - `hotkeys/*`: hotkey model, JSON import/export (kotlinx-serialization, same file format as before),
+      runner with guards (ask first, Idle only).
+    - `ui/*`: all the Compose UI: main screen, handwheel, jog pad, hotkey grid and editor, Move box,
+      settings, console. `AppViewModel.kt`: state and actions.
+    - `platform/Platform.kt`: what each phone supplies (preferences, hotkeys.json, haptics, clock,
+      back button, hotkey file picker); `util/Fmt.kt`: number formatting identical to Java's.
+  - `shared/src/androidMain`: SharedPreferences "z1pendant", filesDir/hotkeys.json, vibrator, file pickers.
+  - `shared/src/iosMain`: NSUserDefaults, Documents/hotkeys.json, Taptic feedback, and
+    `MainViewController()` for the iOS app. Not compiled on Windows; the Xcode project comes later on a Mac.
+  - `shared/src/androidUnitTest`: formatter vs Java, hotkey JSON vs org.json, frames, and the link
+    against `z1sim.py` (`gradlew :shared:testDebugUnitTest`).
+  - `app/`: the Android shell: `MainActivity` (key events, Wi-Fi low-latency lock, keep-screen-on,
+    adb test hooks), manifest, icon.
 - `python/z1proto.py`: wire protocol (frames, CRC, status and discovery parsers) with a self-test.
 - `python/z1client.py`: PC test client: `discover`, `probe` (read-only), `second` (two TCP clients
   at once), `send`, `jog`. Anything that can move the machine needs `--motion`.
@@ -48,6 +62,8 @@ and letting go drops any clicks not yet sent.
 ## Haptics
 VibrationEffect composition primitives: TICK per detent, CLICK every 10th, THUD when clicks are dropped
 or blocked, a double click at a soft limit. Strength is in Settings.
+iOS (not tested yet): light / medium / heavy impacts for tick / every 10th / thud, two rigid knocks
+for a soft limit, a selection click for button presses.
 
 ## Machine outputs
 `diagnose` (sent as an `0xA2` line) returns an `0x82` frame

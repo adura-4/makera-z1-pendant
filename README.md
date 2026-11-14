@@ -116,7 +116,8 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 ## Build from source
 The full source is here. Make it your own.
 
-- **Android app** (`android/`): Kotlin + Jetpack Compose. Open the folder in Android Studio, or with
+- **Android app** (`android/`): Kotlin + Compose Multiplatform (the UI and logic in `android/shared`
+  are written to run on iPhone too; the iOS app isn't built yet). Open the folder in Android Studio, or with
   JDK 17 and the Android SDK installed:
   ```bash
   cd android
