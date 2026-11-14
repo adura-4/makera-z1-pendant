@@ -1,6 +1,6 @@
 # Z1 Pendant
 
-A wireless jog pendant for the **Makera Z1** CNC, as an Android app. Turn a handwheel on your phone,
+A wireless jog pendant for the **Makera Z1** CNC, for Android and iPhone. Turn a handwheel on your phone,
 tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with the machine on its
 **stock firmware**. Nothing on the machine is changed or installed.
 
@@ -45,12 +45,14 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 </p>
 
 ## Requirements
-- An Android phone on **Android 12 or newer**. Developed on a Pixel 10 (Android 16).
+- An Android phone on **Android 12 or newer** (developed on a Pixel 10, Android 16), or an
+  **iPhone on iOS 16 or newer** that you build and install yourself from a Mac (see
+  [iPhone](#iphone); tested on an iPhone 16, iOS 27).
 - A **Makera Z1** (developed on a Z1 Pro) on stock firmware, already set up on your Wi-Fi with the
   Makera app.
 - Phone and machine on the **same Wi-Fi network**.
 
-## Install
+## Install (Android)
 The app isn't on the Play Store, so you install the APK file yourself ("sideloading"). It only takes a minute.
 
 1. **Download the APK** on your phone: open the [latest release](../../releases/latest) and tap
@@ -68,11 +70,37 @@ The app isn't on the Play Store, so you install the APK file yourself ("sideload
 > Prefer installing from a computer? With [adb](https://developer.android.com/tools/adb) and USB
 > debugging on: `adb install z1-pendant-<version>.apk`.
 
+## iPhone
+There's no App Store version, so you build the app on a Mac and install it on your iPhone with your
+own (free) Apple ID. It's the same app and the same screens as on Android.
+
+You need a Mac with **Xcode** (free, Mac App Store) and **Java 21** (e.g. [Temurin](https://adoptium.net)),
+and a USB cable for the first install.
+
+1. Get the source: `git clone https://github.com/jimmyvegas29/makera-z1-pendant`
+2. In Xcode: **Settings → Accounts → +** → sign in with your Apple ID. A free one works.
+3. Plug in the iPhone, tap **Trust**, and turn on **Settings → Privacy & Security → Developer Mode**
+   (the phone restarts).
+4. Open `ios/iosApp.xcodeproj` in Xcode once: target **iosApp → Signing & Capabilities → Team** →
+   your **(Personal Team)**. Note the 10-character team ID (`security find-identity -v -p codesigning`
+   shows it in brackets).
+5. Build and install: `ios/build_and_install.sh <TEAM_ID>`. (Or press ▶ in Xcode with the iPhone selected.)
+6. On the iPhone: **Settings → General → VPN & Device Management** → your Apple ID → **Trust**.
+7. Open **Z1 Pendant** and tap **Allow** when it asks to find devices on your local network.
+
+With a **free Apple ID the app stops opening after 7 days**: plug the phone in and run step 5 again
+(your settings and hotkeys are kept). A paid Apple Developer account makes it a year.
+
+Differences on iPhone: **Scan network** can't find the machine (iOS needs a special Apple permission
+for that), so type its IP once in Settings; the volume buttons can't jog (iOS doesn't let apps use
+them); hotkey export/import is Android-only for now.
+
 ## Connect to your machine
 1. Turn the Z1 on and let it finish homing.
 2. In the app, tap the **⚙ settings** icon (top right) → **Scan network**. Your machine appears as
    `Makera_Z1P_…`; tap it.
-3. If it isn't found (some routers block broadcasts), type the machine's IP address and tap **Connect**.
+3. If it isn't found (some routers block broadcasts, and iPhone can't scan), type the machine's IP
+   address and tap **Connect**.
    The IP is in the Makera app or your router's device list. The port is 2222.
 
 The app remembers the machine and reconnects by itself. The name, IP and round-trip time show at the
@@ -116,9 +144,10 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 ## Build from source
 The full source is here. Make it your own.
 
-- **Android app** (`android/`): Kotlin + Compose Multiplatform (the UI and logic in `android/shared`
-  are written to run on iPhone too; the iOS app isn't built yet). Open the folder in Android Studio, or with
-  JDK 17 and the Android SDK installed:
+- **App** (`android/`): Kotlin + Compose Multiplatform. Almost everything (UI, jog engine, protocol)
+  lives in `android/shared` and runs on both platforms; `android/app` is the Android shell and `ios/`
+  the iPhone shell (see [iPhone](#iphone)). Open `android/` in Android Studio, or with JDK 21 and the
+  Android SDK installed:
   ```bash
   cd android
   ./gradlew assembleRelease        # Windows: gradlew.bat assembleRelease
