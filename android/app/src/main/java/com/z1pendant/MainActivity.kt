@@ -31,8 +31,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Phones stay portrait (manifest); tablets may rotate and get the side-by-side layout
+        // in landscape. (Android 16 already ignores the lock on large screens.)
+        if (resources.configuration.smallestScreenWidthDp >= 600)
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         enableEdgeToEdge()
-        handleIntent(intent)
+        if (savedInstanceState == null) handleIntent(intent)      // not again on rotation
         setContent {
             val keepOn by vm.keepScreenOn.collectAsState()
             LaunchedEffect(keepOn) {

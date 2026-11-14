@@ -61,6 +61,8 @@ fun stepLabel(s: Double) = when {
 
 /** True when the window is at least 600 dp wide (iPad, Android tablet): bigger readout, smaller dial, 5×3 hotkeys. */
 val LocalWide = androidx.compose.runtime.staticCompositionLocalOf { false }
+/** True on a landscape tablet (at least 840 dp wide and wider than tall): side-by-side layout. */
+val LocalLandscape = androidx.compose.runtime.staticCompositionLocalOf { false }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -130,17 +132,15 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             }
         }
 
-        // Header + running banner pinned on top, feed + Hold/Resume/Reset pinned at the bottom;
-        // everything between scrolls.
-        // Wide screens: the dial takes whatever height the rest leaves (it grows when there are
-        // only 1-2 hotkey rows, shrinks for 3). viewH = visible height, otherH = content minus dial.
-        var viewH by remember { mutableIntStateOf(0) }
-        var otherH by remember { mutableIntStateOf(-1) }
-        val placedDial = remember { IntArray(1) }               // dial height used in the last layout, px
-        if (expanded) placedDial[0] = 0
-        Column(Modifier.weight(1f).onSizeChanged { viewH = it.height }.verticalScroll(scroll)) {
-        Column(Modifier.onSizeChanged { otherH = it.height - placedDial[0] }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // ---- DRO ----
+        // ---- the pieces (arranged below for portrait, or side by side on a landscape tablet) ----
+        val landscape = LocalLandscape.current
+        // Dial and jog pad have their own step lists; indices are clamped for the frame where the
+        // mode has switched but the step index hasn't caught up yet.
+        val stepList = vm.steps
+        val si = stepIdx.coerceIn(0, stepList.lastIndex)
+
+        // Readout: tap a row = select the axis; hold 1.5 s or "move" = Move box; zero / undo.
+        val dro: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(vertical = 4.dp)) {
             vm.axes.forEachIndexed { i, a ->
                 val sel = a == axis && !padMode           // the pad's buttons name their own axis
@@ -161,11 +161,11 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                         .padding(horizontal = 10.dp, vertical = 1.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(a.toString(), fontSize = if (wide) 40.sp else 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(if (wide) 50.dp else 26.dp),
+                    Text(a.toString(), fontSize = if (landscape) 36.sp else if (wide) 40.sp else 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(if (wide) 50.dp else 26.dp),
                         color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                        Text(fmtPos(st?.wpos?.getOrNull(i), connected), fontSize = if (wide) 52.sp else 26.sp, lineHeight = if (wide) 54.sp else 28.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-                        Text("M " + fmtPos(st?.mpos?.getOrNull(i), connected), fontSize = if (wide) 18.sp else 12.sp, lineHeight = if (wide) 20.sp else 13.sp, fontFamily = FontFamily.Monospace,
+                        Text(fmtPos(st?.wpos?.getOrNull(i), connected), fontSize = if (landscape) 44.sp else if (wide) 52.sp else 26.sp, lineHeight = if (landscape) 46.sp else if (wide) 54.sp else 28.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                        Text("M " + fmtPos(st?.mpos?.getOrNull(i), connected), fontSize = if (landscape) 16.sp else if (wide) 18.sp else 12.sp, lineHeight = if (landscape) 17.sp else if (wide) 20.sp else 13.sp, fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(Modifier.width(8.dp))
@@ -182,17 +182,89 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 }
             }
         }
+        }
+        val stepSelector: @Composable () -> Unit = {
+            Segmented(stepList.map { stepLabel(it) }, si) { vm.selectStep(it); vm.haptics.press() }
+        }
+        // Dial or jog pad in a box of the given size; top-left switches between them.
+        val stage: @Composable androidx.compose.foundation.layout.BoxScope.(androidx.compose.ui.unit.Dp) -> Unit = { size ->
+            if (!padMode) Handwheel(
+                degPerClick = degPerClick, axis = axis,
+                stepText = "${stepLabel(stepList[si])}${if (axis == 'A') "°" else "mm"}/click",
+                enabled = connected && running == null,
+                onClick = { vm.wheelClicks(it) },
+                modifier = Modifier.size(size).align(Alignment.Center),
+            ) else JogPad(vm, step = stepList[si], enabled = connected && running == null,
+                modifier = Modifier.align(Alignment.Center))
+            ModeButton(padMode, Modifier.align(Alignment.TopStart)) { vm.setJogPad(!padMode) }
+        }
+        // Hotkeys: Edit (drag to rearrange) turns into Save; + adds one. Hold a tile 2 s to edit it.
+        val hotkeyActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+            IconButton(onClick = { onEdit(null) }) {
+                Icon(Icons.Filled.Add, "New hotkey", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+            }
+            if (editMode) Button(onClick = { vm.saveArrangement(); vm.haptics.press() }) { Text("Save") }
+            else TextButton(onClick = { vm.startArranging(); vm.haptics.press() }) { Text("Edit") }
+        }
+        val visible = hotkeys.filter { it.showOnMain }
+        val arranged = if (!editMode) emptyList() else {
+            val byId = hotkeys.associateBy { it.id }
+            val order = arrangeOrder ?: hotkeys.map { it.id }
+            (order.mapNotNull { byId[it] } + hotkeys.filter { it.id !in order })   // new ones go last
+                .let { l -> l.filter { it.showOnMain } + l.filterNot { it.showOnMain } }   // shown first
+        }
+        val hotkeyGrid: @Composable (List<Hotkey>, Int) -> Unit = { shown, cols ->
+            if (editMode) Text("Drag tiles to rearrange · tap one to edit · Save when done", fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HotkeyGrid(shown, cols = cols, arranging = editMode, toggleOf = { toggleState(it, outputs, connected) },
+                onTap = { h -> if (editMode) onEdit(h) else vm.requestRun(h) },
+                onLong = { h -> vm.haptics.majorTick(); onEdit(h) },
+                onMove = { id, to -> vm.moveInArrangement(id, to) },
+                onLift = { vm.haptics.majorTick() })
+            if (shown.isEmpty()) Text("No hotkeys yet. Tap + to add one.", fontSize = 13.sp)
+        }
 
-        // ---- step selector (the axis is picked by tapping its row in the readout above) ----
-        // Dial and jog pad have their own step lists; indices are clamped for the frame where the
-        // mode has switched but the step index hasn't caught up yet.
-        val stepList = vm.steps
-        val si = stepIdx.coerceIn(0, stepList.lastIndex)
-        Segmented(stepList.map { stepLabel(it) }, si) { vm.selectStep(it); vm.haptics.press() }
+        if (landscape) {
+            // ---- landscape tablet: readout, hotkeys and the stop controls on the left; steps
+            // and a big dial / jog pad on the right. Everything always visible: no drawer, no
+            // expand chevron.
+            Row(Modifier.weight(1f).fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.weight(0.48f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f).verticalScroll(scroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        dro()
+                        Row(Modifier.height(36.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Hotkeys", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.weight(1f)); hotkeyActions()
+                        }
+                        hotkeyGrid(if (editMode) arranged else visible, 4)
+                    }
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FeedOverride(st?.feedOverride, connected) { vm.setFeedOverride(it) }
+                        StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset, height = 56.dp)
+                    }
+                }
+                Column(Modifier.weight(0.52f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    stepSelector()
+                    BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) { stage(minOf(maxWidth, maxHeight)) }
+                }
+            }
+        } else {
+        // ---- portrait (phones, and tablets held upright) ----
+        // Header + running banner pinned on top, the drawer pinned at the bottom; between scrolls.
+        // Wide screens: the dial takes whatever height the rest leaves (it grows when there are
+        // only 1-2 hotkey rows, shrinks for 3). viewH = visible height, otherH = content minus dial.
+        var viewH by remember { mutableIntStateOf(0) }
+        var otherH by remember { mutableIntStateOf(-1) }
+        val placedDial = remember { IntArray(1) }               // dial height used in the last layout, px
+        if (expanded) placedDial[0] = 0
+        Column(Modifier.weight(1f).onSizeChanged { viewH = it.height }.verticalScroll(scroll)) {
+        Column(Modifier.onSizeChanged { otherH = it.height - placedDial[0] }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        dro()
+        stepSelector()
 
-        // ---- handwheel or jog pad (hidden while the hotkey grid is expanded) ----
-        // Top-left: switch dial <-> jog pad. Bottom-left: up-chevron opens the hotkey grid (the
-        // grid slides up); expanded, a down-chevron brings the dial back.
+        // Dial / jog pad, hidden while the hotkey grid is expanded. Bottom-left: up-chevron opens
+        // the hotkey grid (it slides up); expanded, a down-chevron brings the dial back.
         if (!expanded) BoxWithConstraints(Modifier.fillMaxWidth()) {
             // Same height in both modes, so nothing below jumps. Phones: 75% of the width.
             // Wide: fill the leftover height, between 260 dp and 80% of the width.
@@ -203,15 +275,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             }
             placedDial[0] = with(density) { box.roundToPx() }
             Box(Modifier.fillMaxWidth().height(box)) {
-                if (!padMode) Handwheel(
-                    degPerClick = degPerClick, axis = axis,
-                    stepText = "${stepLabel(stepList[si])}${if (axis == 'A') "°" else "mm"}/click",
-                    enabled = connected && running == null,
-                    onClick = { vm.wheelClicks(it) },
-                    modifier = Modifier.size(box).align(Alignment.Center),
-                ) else JogPad(vm, step = stepList[si], enabled = connected && running == null,
-                    modifier = Modifier.align(Alignment.Center))
-                ModeButton(padMode, Modifier.align(Alignment.TopStart)) { vm.setJogPad(!padMode) }
+                stage(box)
                 IconButton(onClick = { vm.hotkeysExpanded.value = true; vm.haptics.press() },
                     modifier = Modifier.align(Alignment.BottomStart)) {
                     Icon(Icons.Filled.ExpandLess, "Show all hotkeys", Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
@@ -219,43 +283,22 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             }
         }
 
-        // ---- hotkeys ----
-        // Collapsed: dial + the first 8 hotkeys. Expanded: dial hidden, all hotkeys, and Edit to
-        // rearrange (drag) / add; Edit turns into Save. Hold a tile 2 s to edit it, in either view.
+        // Collapsed: the first 8 hotkeys (15 on a wide screen). Expanded: dial hidden, all hotkeys,
+        // + and Edit.
         if (expanded) Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { vm.hotkeysExpanded.value = false; vm.haptics.press() }, enabled = !editMode) {
                 Icon(Icons.Filled.ExpandMore, "Back to the dial", Modifier.size(32.dp),
                     tint = if (editMode) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.weight(1f))
-            if (expanded) {
-                // New hotkey: a plain + next to Edit/Save, there whether or not you're arranging.
-                IconButton(onClick = { onEdit(null) }) {
-                    Icon(Icons.Filled.Add, "New hotkey", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                }
-                if (editMode) Button(onClick = { vm.saveArrangement(); vm.haptics.press() }) { Text("Save") }
-                else TextButton(onClick = { vm.startArranging(); vm.haptics.press() }) { Text("Edit") }
-            }
+            hotkeyActions()
         }
-        val visible = hotkeys.filter { it.showOnMain }
         val shown = when {
-            editMode -> {
-                val byId = hotkeys.associateBy { it.id }
-                val order = arrangeOrder ?: hotkeys.map { it.id }
-                (order.mapNotNull { byId[it] } + hotkeys.filter { it.id !in order })   // new ones go last
-                    .let { l -> l.filter { it.showOnMain } + l.filterNot { it.showOnMain } }   // shown first
-            }
+            editMode -> arranged
             expanded -> visible
             else -> visible.take(if (wide) 15 else 8)
         }
-        if (editMode) Text("Drag tiles to rearrange · tap one to edit · Save when done", fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        HotkeyGrid(shown, cols = if (wide) 5 else 4, arranging = editMode, toggleOf = { toggleState(it, outputs, connected) },
-            onTap = { h -> if (editMode) onEdit(h) else vm.requestRun(h) },
-            onLong = { h -> vm.haptics.majorTick(); onEdit(h) },
-            onMove = { id, to -> vm.moveInArrangement(id, to) },
-            onLift = { vm.haptics.majorTick() })
-        if (shown.isEmpty()) Text("No hotkeys. Tap the arrow, then +.", fontSize = 13.sp)
+        hotkeyGrid(shown, if (wide) 5 else 4)
 
         Spacer(Modifier.height(4.dp))
         }
@@ -287,7 +330,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         }
         ControlsDrawer(open, feed = st?.feedOverride, connected = connected,
             onOpen = { o -> if (o != open) { vm.controlsOpen.value = o; autoOpened = false; vm.haptics.press() } },
-            onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset)
+            onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset, state = st?.state)
+        }
     }
 }
 
@@ -295,6 +339,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
 private fun ControlsDrawer(
     open: Boolean, feed: Double?, connected: Boolean, onOpen: (Boolean) -> Unit,
     onFeed: (Int) -> Unit, onHold: () -> Unit, onResume: () -> Unit, onReset: () -> Unit,
+    state: String? = null,
 ) {
     val swipeDp = 24.dp
     val swipePx = with(androidx.compose.ui.platform.LocalDensity.current) { swipeDp.toPx() }
@@ -329,14 +374,8 @@ private fun ControlsDrawer(
             exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Top)) {
             Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 FeedOverride(feed, connected, onFeed)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onHold, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706), contentColor = Color.White)) { Text("Hold", fontSize = 16.sp) }
-                    Button(onClick = onResume, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A), contentColor = Color.White)) { Text("Resume", fontSize = 16.sp) }
-                    Button(onClick = onReset, enabled = connected, modifier = Modifier.weight(1f).height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White)) { Text("Reset", fontSize = 16.sp) }
-                }
+                // Muted while idle; the relevant ones light up (see StopButtons).
+                StopButtons(state, connected, onHold, onResume, onReset)
             }
         }
     }

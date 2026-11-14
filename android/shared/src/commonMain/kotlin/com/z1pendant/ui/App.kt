@@ -60,7 +60,8 @@ fun App(vm: AppViewModel) {
         // every button press, which the "press any button to bind" flow relies on.
         vm.onMainScreen = !(editorOpen || settings || console)
         // Windows 600 dp or wider (iPad, Android tablet) get the wide layout; see LocalWide.
-        androidx.compose.runtime.CompositionLocalProvider(LocalWide provides (maxWidth >= 600.dp)) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalWide provides (maxWidth >= 600.dp),
+            LocalLandscape provides (maxWidth >= 840.dp && maxWidth > maxHeight)) {
             when {
                 editorOpen -> HotkeyEditor(vm, editing) { editorOpen = false; editing = null; vm.capture.value = null }
                 settings -> SettingsScreen(vm) { settings = false }
