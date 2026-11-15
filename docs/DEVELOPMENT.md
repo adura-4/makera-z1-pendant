@@ -81,7 +81,8 @@ Start: `M3 S<rpm>`; stop: `M5`. The status line carries both things the tile nee
 `|S:current,target,override%,…|` (current RPM is live; target stays at the default 10000 while off)
 and `|T:tool,offset,target tool,…|` (active tool). The firmware halts the machine on M3 unless
 0 < tool < 100000 (stock: "ERROR: No tool or probe tool!"; community `SpindleControl.cpp`), so the
-start box refuses first. Running = current RPM > 0, or an M3 sent in the last 10 s (spin-up). The Z1
+start box refuses first. Stopping always asks too: the only sign of a job is the Run state, which
+doesn't say who started the spindle. Running = current RPM > 0, or an M3 sent in the last 10 s (spin-up). The Z1
 spindle is 150 W, 0–13,000 RPM (Makera's spec); the config holds motion `delay_on_s 8` after M3 and
 `delay_off_s 4` after M5.
 

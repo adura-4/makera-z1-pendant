@@ -96,3 +96,33 @@ fun SpindleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
         }
     }
 }
+
+/**
+ * Spindle stop box, opened by the Spindle tile (or a bound button) while the spindle runs. Always
+ * asks: a job may be using the spindle, and the app can't tell who started it. Same frame as the
+ * start box: blue icon + title, ✕ top-right, the line it sends, Stop at the bottom.
+ */
+@Composable
+fun SpindleStopDialog(vm: AppViewModel, onDismiss: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = RoundedCornerShape(24.dp), color = cs.surfaceVariant) {
+            Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Cyclone, null, Modifier.size(30.dp), tint = cs.primary)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Stop spindle?", fontSize = 24.sp)
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Cancel") }
+                }
+                Column(Modifier.padding(end = 12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    vm.link.dialect.spindleOff().forEach { Text(it, fontFamily = FontFamily.Monospace, fontSize = 15.sp) }
+                    Button(onClick = { vm.stopSpindle() },
+                        modifier = Modifier.align(Alignment.CenterHorizontally).fillMaxWidth(0.6f).height(50.dp)) {
+                        Text("Stop", fontSize = 18.sp)
+                    }
+                }
+            }
+        }
+    }
+}

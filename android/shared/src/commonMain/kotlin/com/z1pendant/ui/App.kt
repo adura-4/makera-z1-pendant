@@ -51,6 +51,7 @@ fun App(vm: AppViewModel) {
     var editorOpen by remember { mutableStateOf(false) }
     val confirm by vm.confirmFor.collectAsState()
     val spindleAsk by vm.spindleAsk.collectAsState()
+    val spindleStopAsk by vm.spindleStopAsk.collectAsState()
     val snackHost = remember { SnackbarHostState() }
     // Kept here so returning from the editor/settings doesn't jump the main screen back to the top.
     val mainScroll = rememberScrollState()
@@ -74,6 +75,7 @@ fun App(vm: AppViewModel) {
         SnackbarHost(snackHost, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing))
     } }
     if (spindleAsk) SpindleDialog(vm) { vm.spindleAsk.value = false }
+    if (spindleStopAsk) SpindleStopDialog(vm) { vm.spindleStopAsk.value = false }
     confirm?.let { h ->
         AlertDialog(onDismissRequest = { vm.confirmFor.value = null },
             title = { Text("Run “${h.label}”?") },

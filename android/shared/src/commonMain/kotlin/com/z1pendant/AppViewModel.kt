@@ -60,6 +60,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     // ---- spindle ----
     /** The spindle start box is open (the Spindle tile or a bound button, while it's off). */
     val spindleAsk = MutableStateFlow(false)
+    /** The stop box is open: stopping always asks too (a job may be using the spindle; we can't tell). */
+    val spindleStopAsk = MutableStateFlow(false)
     /** RPM last started with; the start box opens holding it. */
     val spindleRpm = MutableStateFlow(prefs.getInt("spindleRpm", 10_000).coerceIn(1, SPINDLE_MAX_RPM))
     /** nowMs() of the last M3 we sent (0 = none since the last M5): shows the tile as on until the RPM reads back. */
@@ -96,10 +98,19 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         spindleAsk.value = false
     }
 
-    private fun spindleToggle(): List<String>? {
-        if (!spindleRunning(link.status.value)) { spindleAsk.value = true; return null }   // always asks
+    /** Stop box → M5. */
+    fun stopSpindle() {
+        haptics.press()
         spindleStartAt = 0L
-        return link.dialect.spindleOff()                                                    // stop: no question
+        log("▶ spindle off")
+        link.dialect.spindleOff().forEach { link.sendLine(it) }
+        spindleStopAsk.value = false
+    }
+
+    /** Both ways ask: off → the start box, running → the stop box. */
+    private fun spindleToggle(): List<String>? {
+        if (spindleRunning(link.status.value)) spindleStopAsk.value = true else spindleAsk.value = true
+        return null
     }
     /** Bound buttons and volume-jog only act while the main screen is showing. */
     @Volatile var onMainScreen = true
