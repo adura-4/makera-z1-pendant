@@ -29,8 +29,9 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   Bind any hotkey to a physical button: volume keys, Bluetooth remotes and gamepads, USB keyboards.
   Import/export the whole set as a file.
 - **Feed override, spindle speed, Hold, Resume, Reset** in a drawer at the bottom (swipe up). The
-  spindle slider is in RPM (full bar = 13,000): while you drag, its label shows the RPM you'll get;
-  letting go sets it. Both sliders send only when you let go. It opens by itself
+  sliders are plain bars you drag anywhere on (the part past 100 % turns a darker blue), and they
+  send only when you let go. The spindle bar is in RPM (full = 13,000): while you drag, its label
+  shows the RPM you'll get. Tap the % to go back to 100 %. It opens by itself
   when the machine holds, alarms, or starts moving from somewhere else (e.g. a job from Makera Studio).
   The buttons stay quiet while idle and light up when they matter: Hold and Reset while moving,
   Resume on hold, Reset in an alarm.

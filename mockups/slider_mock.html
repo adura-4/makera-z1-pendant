@@ -1,0 +1,62 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Slider mock</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;600&display=block">
+<style>
+  :root{--bg:#0B1120;--sv:#172033;--sc:#1E293B;--primary:#38BDF8;--muted:#94A3B8;--text:#E6E9EF;--track:#0F1A2E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9edf2;font-family:Roboto,Arial,sans-serif;padding:22px;display:flex;flex-direction:column;gap:18px;width:560px}
+  .cap{font:600 15px "Segoe UI",Arial;color:#1f2937}
+  .sub{font:400 12.5px "Segoe UI",Arial;color:#4b5563;margin-top:3px}
+  .drawer{background:var(--sv);border-radius:16px;padding:10px 12px;color:var(--text);display:flex;flex-direction:column;gap:14px;width:440px}
+  .row{display:flex;align-items:center;gap:8px;height:34px;font-size:16px}
+  .lab{width:64px;white-space:nowrap}
+  .lab.drag{color:var(--primary);font-family:"Roboto Mono",monospace;font-weight:600}
+  .val{width:58px;font-family:"Roboto Mono",monospace;font-size:14px;text-align:right}
+  .val.ov{color:var(--primary);font-weight:600}
+  .btn{width:34px;color:var(--primary);font-size:15px;text-align:center}
+  .btn.dim{color:rgba(148,163,184,.4)}
+  .bar{flex:1;position:relative;height:34px}
+  /* today: M3 2024 style, gap around the thumb + stop dot */
+  .t-act{position:absolute;left:0;top:9px;height:16px;border-radius:8px 3px 3px 8px;background:var(--primary)}
+  .t-in{position:absolute;right:0;top:9px;height:16px;border-radius:3px 8px 8px 3px;background:var(--track)}
+  .t-in i{position:absolute;right:6px;top:6px;width:4px;height:4px;border-radius:2px;background:var(--primary)}
+  .t-thumb{position:absolute;top:0;width:4px;height:34px;border-radius:2px;background:var(--primary)}
+  /* B: no dot, no gaps, thin thumb */
+  .b-track{position:absolute;left:0;right:0;top:12px;height:10px;border-radius:5px;background:var(--track)}
+  .b-fill{position:absolute;left:0;top:12px;height:10px;border-radius:5px;background:var(--primary)}
+  .b-thumb{position:absolute;top:5px;width:4px;height:24px;border-radius:2px;background:#fff}
+  /* C: no thumb, solid bar */
+  .c-track{position:absolute;left:0;right:0;top:7px;height:20px;border-radius:10px;background:var(--track)}
+  .c-fill{position:absolute;left:0;top:7px;height:20px;border-radius:10px;background:var(--primary)}
+  .c-mark{position:absolute;top:4px;width:2px;height:26px;background:rgba(226,232,240,.35)}
+  .k{font:600 12px "Segoe UI",Arial;color:#374151;margin-bottom:5px}
+</style></head><body>
+
+<div><div class="cap">Today (for reference)</div>
+<div class="sub">The dot is Material's 2024 "end of track" marker. The blue "100" on the right is a reset button (back to 100 %), which reads like a second copy of the value.</div></div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="t-act" style="width:46%"></div><div class="t-thumb" style="left:calc(46% + 4px)"></div><div class="t-in" style="width:calc(54% - 12px)"><i></i></div></div><span class="val">100%</span><span class="btn">100</span></div>
+  <div class="row"><span class="lab">Spindle</span><div class="bar"><div class="t-act" style="width:70%"></div><div class="t-thumb" style="left:calc(70% + 4px)"></div><div class="t-in" style="width:calc(30% - 12px)"><i></i></div></div><span class="val">9,700</span><span class="btn">100</span></div>
+</div>
+
+<div><div class="cap">B · Keep a thin handle, no dot, no gaps, no reset button</div>
+<div class="sub">The value turns blue when it's overridden. Tap the blue value to reset to 100 % (it's plain white at 100 %, nothing to reset).</div></div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="b-track"></div><div class="b-fill" style="width:46%"></div><div class="b-thumb" style="left:46%"></div></div><span class="val">100%</span></div>
+  <div class="row"><span class="lab">Spindle</span><div class="bar"><div class="b-track"></div><div class="b-fill" style="width:75%"></div><div class="b-thumb" style="left:75%"></div></div><span class="val ov">9,700</span></div>
+</div>
+
+<div><div class="cap">C · No handle: a solid bar you drag, no dot, no reset button</div>
+<div class="sub">Drag anywhere on the bar. A faint tick marks 100 % (the programmed speed) so you can find your way back. Tap the blue value to reset.</div></div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="c-track"></div><div class="c-fill" style="width:46%"></div><div class="c-mark" style="left:46%"></div></div><span class="val">100%</span></div>
+  <div class="row"><span class="lab">Spindle</span><div class="bar"><div class="c-track"></div><div class="c-fill" style="width:75%"></div><div class="c-mark" style="left:61.5%"></div></div><span class="val ov">9,700</span></div>
+</div>
+
+<div><div class="k">C while dragging the spindle bar (label shows the RPM you'll get; sent on release)</div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="c-track"></div><div class="c-fill" style="width:46%"></div><div class="c-mark" style="left:46%"></div></div><span class="val">100%</span></div>
+  <div class="row"><span class="lab drag">11,200</span><div class="bar"><div class="c-track"></div><div class="c-fill" style="width:86%"></div><div class="c-mark" style="left:61.5%"></div></div><span class="val ov">9,700</span></div>
+</div></div>
+
+</body></html>

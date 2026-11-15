@@ -1,0 +1,52 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Slider mock 2</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;600&display=block">
+<style>
+  :root{--sv:#172033;--primary:#38BDF8;--deep:#0369A1;--text:#E6E9EF;--track:#0F1A2E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9edf2;font-family:Roboto,Arial,sans-serif;padding:22px;display:flex;flex-direction:column;gap:16px;width:560px}
+  .cap{font:600 15px "Segoe UI",Arial;color:#1f2937}
+  .sub{font:400 12.5px "Segoe UI",Arial;color:#4b5563;margin-top:3px}
+  .drawer{background:var(--sv);border-radius:16px;padding:10px 12px;color:var(--text);display:flex;flex-direction:column;gap:14px;width:440px}
+  .row{display:flex;align-items:center;gap:10px;height:34px;font-size:16px}
+  .lab{width:64px;white-space:nowrap}
+  .lab.drag{color:var(--primary);font-family:"Roboto Mono",monospace;font-weight:600}
+  .val{width:52px;font-family:"Roboto Mono",monospace;font-size:14px;text-align:right}
+  .val.ov{color:var(--primary);font-weight:600}
+  .bar{flex:1;position:relative;height:34px}
+  .track{position:absolute;left:0;right:0;top:7px;height:20px;border-radius:10px;background:var(--track)}
+  .fill{position:absolute;left:0;top:0;bottom:0;background:var(--primary);border-radius:10px;z-index:2}
+  .fill.sq{border-radius:10px 0 0 10px}
+  .over{position:absolute;top:0;bottom:0;background:var(--deep);border-radius:0 10px 10px 0;z-index:1}
+  .mark{position:absolute;top:4px;width:2px;height:26px;background:rgba(226,232,240,.35)}
+  .k{font:600 12px "Segoe UI",Arial;color:#374151;margin-bottom:5px}
+</style></head><body>
+
+<div><div class="cap">No handle · no dot · past 100 % = darker blue · % on the right for both</div>
+<div class="sub">Drag anywhere on the bar. Tap the % to reset to 100 % (it's blue when there's something to reset, white at 100 %).</div></div>
+
+<div><div class="k">1 · Both at 100 % (spindle programmed at 8,000)</div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="track"><div class="fill" style="width:47.4%"></div></div></div><span class="val">100%</span></div>
+  <div class="row"><span class="lab">Spindle</span><div class="bar"><div class="track"><div class="fill" style="width:61.5%"></div></div></div><span class="val">100%</span></div>
+</div></div>
+
+<div><div class="k">2 · Feed 140 %, spindle 121 % (9,700 RPM): the part past 100 % is the darker blue</div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="track"><div class="fill sq" style="width:47.4%"></div><div class="over" style="left:47.4%;width:21%"></div></div></div><span class="val ov">140%</span></div>
+  <div class="row"><span class="lab">Spindle</span><div class="bar"><div class="track"><div class="fill sq" style="width:61.5%"></div><div class="over" style="left:61.5%;width:13.1%"></div></div></div><span class="val ov">121%</span></div>
+</div></div>
+
+<div><div class="k">3 · Below 100 %: feed 60 %, spindle 75 % (6,000 RPM): plain fill</div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="track"><div class="fill" style="width:26.3%"></div></div></div><span class="val ov">60%</span></div>
+  <div class="row"><span class="lab">Spindle</span><div class="bar"><div class="track"><div class="fill" style="width:46.2%"></div></div></div><span class="val ov">75%</span></div>
+</div></div>
+
+<div><div class="k">4 · Dragging the spindle bar: label = the RPM you'll get, % follows the drag; sent when you let go</div>
+<div class="drawer">
+  <div class="row"><span class="lab">Feed</span><div class="bar"><div class="track"><div class="fill" style="width:47.4%"></div></div></div><span class="val">100%</span></div>
+  <div class="row"><span class="lab drag">11,200</span><div class="bar"><div class="track"><div class="fill sq" style="width:61.5%"></div><div class="over" style="left:61.5%;width:24.7%"></div></div></div><span class="val ov">140%</span></div>
+</div></div>
+
+</body></html>
