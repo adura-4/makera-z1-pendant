@@ -62,6 +62,11 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   <img src="docs/screenshots/10_tablet_jogpad.png" width="420" alt="Tablet, landscape, jog pad">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/spindle_demo.gif" width="300" alt="Spindle: start at 10,000 RPM, drag the speed up, reset, stop">
+  <br><sub>Spindle: start from the tile, adjust the speed in the drawer, stop.</sub>
+</p>
+
 ## Requirements
 - An Android phone or tablet on **Android 12 or newer** (developed on a Pixel 10, Android 16), or an
   **iPhone / iPad on iOS 16 or newer** that you build and install yourself from a Mac (see
