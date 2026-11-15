@@ -77,8 +77,11 @@ interface Dialect {
     fun feedOverride(percent: Int): List<String>
     fun light(on: Boolean): List<String>
     fun vacuum(on: Boolean): List<String>
-    fun jogMove(axis: Char, dist: Double, feedMmMin: Double): String
-    fun absoluteMode(): String
+    /**
+     * One jog move to machine position [machinePos] on [axis]. Must not change the machine's modal
+     * state (no G91), so nothing is left behind if the link drops mid-jog.
+     */
+    fun jogTo(axis: Char, machinePos: Double, feedMmMin: Double): String
 }
 
 object GrblishDialect : Dialect {
@@ -92,9 +95,9 @@ object GrblishDialect : Dialect {
     override fun light(on: Boolean) = listOf(if (on) "M821" else "M822")
     // Z1 config: switch.extendout (P2.2, the vacuum / chip-clear output) on M851 / off M852.
     override fun vacuum(on: Boolean) = listOf(if (on) "M851" else "M852")
-    override fun jogMove(axis: Char, dist: Double, feedMmMin: Double) =
-        "G91G1$axis${fmt(dist)}F${Fmt.fixed(feedMmMin, 0)}"
-    override fun absoluteMode() = "G90"
+    // G53 = machine coordinates for this line only; G90/G91 and the work offset stay as they are.
+    override fun jogTo(axis: Char, machinePos: Double, feedMmMin: Double) =
+        "G53G1$axis${fmt(machinePos)}F${Fmt.fixed(feedMmMin, 0)}"
 
     fun fmt(v: Double) = Fmt.trimmed4(v)
 }

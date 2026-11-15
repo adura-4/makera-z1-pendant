@@ -1,6 +1,7 @@
 package com.z1pendant
 
 import android.os.SystemClock
+import com.z1pendant.jog.JogEngine
 import com.z1pendant.link.ConnState
 import com.z1pendant.link.MachineTarget
 import com.z1pendant.link.makera.MakeraLink
@@ -8,6 +9,10 @@ import io.mockk.every
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -47,6 +52,33 @@ class MakeraLinkSimTest {
     @After fun stopSim() {
         sim?.destroy(); sim?.waitFor(5, TimeUnit.SECONDS)
         unmockkStatic(SystemClock::class)
+    }
+
+    /**
+     * Jog engine + link + sim end to end: ten 0.1 mm clicks move X by 1 mm, and the machine is not
+     * left in relative mode: a plain absolute G0 afterwards lands where it says.
+     */
+    @Test fun jogLeavesNoRelativeModeBehind() = runBlocking {
+        val link = MakeraLink()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val jog = JogEngine(link, scope)
+        jog.axis = 'X'; jog.step = 0.1
+        link.connect(MachineTarget("sim", "127.0.0.1", port))
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        val x0 = link.status.value!!.mpos[0]
+        jog.start()
+        repeat(10) { jog.click(1); delay(30) }
+        withTimeout(10000) {
+            while (link.status.value?.let { it.isIdle && kotlin.math.abs(it.mpos[0] - (x0 + 1.0)) < 1e-6 } != true) delay(20)
+        }
+        delay(600)                                   // the engine's quiet time after a jog
+        jog.stop()
+
+        val ack = CompletableDeferred<Pair<Boolean, String>>()
+        link.sendLine("G0 X-90") { ok, reply -> ack.complete(ok to reply) }
+        assertTrue("ok for G0 X-90", withTimeout(3000) { ack.await() }.first)
+        withTimeout(10000) { while (link.status.value?.let { it.isIdle && it.mpos[0] == -90.0 } != true) delay(20) }
+        link.disconnect(); scope.cancel()
     }
 
     @Test fun connectPollSendDisconnect() = runBlocking {
