@@ -155,6 +155,8 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 
 **Bottom drawer**
 - Swipe up on the handle at the bottom for Feed override, **Hold**, **Resume** and **Reset**.
+- **Reset** asks first: it's an emergency stop (Ctrl-X). Motion and the spindle stop, a running job
+  is cancelled, and the machine halts until you Unlock. To pause and carry on, use **Hold**.
 
 **Console** (icon next to the state pill)
 - Shows what was sent (→), the machine's replies (←), hotkeys run (▶) and a one-line summary of each

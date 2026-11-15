@@ -244,7 +244,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         FeedOverride(st?.feedOverride, connected) { vm.setFeedOverride(it) }
                         SpindleOverride(vm.spindleSlide(st), onSet = vm::setSpindleRpm, onReset = vm::resetSpindleOverride)
-                        StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset, height = 56.dp)
+                        StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, height = 56.dp)
                     }
                 }
                 Column(Modifier.weight(0.52f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -327,7 +327,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         }
         ControlsDrawer(open, feed = st?.feedOverride, connected = connected,
             onOpen = { o -> if (o != open) { vm.controlsOpen.value = o; autoOpened = false; vm.haptics.press() } },
-            onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset, state = st?.state,
+            onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, state = st?.state,
             spindle = { SpindleOverride(vm.spindleSlide(st), onSet = vm::setSpindleRpm, onReset = vm::resetSpindleOverride) })
         }
     }

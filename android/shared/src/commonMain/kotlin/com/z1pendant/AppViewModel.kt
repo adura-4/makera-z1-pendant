@@ -430,6 +430,9 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     fun hold() { haptics.press(); link.feedHold() }
     fun resume() { haptics.press(); link.resume() }
     fun reset() { haptics.press(); runner.cancel(); jog.cancelPending(); link.reset() }
+    /** The drawer's Reset asks first (ResetDialog): it's an emergency stop, not a pause. */
+    val resetAsk = MutableStateFlow(false)
+    fun confirmReset() { resetAsk.value = false; reset() }
 
     private fun builtin(b: BuiltIn): List<String>? {
         val d = link.dialect
