@@ -85,6 +85,8 @@ The Move box sends `G90 G0 <axis><value>` (Go to) or `G91 G0 <axis><value>` + `G
 refuses targets past the soft limits before sending anything.
 
 ## Test hooks
+Debug builds only (`gradlew assembleDebug`); a release build ignores these extras, so other apps
+can't use them to move the machine.
 - `adb shell am start -n com.z1pendant/.MainActivity --es host <ip> [--ei port 2222] [--es name …]` connects.
 - `… --ei testclicks <±n> --ei testms <ms> [--ei teststep <index>]` injects a burst of dial clicks.
 - Simulator: `python3 python/z1sim.py`, then connect the app to that computer's IP (or

@@ -52,9 +52,16 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    /** `am start -n com.z1pendant/.MainActivity --es host 192.168.1.50 [--ei port 2222] [--es name Z1]` */
+    /**
+     * adb test hooks: `am start -n com.z1pendant/.MainActivity --es host 192.168.1.50 [--ei port 2222] [--es name Z1]`.
+     *
+     * Debug builds only. The launcher activity is exported, so any app on the phone can start it
+     * with extras; in a release build these would let it jog the machine or point the pendant at
+     * another host.
+     */
     private fun handleIntent(i: android.content.Intent?) {
         i ?: return
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE == 0) return
         // Test hook: `--ei testclicks 100 --ei testms 1000 [--ei teststep 3]` = burst of handwheel clicks.
         if (i.hasExtra("testclicks")) {
             if (i.hasExtra("teststep")) vm.selectStep(i.getIntExtra("teststep", 2))
