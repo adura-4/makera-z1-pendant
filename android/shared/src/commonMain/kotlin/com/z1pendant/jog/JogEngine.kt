@@ -2,6 +2,7 @@ package com.z1pendant.jog
 
 import com.z1pendant.link.ConnState
 import com.z1pendant.link.MachineLink
+import com.z1pendant.link.MachineStatus
 import com.z1pendant.platform.PLog
 import com.z1pendant.platform.nowMs
 import com.z1pendant.util.Fmt
@@ -49,6 +50,11 @@ data class JogConfig(
     val positionMaxAgeMs: Long = 400,
     /** Smoothie's queue_delay_time_ms: the machine sits still this long when a jog starts. */
     val startDelayS: Double = 0.1,
+    /**
+     * Clicks that can't start a jog within this long (machine busy: a job, someone else's move, a
+     * macro still running) are thrown away with a thud, never stored up to fire later.
+     */
+    val startWaitMs: Long = 1500,
     val accelMmS2: Double = 150.0,            // live M503: XYZ 150 mm/s²
     val minFeedMmMin: Double = 5.0,             // low enough to follow a slow 0.01 mm turn without stop-go
     val limits: Map<Char, AxisLimits> = mapOf(
@@ -159,7 +165,10 @@ class JogEngine(
     /** Drop whatever is pending (e.g. app backgrounded, finger lifted with "stop on release"). */
     fun cancelPending() { pending.store(0) }
 
-    private fun endSession() { target = null; firstClickAt = 0L }
+    private fun endSession() { target = null; firstClickAt = 0L; waitSince = 0L }
+
+    /** When clicks first had to wait for a jog to start (0 = not waiting). */
+    private var waitSince = 0L
 
     private fun axisIndex(a: Char) = "XYZA".indexOf(a)
 
@@ -185,8 +194,9 @@ class JogEngine(
             if (burst.isNotEmpty() && now - lastSendAt > 250 && link.pendingLines == 0) {
                 onJogDone(LinkedHashMap(burst)); burst.clear()
             }
-            if (st.isIdle && link.pendingLines == 0 && now - lastSendAt > 300) endSession()
+            if (stationary(st) && link.pendingLines == 0 && now - lastSendAt > 300) endSession()
             if (target == null) firstClickAt = 0L          // clicks were cancelled before a session started
+            waitSince = 0L
             return
         }
 
@@ -195,10 +205,21 @@ class JogEngine(
         val lim = config.limits[a] ?: return
         val pos = st.mpos.getOrNull(ai) ?: return
         if (target == null || targetAxis != a) {
-            if (!st.isIdle || link.pendingLines > 0) return     // let the previous axis/macro finish
-            // Start from where the machine says it is now: a status that arrived after the first
-            // click, not one from before (stale after a Wi-Fi gap, or from before another sender moved it).
-            if (st.atMs <= firstClickAt) return
+            // Start only with the machine standing still and nothing of ours in flight (the previous
+            // axis or a macro finishes first), from where the machine says it is now: a status that
+            // arrived after the first click, not one from before (stale after a Wi-Fi gap, or from
+            // before another sender moved it). Clicks that wait too long are dropped, not saved up:
+            // a move that fires seconds later (say, when a spindle stops) would be a surprise.
+            if (!stationary(st) || link.pendingLines > 0 || st.atMs <= firstClickAt) {
+                if (waitSince == 0L) waitSince = now
+                else if (now - waitSince > config.startWaitMs) {
+                    pending.store(0); onDrop(); waitSince = 0L
+                    if (target == null) firstClickAt = 0L
+                    PLog.i("JogEngine", "dropped $n clicks: no jog start for ${config.startWaitMs} ms (state ${st.state})")
+                }
+                return
+            }
+            waitSince = 0L
             target = pos; targetAxis = a
             pathLo = pos; pathHi = pos; startPos = st.mpos.toList()
         } else if (offPath(st.mpos, ai, pos)) {
@@ -221,7 +242,7 @@ class JogEngine(
         val readAt = if (now - mposSince <= config.positionMaxAgeMs) mposSince else st.atMs
         val statusAgeS = (now - readAt + (link.latencyMs.value ?: 30) / 2) / 1000.0
         val rawLead = abs(target!! - pos)
-        val lead = if (st.state.equals("Run", true)) maxOf(0.0, rawLead - lastCmdV * statusAgeS) else rawLead
+        val lead = if (!stationary(st)) maxOf(0.0, rawLead - lastCmdV * statusAgeS) else rawLead
         // Feed: hand speed, corrected toward a lead of vHand × buffer.
         // Floor: a waiting click always moves at least fast enough to finish its step in ~0.3 s.
         // The hand-speed window is only 200 ms, so a click sent later than that (the first move
@@ -294,3 +315,12 @@ class JogEngine(
         const val PATH_TOLERANCE = 0.02
     }
 }
+
+/**
+ * The machine is standing still: Idle, or Run with nothing moving. The Z1 reports Run the whole
+ * time the spindle turns, so "Run, no job playing, actual feed 0" is a spindle on and the axes
+ * still, and jogging is fine. A playing job (|P:) always counts as busy, even between moves.
+ * Without a feed reading (other firmware) only Idle counts.
+ */
+internal fun stationary(st: MachineStatus): Boolean = st.isIdle ||
+    (st.state.equals("Run", ignoreCase = true) && st.job == null && st.feedActual == 0.0)

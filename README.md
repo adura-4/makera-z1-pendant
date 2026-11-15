@@ -156,6 +156,11 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 - Tap a button for one step; hold it to keep moving.
 - The axis you jog on the pad becomes the selected axis, so the dial picks up where you left off.
 
+**Jogging and the machine state**
+- The dial and pad work while the spindle runs (the Z1 reports Run the whole time it turns).
+- While a job plays, or while something else is moving the machine, they don't move it. A click that
+  can't start within 1.5 s is dropped with a bump in your hand, never saved up to move later.
+
 **Hotkeys**
 - Tap a tile to run it. Hold a tile for 2 s to edit it.
 - The **⌃** chevron (bottom-left of the dial) shows every hotkey. There, **+** adds one and **Edit**

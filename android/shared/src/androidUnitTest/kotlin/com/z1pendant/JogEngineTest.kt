@@ -116,6 +116,48 @@ class JogEngineTest {
         assertEquals(0, drops)
     }
 
+    /** Spindle on, axes still: the Z1 says Run, no |P:, actual feed 0. Jogging works. */
+    private fun spindleOn(x: Double, at: Long = clock, feed: Double = 0.0, job: com.z1pendant.link.JobProgress? = null) =
+        status("Run", x, at = at).copy(feedActual = feed, job = job)
+
+    @Test fun jogsWhileOnlyTheSpindleRuns() {
+        at(1000); link.status.value = spindleOn(-112.5)
+        at(1100); jog.click(1)
+        at(1120); link.status.value = spindleOn(-112.5)
+        at(1140); jog.tick()
+        assertEquals(listOf("G53G1X-112.4"), link.lines.map { it.substringBefore('F') })
+        assertEquals(0, drops)
+    }
+
+    @Test fun lockedWhileAJobPlaysAndClicksAreDroppedNotSaved() {
+        val job = com.z1pendant.link.JobProgress(120, 10, 60)
+        at(1000); link.status.value = spindleOn(-112.5, job = job)
+        at(1100); jog.click(3)
+        for (t in 1120L..2800L step 40) { at(t); link.status.value = spindleOn(-112.5, job = job); jog.tick() }
+        assertEquals("nothing sent during a job", 0, link.lines.size)
+        assertEquals(1, drops)
+
+        // The job ends: the old clicks must not fire now.
+        for (t in 2840L..3400L step 40) { at(t); link.status.value = status("Idle", -112.5); jog.tick() }
+        assertEquals("no late move once the machine is free", 0, link.lines.size)
+    }
+
+    @Test fun waitsForSomeoneElsesMoveThenDrops() {
+        at(1000); link.status.value = spindleOn(-112.5, feed = 800.0)     // Run and actually moving
+        at(1100); jog.click(1)
+        for (t in 1120L..2800L step 40) { at(t); link.status.value = spindleOn(-112.5, feed = 800.0); jog.tick() }
+        assertEquals(0, link.lines.size)
+        assertEquals(1, drops)
+    }
+
+    @Test fun briefBusyWaitStillStarts() {
+        at(1000); link.status.value = status("Run", -112.5).copy(feedActual = 500.0)   // finishing a short move
+        at(1100); jog.click(1); jog.tick()
+        at(1600); link.status.value = status("Idle", -112.5); jog.tick()
+        assertEquals(listOf("G53G1X-112.4"), link.lines.map { it.substringBefore('F') })
+        assertEquals(0, drops)
+    }
+
     @Test fun typedMovesNeverUseRelativeMode() {
         assertEquals(listOf("G53 G0 X-102.5"), AppViewModel.moveLines('X', 10.0, relative = true, endMachine = -102.5))
         assertEquals(listOf("G90 G0 Z5"), AppViewModel.moveLines('Z', 5.0, relative = false, endMachine = -40.0))
