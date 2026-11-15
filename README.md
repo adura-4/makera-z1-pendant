@@ -137,6 +137,7 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 **Jog pad**
 - Tap the joystick button (top-left of the dial). Tap the dial icon in the same spot to go back.
 - Tap a button for one step; hold it to keep moving.
+- The axis you jog on the pad becomes the selected axis, so the dial picks up where you left off.
 
 **Hotkeys**
 - Tap a tile to run it. Hold a tile for 2 s to edit it.

@@ -243,9 +243,13 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         haptics.press()
     }
 
-    /** One pad press (or one repeat while held): one step on [a] in direction [dir]. */
+    /**
+     * One pad press (or one repeat while held): one step on [a] in direction [dir]. The pressed
+     * axis also becomes the selected one, so going back to the dial (or the volume keys) carries
+     * on with the axis you were just jogging, not an older selection.
+     */
     fun padJog(a: Char, dir: Int) {
-        if (jog.axis != a) jog.axis = a
+        if (axis.value != a || jog.axis != a) selectAxis(a)
         jog.step = steps[stepIndex.value]
         wheelClicks(dir)
     }
