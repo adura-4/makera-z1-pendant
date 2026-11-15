@@ -137,6 +137,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     val hotkeysExpanded = MutableStateFlow(false)
     /** Bottom drawer with feed override + Hold/Resume/Reset pulled up. */
     val controlsOpen = MutableStateFlow(false)
+    /** The pendant's own motion, which doesn't open the drawer by itself. */
+    val ownMotion = OwnMotion()
     /** While arranging: the working order (ids). Saved by [saveArrangement]. */
     val arrangeOrder = MutableStateFlow<List<String>?>(null)
 
@@ -394,6 +396,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         if (why != null) { snack.tryEmit("Move $axis: $why"); haptics.thud(); return }
         haptics.press()
         log("▶ move $axis: ${if (relative) "by" else "to"} $value")
+        ownMotion.sent(nowMs())
         planMove(axis, value, relative).lines.forEach { link.sendLine(it) }
     }
     fun setFeedOverride(p: Int) = link.dialect.feedOverride(p.coerceIn(10, 300)).forEach { link.sendLine(it) }

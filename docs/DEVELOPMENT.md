@@ -123,6 +123,15 @@ to 0.01 % (programmed = the status's target field; assumed to exclude the overri
 `SpindleControl`, **unverified on stock**). Range: 50 % of programmed (Makera's slider floor) up to
 13,000 or 300 % (firmware limit), whichever is lower. Makera's own app slider is 50–200 %.
 
+## Controls drawer
+The bottom drawer (feed override, Hold, Resume, Reset) opens by itself on Hold, Pause or Alarm, and when
+the machine moves without the pendant having started it (e.g. a job from Makera Studio). It closes again
+at Idle if it opened itself. `OwnMotion` tracks the pendant's own motion: jogs, typed moves and hotkeys
+count from the moment they are sent until the machine has been busy and is Idle again (or 1.5 s if it
+never starts). The firmware acks a line when it is queued, not when the move ends, so the ack can't be
+used. It used to count a jog as the pendant's only for 1.5 s after the last click, and typed moves not at
+all, so a long jog step or a typed move opened the drawer.
+
 ## Zero / undo
 `zero` sends `G10 L20 P0 <axis>0`. Pressed again while the axis still reads 0.000 and hasn't moved, it
 sends `G10 L20 P0 <axis><previous value>` instead. The Zero hotkeys (X/Y/Z/A, XY, XYZ, selected) share it.

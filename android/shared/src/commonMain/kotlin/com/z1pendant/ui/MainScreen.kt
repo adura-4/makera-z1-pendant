@@ -311,20 +311,13 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // ---- bottom drawer: feed override + hold/resume/reset ----
         // Closed it's a slim handle. Swipe up (or tap) to open, swipe down to close. It opens by
         // itself only when something other than the pendant is driving the machine or it stops:
-        // Hold, Alarm, or motion the pendant didn't start (e.g. a job started from Studio). Dial
-        // jogs and hotkeys (Home, Z up, ...) don't open it. If it opened itself, it closes again
-        // once the machine is back to Idle.
+        // Hold, Alarm, or motion the pendant didn't start (e.g. a job started from Studio). Jogs,
+        // typed moves and hotkeys (Home, Z up, ...) don't open it (OwnMotion). If it opened itself,
+        // it closes again once the machine is back to Idle.
         val open by vm.controlsOpen.collectAsState()
         val s = st?.state
-        // A hotkey's motion keeps the machine busy after the hotkey "finishes" (the firmware acks
-        // a line when it's queued, not when the move ends), so remember it until Idle again.
-        var pendantMotion by remember { mutableStateOf(false) }
-        LaunchedEffect(running != null, s) {
-            if (running != null) pendantMotion = true
-            else if (s.equals("Idle", true) || !connected) pendantMotion = false
-        }
-        val machineMoving = (s.equals("Run", true) || s.equals("Home", true)) && !pendantMotion && running == null &&
-            nowMs() - vm.jog.lastJogAt > 1500
+        val own = vm.ownMotion.isOwn(s, connected, nowMs(), hotkeyRunning = running != null, lastJogAt = vm.jog.lastJogAt)
+        val machineMoving = (s.equals("Run", true) || s.equals("Home", true)) && !own
         val needsControls = connected && (machineMoving ||
             s.equals("Hold", true) || s.equals("Pause", true) || s.equals("Alarm", true))
         var autoOpened by remember { mutableStateOf(false) }
