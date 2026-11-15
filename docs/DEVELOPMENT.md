@@ -125,7 +125,7 @@ spindle is 150 W, 0–13,000 RPM (Makera's spec); the config holds motion `delay
 Override slider (drawer): in RPM, full bar = 13,000. Release sends `M223 S<desired / programmed × 100>`
 to 0.01 % (programmed = the status's target field; assumed to exclude the override, as in the community
 `SpindleControl`, **unverified on stock**). Range: 50 % of programmed (Makera's slider floor) up to
-13,000 or 300 % (firmware limit), whichever is lower. Makera's own app slider is 50–200 %.
+13,000 or 200 %, whichever is lower: the stock firmware clamps M223 to 50–200 % (community: 10–300 %), same as Makera's slider.
 
 ## Controls drawer
 The bottom drawer (feed override, Hold, Resume, Reset) opens by itself on Hold, Pause or Alarm, and when
@@ -159,6 +159,11 @@ not while the screen redraws.
   starts `00 00`) isn't handled yet. The app downloads the playing file once per md5, paced 25 ms per
   packet, and reads its tools (`JobFileParser`: Fusion `(T1 name D=… - type)` and Makera
   `;@MKR|TOOL|number=…|name=…` headers; `M6` lines, skipping changes to the tool already in).
+- Overrides live in RAM in the firmware (makeraz1firmware): M220 → `Robot::seconds_per_minute`, M223 →
+  the spindle `factor`; both reply just `ok`, and the status shows them (`F:…,override`, `S:…,factor`).
+  Nothing resets the spindle factor but `M223 S100` or a reboot; the feed override resets on `M2`
+  only (`M30` resets it only in grbl mode, which the Z1 isn't), and the probing macros end with
+  `M220 S100`. Jobs end with `M30`, so both overrides carry into the next job.
 - When a job ends (`|P:` gone for 3 statuses), the app puts feed and spindle overrides back to 100 %:
   the firmware keeps them across jobs, and an 85 % left over from earlier made a later job's S13000
   run at ~11,050.

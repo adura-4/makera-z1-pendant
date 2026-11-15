@@ -763,12 +763,13 @@ data class SpindleSlide(val target: Double, val pct: Double, val lo: Int, val hi
 }
 
 /**
- * Bottom: half the programmed RPM (Makera's own slider stops at 50 %). Top: the spindle's max, or
- * 300 % of programmed (the firmware's override limit), whichever is lower.
+ * Bottom: half the programmed RPM. Top: the spindle's max, or 200 % of programmed, whichever is
+ * lower. 50–200 % is the stock Z1 firmware's own clamp on M223 (makeraz1firmware SpindleControl;
+ * the community firmware allows 10–300 %) and Makera's slider range.
  */
 fun spindleSlideFor(target: Double, pct: Double) = SpindleSlide(target, pct,
     lo = kotlin.math.round(target * 0.5).toInt(),
-    hi = kotlin.math.round(minOf(SPINDLE_MAX_RPM.toDouble(), target * 3.0)).toInt())
+    hi = kotlin.math.round(minOf(SPINDLE_MAX_RPM.toDouble(), target * 2.0)).toInt())
 
 /**
  * Probe tool numbers (community firmware ATCHandler: "a 3-axis probe must be installed (tool 0,

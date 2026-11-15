@@ -104,7 +104,7 @@ class Machine:
                 self.feed = vals["F"]
             if 223 in m and "S" in vals:
                 self._spin()
-                self.spindle_factor = max(10.0, min(300.0, vals["S"]))
+                self.spindle_factor = max(50.0, min(200.0, vals["S"]))   # stock Z1 clamp
                 return ["ok\r\n"]
             if 220 in m and "S" in vals:
                 self.fro = max(10.0, min(300.0, vals["S"]))

@@ -59,7 +59,7 @@ class SpindleTest {
         assertEquals(108.33, s12.percentFor(13000), 1e-9)
         assertEquals(9700, spindleSlideFor(8000.0, s8.percentFor(9700)).now)   // lands on the drag
         val s4 = spindleSlideFor(4000.0, 100.0)
-        assertEquals(12000, s4.hi)                                // 300 % comes first
+        assertEquals(8000, s4.hi)                                 // 200 % (stock clamp) comes first
         assertEquals(7800, spindleSlideFor(6000.0, 130.0).now)    // program changes speed: the % stays
         assertEquals(listOf("M223 S162.5"), GrblishDialect.spindleOverride(162.5))
         assertEquals(listOf("M223 S100"), GrblishDialect.spindleOverride(100.0))
