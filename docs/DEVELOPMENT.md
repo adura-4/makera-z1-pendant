@@ -70,6 +70,27 @@ over from a fresh reading.
 Jog pad: a tap is one click; a held button repeats after 0.4 s at `max(120 ms, step / axis max speed)`,
 and letting go drops any clicks not yet sent.
 
+The tap's click is sent when the finger lifts, and the repeat runs on a fixed clock. Nothing is sent
+on touch: the Z1 (Smoothie) plans a move that is alone in its queue to end at a standstill and never
+re-plans a move once it is running (`Block::calculate_trapezoid` returns early `if (is_ticking)`), so a
+step sent on touch made every hold stop after its first step.
+
+While a button repeats, the hand speed is the exact repeat rate and the feed is a constant 97 % of it
+(`JogConfig.holdFeedFactor`), with no lead correction. On a real Z1, any feed change from move to move
+is audible, and a feed even a few % faster than the clicks arrive empties the queue, so the machine
+stops for a moment and starts again. A little slower, the queue fills slowly up to the cap, where a
+dropped click costs nothing because moves are still queued. With the lead correction, every jump in the
+lead estimate went into the feed (F918, F704, F921, F665, … at the 1 mm step). The repeat runs on a fixed
+clock because a delay after each click adds up (124 ms instead of 120 on a Galaxy S21), which made the
+real supply slower than the feed.
+
+The lead's dead reckoning (every jog, not only the pad) counts from when the reported position was
+read, not from the latest status: the Z1 refreshes the position in its status only every 250–370 ms and
+repeats it in between, so a position is as old as the first status that carried it (trusted up to
+400 ms, `JogConfig.positionMaxAgeMs`; after that the machine is standing still). Counting from the
+latest status made the lead look up to ~0.3 s of travel too long, so clicks were dropped at the cap
+while the machine had little queued.
+
 ## Haptics
 VibrationEffect composition primitives: TICK per detent, CLICK every 10th, THUD when clicks are dropped
 or blocked, a double click at a soft limit. Strength is in Settings.
