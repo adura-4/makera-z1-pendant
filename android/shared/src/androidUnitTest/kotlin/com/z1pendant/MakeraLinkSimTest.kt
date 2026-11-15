@@ -71,4 +71,24 @@ class MakeraLinkSimTest {
         delay(300)
         assertEquals("stays disconnected", ConnState.Disconnected, link.conn.value)
     }
+
+    /** \$H ends at the soft max (-1), like the real Z1, so the first move after homing doesn't alarm. */
+    @Test fun moveAfterHomingStaysInsideSoftLimits() = runBlocking {
+        val link = MakeraLink()
+        link.connect(MachineTarget("sim", "127.0.0.1", port))
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        link.sendLine("\$H")
+        withTimeout(15000) {
+            while (link.status.value?.let { it.isIdle && it.mpos.take(3).all { m -> m == -1.0 } } != true) delay(50)
+        }
+        val ack = CompletableDeferred<Pair<Boolean, String>>()
+        link.sendLine("G91 G0 X-1") { ok, reply -> ack.complete(ok to reply) }
+        val (ok, reply) = withTimeout(3000) { ack.await() }
+        assertTrue("ok for the first move after homing: $reply", ok)
+        link.sendLine("G90")
+        // The firmware (and the sim) waits 100 ms before running a queue that was empty: wait for the position.
+        withTimeout(5000) { while (link.status.value?.let { it.isIdle && it.mpos[0] == -2.0 } != true) delay(20) }
+        assertEquals(link.status.value!!.raw, "Idle", link.status.value!!.state)
+        link.disconnect()
+    }
 }
