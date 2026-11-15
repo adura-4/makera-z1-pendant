@@ -138,7 +138,10 @@ export/import is Android-only for now. **Scan network** works once you've allowe
    The IP is in the Makera app or your router's device list. The port is 2222.
 
 The app remembers the machine and reconnects by itself. The name, IP and round-trip time show at the
-top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
+top; the pill shows the machine state (Idle, Run, Hold, Alarm…). If the machine stops answering for
+1.5 s, the pill says **No reply** and the app sends nothing until it answers again; after 25 s it
+drops the connection and reconnects. If a command may still have been on its way when the machine
+went quiet, the app drops the connection at once instead, so that command can't run later.
 
 <p align="center"><img src="docs/screenshots/08_settings.png" width="240" alt="Settings"></p>
 

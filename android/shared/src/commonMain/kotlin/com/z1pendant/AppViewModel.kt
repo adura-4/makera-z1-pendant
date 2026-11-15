@@ -279,7 +279,9 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         viewModelScope.launch {
             link.conn.collectLatest { c ->
                 log("· link $c")
-                if (c != ConnState.Connected) { jog.cancelPending(); forgetJob() }
+                if (c != ConnState.Connected) jog.cancelPending()
+                // A stall that clears is still the same connection: keep the job.
+                if (c != ConnState.Connected && c != ConnState.Stalled) forgetJob()
             }
         }
         target.value?.let { if (prefs.getBoolean("autoConnect", true)) link.connect(it) }

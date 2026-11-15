@@ -104,6 +104,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                     when (conn) {
                         ConnState.Connected -> "${target?.host} · ${lat?.let { "$it ms" } ?: "—"}"
                         ConnState.Connecting -> "connecting to ${target?.host}…"
+                        ConnState.Stalled -> "not answering · stop at the machine if needed"
                         ConnState.Lost -> "link lost · reconnecting…"
                         ConnState.Disconnected -> "tap to connect"
                     }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -114,7 +115,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             val jp = job?.percent
             val toolWait = connected && s0.equals("Tool", true)
             val pill = when {
-                !connected -> if (conn == ConnState.Lost) "Lost" else "Offline"
+                !connected -> when (conn) { ConnState.Lost -> "Lost"; ConnState.Stalled -> "No reply"; else -> "Offline" }
                 toolWait -> "Tool change"
                 jp != null && (s0.equals("Hold", true) || s0.equals("Pause", true)) -> "$s0 $jp%"
                 jp != null && !s0.equals("Alarm", true) -> "Run $jp%"

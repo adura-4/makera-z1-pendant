@@ -68,7 +68,11 @@ private val NoJobFile = kotlinx.coroutines.flow.MutableStateFlow<JobFile?>(null)
 
 data class MachineTarget(val name: String, val host: String, val port: Int)
 
-enum class ConnState { Disconnected, Connecting, Connected, Lost }
+/**
+ * [Stalled]: connected, but the machine stopped answering status queries. Nothing is sent until it
+ * answers again; after a longer silence the link gives up ([Lost]) and reconnects.
+ */
+enum class ConnState { Disconnected, Connecting, Connected, Stalled, Lost }
 
 data class MachineStatus(
     val state: String,                 // Idle, Run, Hold, Alarm, Home, Pause, Wait, Tool, Sleep

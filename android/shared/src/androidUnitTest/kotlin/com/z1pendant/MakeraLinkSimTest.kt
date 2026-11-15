@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -102,6 +103,84 @@ class MakeraLinkSimTest {
         assertEquals(ConnState.Disconnected, link.conn.value)
         delay(300)
         assertEquals("stays disconnected", ConnState.Disconnected, link.conn.value)
+    }
+
+    /** Every state the link goes through, in order (repeats collapsed). */
+    private fun CoroutineScope.recordStates(link: MakeraLink): MutableList<ConnState> {
+        val seen = java.util.Collections.synchronizedList(mutableListOf<ConnState>())
+        launch { link.conn.collect { if (seen.lastOrNull() != it) seen += it } }
+        return seen
+    }
+
+    /**
+     * The machine goes quiet for 3 s (a stalled Z1 network): the link calls it Stalled, sends
+     * nothing, refuses new lines, and carries on over the same connection once statuses come back.
+     */
+    @Test fun shortStallKeepsTheConnection() = runBlocking {
+        val link = MakeraLink()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val states = scope.recordStates(link)
+        link.connect(MachineTarget("sim", "127.0.0.1", port))
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        val x0 = link.status.value!!.mpos[0]
+
+        link.sendLine("simfreeze 3")
+        withTimeout(3000) { while (link.conn.value != ConnState.Stalled) delay(20) }
+        val refused = CompletableDeferred<Pair<Boolean, String>>()
+        link.sendLine("G0 X-10") { ok, reply -> refused.complete(ok to reply) }
+        val (ok, reply) = withTimeout(1000) { refused.await() }
+        assertTrue("refused while stalled", !ok)
+        assertEquals("machine not answering", reply)
+
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        val seen = states.toList()
+        assertTrue("stalled, then back on the same connection: $seen",
+            ConnState.Stalled in seen && ConnState.Lost !in seen && seen.count { it == ConnState.Connecting } == 1)
+        assertEquals("the refused line never ran", x0, link.status.value!!.mpos[0], 1e-9)
+
+        val ack = CompletableDeferred<Boolean>()
+        link.sendLine("G0 X-1") { ok2, _ -> ack.complete(ok2) }
+        assertTrue("lines flow again", withTimeout(3000) { ack.await() })
+        link.disconnect(); scope.cancel()
+    }
+
+    /**
+     * The machine goes quiet with a line still unanswered: the link doesn't wait in Stalled, it drops
+     * the socket at once (that line fails) and reconnects.
+     */
+    @Test fun stallWithUnansweredLineDropsAtOnce() = runBlocking {
+        val link = MakeraLink()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val states = scope.recordStates(link)
+        link.connect(MachineTarget("sim", "127.0.0.1", port))
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+
+        link.sendLine("simfreeze 4")
+        val ack = CompletableDeferred<Pair<Boolean, String>>()
+        link.sendLine("G4 P0") { ok, reply -> ack.complete(ok to reply) }
+        val (ok, reply) = withTimeout(4000) { ack.await() }
+        assertTrue("the unanswered line failed: $reply", !ok)
+        assertEquals("link lost", reply)
+        withTimeout(8000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        val seen = states.toList()
+        assertTrue("dropped without a stall: $seen", ConnState.Stalled !in seen && ConnState.Lost in seen)
+        link.disconnect(); scope.cancel()
+    }
+
+    /** A stall longer than the give-up time drops the socket and reconnects once the machine is back. */
+    @Test fun longStallGivesUpAndReconnects() = runBlocking {
+        val link = MakeraLink(giveUpMs = 2500)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val states = scope.recordStates(link)
+        link.connect(MachineTarget("sim", "127.0.0.1", port))
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+
+        link.sendLine("simfreeze 5")
+        withTimeout(5000) { while (link.conn.value != ConnState.Lost) delay(20) }
+        withTimeout(10000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        val seen = states.toList()
+        assertTrue("stalled before giving up: $seen", seen.indexOf(ConnState.Stalled) in 0 until seen.indexOf(ConnState.Lost))
+        link.disconnect(); scope.cancel()
     }
 
     /** \$H ends at the soft max (-1), like the real Z1, so the first move after homing doesn't alarm. */

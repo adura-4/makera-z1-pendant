@@ -45,12 +45,17 @@ import kotlinx.coroutines.withTimeout
  *
  * Flow control: lines go out one at a time (window 2) and each waits for its "ok"/"error" reply.
  * If the machine never acks (unverified on stock firmware), the link drops to timed spacing so
- * nothing jams. A status query goes out every [pollMs]; no reply for [lossMs] = link lost, and
- * the link reconnects by itself.
+ * nothing jams. A status query goes out every [pollMs]. No reply for [stallMs]: if a line may not have
+ * reached the machine yet, the socket is reset at once so that line can't run late. Otherwise the link is stalled:
+ * nothing more is sent, the socket stays open, and the link carries on if the machine answers again.
+ * After [giveUpMs] without a reply the socket is dropped and the link reconnects by itself.
  *
  * Sockets are ktor-network (the same code on Android and iOS).
  */
-class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)) : MachineLink {
+class MakeraLink(
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val giveUpMs: Long = 25_000,
+) : MachineLink {
     override val conn = MutableStateFlow(ConnState.Disconnected)
     override val status = MutableStateFlow<MachineStatus?>(null)
     override val messages = MutableSharedFlow<String>(extraBufferCapacity = 64)
@@ -143,13 +148,17 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
     @Volatile private var pollMs = 200L
     @Volatile private var queryAt = 0L
     @Volatile private var lastStatusAt = 0L
+    /** Oldest status query not answered yet (0 = none). */
+    @Volatile private var firstQueryAt = 0L
+    /** Everything sent before this reached the machine: a query sent then was answered, and TCP keeps order. */
+    @Volatile private var reachedAt = 0L
     private var job: Job? = null
     /** null = not known yet, true = machine replies "ok" per line, false = it doesn't. */
     @Volatile var acksSeen: Boolean? = null; private set
 
     private val window = 2
     private val ackTimeoutMs = 4000L
-    private val lossMs = 1500L
+    private val stallMs = 1500L
 
     override val pendingLines: Int get() = synchronized(lock) { queue.size + inFlight.size }
 
@@ -202,12 +211,17 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             conn.value = if (first) ConnState.Connecting else ConnState.Lost
             first = false
             try {
-                val s = withTimeout(3000) { aSocket(selector).tcp().connect(t.host, t.port) { noDelay = true } }
+                // Linger 0: closing the socket drops whatever it still holds unsent (a reset, not a
+                // graceful close), so a line stuck in it can't reach the machine later.
+                val s = withTimeout(3000) {
+                    aSocket(selector).tcp().connect(t.host, t.port) { noDelay = true; lingerSeconds = 0 }
+                }
                 socket = s; out = s.openWriteChannel(autoFlush = false)
                 lastStatusAt = nowMs()
-                queryAt = 0
+                queryAt = 0; firstQueryAt = 0; reachedAt = 0
                 val reader = scope.launch { readLoop(s) }
-                sendRaw(MakeraFrame.rt('?'.code)); queryAt = nowMs()
+                queryAt = nowMs(); firstQueryAt = queryAt
+                sendRaw(MakeraFrame.rt('?'.code))
                 // Wait for the first status before calling it connected.
                 val t0 = nowMs()
                 while (status.value == null || status.value!!.atMs < t0) {
@@ -238,9 +252,29 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             val now = nowMs()
             // Output states every 3 s, but not while jogging (fast status polls mean a jog is on).
             if (now - lastDiagAt > 3000 && pollMs >= 200) refreshOutputs()
-            if (now - lastStatusAt > lossMs) throw LinkException("no status for ${now - lastStatusAt} ms")
+            val silentMs = now - lastStatusAt
+            if (silentMs > giveUpMs) throw LinkException("no status for $silentMs ms")
+            // The machine went quiet (a Wi-Fi gap, or the Z1's network stalling).
+            val stalled = silentMs > stallMs
+            if (stalled && conn.value == ConnState.Connected) {
+                // A line sent after the last answered query may still be in the phone's socket, and
+                // would run whenever the machine wakes: reset the socket now, which throws it away.
+                // (A line the machine has, like a $H still homing, runs either way.)
+                val unsure = synchronized(lock) { inFlight.count { it.sentAt >= reachedAt } }
+                if (unsure > 0) throw LinkException("no status for $silentMs ms, $unsure line(s) maybe not delivered: dropped")
+                // Everything sent reached the machine: keep the socket and send nothing more until
+                // the machine answers again.
+                PLog.w(TAG, "no status for $silentMs ms: stalled")
+                conn.value = ConnState.Stalled
+                latencyMs.value = null
+                failQueued("machine not answering")
+            } else if (!stalled && conn.value == ConnState.Stalled) {
+                PLog.i(TAG, "answering again")
+                conn.value = ConnState.Connected
+            }
             if (queryAt == 0L && now - lastStatusAt >= pollMs || queryAt != 0L && now - queryAt > 600) {
                 queryAt = now
+                if (firstQueryAt == 0L) firstQueryAt = now
                 sendRaw(MakeraFrame.rt('?'.code))
             }
             var toSend: Pending? = null
@@ -248,12 +282,12 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
                 // Ack timeouts: release the slot so a missing "ok" never jams the pendant.
                 // Confirmed on the Z1 (fw 1.1.3.0.1.13): G-code / $ lines get "ok"; a timeout here
                 // means something is wrong, so it's logged but never changes the flow-control mode.
-                while (inFlight.isNotEmpty() && now - inFlight.first().sentAt > ackTimeoutMs) {
+                while (!stalled && inFlight.isNotEmpty() && now - inFlight.first().sentAt > ackTimeoutMs) {
                     val p = inFlight.removeFirst()
                     PLog.w(TAG, "no ok for '${p.line}' in $ackTimeoutMs ms")
                     p.onAck?.invoke(true, "")
                 }
-                if (queue.isNotEmpty() && inFlight.size < window) {
+                if (!stalled && queue.isNotEmpty() && inFlight.size < window) {
                     val p = queue.removeFirst()
                     p.sentAt = now
                     // Shell commands (version, ls, …) reply with text and no "ok": don't wait for one,
@@ -292,6 +326,8 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             MakeraFrame.STATUS_RES -> {
                 lastStatusAt = now
                 if (queryAt != 0L) { latencyMs.value = (now - queryAt).toInt(); queryAt = 0 }
+                // Replies come in order, so this answers the oldest query out.
+                if (firstQueryAt != 0L) { reachedAt = firstQueryAt; firstQueryAt = 0 }
                 StatusParser.parse(text, now)?.let { status.value = it }
             }
             MakeraFrame.FIRM_VER -> firmware.value = text.trim()
@@ -321,8 +357,9 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
 
     override fun sendLine(line: String, quiet: Boolean, onAck: ((ok: Boolean, reply: String) -> Unit)?) {
         if (conn.value != ConnState.Connected) {
-            if (!quiet) messages.tryEmit("not sent (not connected): $line")
-            onAck?.invoke(false, "not connected"); return
+            val why = if (conn.value == ConnState.Stalled) "machine not answering" else "not connected"
+            if (!quiet) messages.tryEmit("not sent ($why): $line")
+            onAck?.invoke(false, why); return
         }
         synchronized(lock) { queue.addLast(Pending(line, quiet, onAck)) }
     }
@@ -344,6 +381,12 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             PLog.w(TAG, "send: ${e.message}")
             closeSocket()
         }
+    }
+
+    /** Lines not sent yet: they will never go out on this socket. */
+    private fun failQueued(why: String) {
+        val dropped = synchronized(lock) { queue.toList().also { queue.clear() } }
+        dropped.forEach { it.onAck?.invoke(false, why) }
     }
 
     private fun failAll(why: String) {
