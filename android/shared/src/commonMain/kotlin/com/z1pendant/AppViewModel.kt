@@ -139,6 +139,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     val controlsOpen = MutableStateFlow(false)
     /** The pendant's own motion, which doesn't open the drawer by itself. */
     val ownMotion = OwnMotion()
+    /** Whether the machine's current motion is the pendant's own; re-checked on every status (see init). */
+    val ownMotionActive = MutableStateFlow(false)
     /** While arranging: the working order (ids). Saved by [saveArrangement]. */
     val arrangeOrder = MutableStateFlow<List<String>?>(null)
 
@@ -180,6 +182,13 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             link.messages.collect { m -> log("← $m") }
         }
         viewModelScope.launch { link.sent.collect { m -> log("→ $m") } }
+        // Own motion is tracked here, once per status, rather than while the screen redraws.
+        viewModelScope.launch {
+            link.status.collect { st ->
+                ownMotionActive.value = ownMotion.isOwn(st?.state, link.conn.value == ConnState.Connected, nowMs(),
+                    hotkeyRunning = runner.running.value != null, lastJogAt = jog.lastJogAt)
+            }
+        }
         viewModelScope.launch { runner.lastError.collect { it?.let { e -> snack.tryEmit(e); runner.lastError.value = null } } }
         viewModelScope.launch {
             link.conn.collectLatest { c ->
@@ -306,6 +315,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
 
     fun sendConsole(line: String) {
         if (line.isBlank()) return
+        ownMotion.sent(nowMs())             // typed by you: any motion it starts is the pendant's own
         link.sendLine(line.trim())          // the link logs it when it actually goes out
     }
 

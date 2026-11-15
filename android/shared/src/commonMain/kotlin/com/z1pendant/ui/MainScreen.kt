@@ -312,11 +312,11 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // Closed it's a slim handle. Swipe up (or tap) to open, swipe down to close. It opens by
         // itself only when something other than the pendant is driving the machine or it stops:
         // Hold, Alarm, or motion the pendant didn't start (e.g. a job started from Studio). Jogs,
-        // typed moves and hotkeys (Home, Z up, ...) don't open it (OwnMotion). If it opened itself,
+        // typed moves, console lines and hotkeys (Home, Z up, ...) don't open it (OwnMotion). If it opened itself,
         // it closes again once the machine is back to Idle.
         val open by vm.controlsOpen.collectAsState()
         val s = st?.state
-        val own = vm.ownMotion.isOwn(s, connected, nowMs(), hotkeyRunning = running != null, lastJogAt = vm.jog.lastJogAt)
+        val own by vm.ownMotionActive.collectAsState()
         val machineMoving = (s.equals("Run", true) || s.equals("Home", true)) && !own
         val needsControls = connected && (machineMoving ||
             s.equals("Hold", true) || s.equals("Pause", true) || s.equals("Alarm", true))
