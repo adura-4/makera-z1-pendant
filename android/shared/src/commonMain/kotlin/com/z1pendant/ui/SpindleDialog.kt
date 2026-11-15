@@ -46,7 +46,7 @@ fun SpindleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
     val rpm = field.text.filter { it.isDigit() }.take(6).toIntOrNull()
     val block = remember(st, rpm) { vm.spindleBlock(rpm) }  // re-checked on every status
     val lastTool by vm.lastSetTool.collectAsState()
-    var pick by remember { mutableStateOf(lastTool) }       // the tool on the wheel
+    var pick by remember { mutableStateOf(lastTool) }       // the tool on the stepper
     var toolSet by remember { mutableStateOf<Int?>(null) }   // set from this box: "Tool Tn set." once the machine reports it
     var flash by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(flash) { if (flash != null) { delay(220); flash = null } }
@@ -91,12 +91,10 @@ fun SpindleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                         keyboardActions = KeyboardActions(onGo = { start() }))
                     if (block != null) Text(block, fontSize = 13.sp, color = cs.error)
                     else if (toolSet != null && st?.tool == toolSet) Text("Tool T$toolSet set.", fontSize = 13.sp, color = Color(0xFF86EFAC))
-                    // No usable tool: pick one on the wheel and tell the firmware it's in (M493.2, no motion).
+                    // No usable tool: pick one (− / +, hold to run) and tell the firmware it's in (M493.2, no motion).
                     if (vm.spindleToolProblem(st)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            WheelPicker((1..99).map { "T$it" }, initial = lastTool - 1, onPick = { i ->
-                                if (pick != i + 1) { pick = i + 1; vm.haptics.tick() }
-                            })
+                            Stepper(pick, 1..99, onChange = { pick = it }, label = { "T$it" }, onStep = { vm.haptics.tick() })
                             PendantOutlinedButton(onClick = { vm.setTool(pick); toolSet = pick }, shape = boxShape,
                                 modifier = Modifier.height(48.dp)) { Text("Set tool", fontSize = 16.sp) }
                         }

@@ -47,7 +47,7 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 - **Spindle**: the Spindle tile is dim while off; tap it for the start box (always asks): pick a preset
   (up to the Z1's 13,000 RPM max) or type an RPM. It remembers the last one. While it runs, the tile
   turns blue and shows the live RPM, also during a job; tap it to stop (it asks first, every time). It refuses to start with no tool or the probe loaded
-  (the firmware would halt the machine) and offers a tool wheel to set the tool number (no motion).
+  (the firmware would halt the machine) and offers a − T1 + stepper to set the tool number (no motion).
 - Works alongside Makera Studio: both can be connected at the same time.
 
 <p align="center">
