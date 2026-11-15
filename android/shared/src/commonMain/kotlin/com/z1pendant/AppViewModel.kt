@@ -81,8 +81,9 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             !st.isIdle -> "Machine is ${st.state}, not Idle"
             tool != null && isProbeTool(tool) -> "The probe is loaded (T$tool). Load a cutting tool first."
             tool != null && tool < 0 -> "No tool loaded (empty collet). Load a tool first."
-            // Anything else the firmware won't spin (it halts the machine on M3 unless 0 < T < 100000).
-            tool != null && tool >= 100_000 -> "Tool T$tool can't run the spindle. Load a cutting tool first."
+            // Anything else the stock Z1 firmware won't spin: M3 halts unless 1 <= T <= 999
+            // (Makera's makeraz1firmware SpindleControl; the community firmware allows < 100000).
+            tool != null && tool >= 1_000 -> "Tool T$tool can't run the spindle. Load a cutting tool first."
             rpm == null || rpm < 1 -> "Enter an RPM"
             rpm > SPINDLE_MAX_RPM -> "The Z1 spindle tops out at ${Fmt.thousands(SPINDLE_MAX_RPM)} RPM"
             else -> null
@@ -130,7 +131,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
 
     /** The firmware won't spin with the tool it has (probe, empty collet, or out of range). */
     fun spindleToolProblem(st: MachineStatus?): Boolean =
-        st?.tool?.let { isProbeTool(it) || it < 0 || it >= 100_000 } == true
+        st?.tool?.let { isProbeTool(it) || it < 0 || it >= 1_000 } == true
 
     /** Start box → M493.2 T[n] (no motion). */
     fun setTool(n: Int) {
@@ -751,7 +752,7 @@ fun spindleSlideFor(target: Double, pct: Double) = SpindleSlide(target, pct,
 /**
  * Probe tool numbers (community firmware ATCHandler: "a 3-axis probe must be installed (tool 0,
  * 9999 or tool >= 999990)"); -1 = empty collet. Spinning a probe would wreck it, so the spindle
- * start box refuses these even where the firmware's own check (0 < T < 100000) would let 9999 through.
+ * start box refuses these (the stock firmware's own check, 1 <= T <= 999, already stops 9999 and up).
  */
 fun isProbeTool(t: Int) = t == 0 || t == 9999 || t >= 999_990
 
