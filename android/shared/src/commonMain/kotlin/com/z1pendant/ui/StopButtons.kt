@@ -1,6 +1,7 @@
 package com.z1pendant.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,5 +50,7 @@ private fun androidx.compose.foundation.layout.RowScope.StopButton(
             containerColor = if (lit) fill else MaterialTheme.colorScheme.secondaryContainer,
             contentColor = if (lit) Color.White else text,
         ),
-    ) { Text(label, fontSize = 16.sp) }
+        // The default 24 dp side padding left "Resume" too little room on a 360 dp phone: it wrapped.
+        contentPadding = PaddingValues(horizontal = 8.dp),
+    ) { Text(label, fontSize = 16.sp, maxLines = 1, softWrap = false) }
 }

@@ -252,7 +252,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         } else {
         // ---- portrait (phones, and tablets held upright) ----
         // Header + running banner pinned on top, the drawer pinned at the bottom; between scrolls.
-        // Wide screens: the dial takes whatever height the rest leaves (it grows when there are
+        // The dial takes whatever height the rest leaves (on wide screens it grows when there are
         // only 1-2 hotkey rows, shrinks for 3). viewH = visible height, otherH = content minus dial.
         var viewH by remember { mutableIntStateOf(0) }
         var otherH by remember { mutableIntStateOf(-1) }
@@ -266,13 +266,14 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // Dial / jog pad, hidden while the hotkey grid is expanded. Bottom-left: up-chevron opens
         // the hotkey grid (it slides up); expanded, a down-chevron brings the dial back.
         if (!expanded) BoxWithConstraints(Modifier.fillMaxWidth()) {
-            // Same height in both modes, so nothing below jumps. Phones: 75% of the width.
-            // Wide: fill the leftover height, between 260 dp and 80% of the width.
+            // Same height in both modes, so nothing below jumps. Both fill the leftover height.
+            // Phones: up to 75% of the width, down to 62% (the jog pad's full height), so the screen
+            // doesn't scroll on shorter phones or with a larger display size (e.g. a Galaxy S21 at
+            // 360 dp wide was 32 dp too tall). Wide: between 260 dp and 80% of the width.
             val density = androidx.compose.ui.platform.LocalDensity.current
-            val box = if (!wide) maxWidth * 0.75f else {
-                val left = if (viewH > 0 && otherH >= 0) with(density) { (viewH - otherH).toDp() } else maxWidth * 0.5f
-                left.coerceIn(260.dp, maxWidth * 0.8f)
-            }
+            val left = if (viewH > 0 && otherH >= 0) with(density) { (viewH - otherH).toDp() } else null
+            val box = if (!wide) (left ?: maxWidth).coerceIn(maxWidth * 0.62f, maxWidth * 0.75f)
+                else (left ?: maxWidth * 0.5f).coerceIn(260.dp, maxWidth * 0.8f)
             placedDial[0] = with(density) { box.roundToPx() }
             Box(Modifier.fillMaxWidth().height(box)) {
                 stage(box)
