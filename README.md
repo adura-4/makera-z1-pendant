@@ -17,7 +17,8 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 - **Handwheel**: drag around the dial; every click (12° by default) moves one step, with a vibration
   "detent" you can feel. The wheel turns in whole clicks under a fixed marker.
 - **Jog pad**: tap the joystick button to swap the dial for a −X/+X/−Y/+Y pad with Z and A up/down.
-  Tap for one step, hold to keep moving; it stops when you let go.
+  Tap for one step (it moves when you lift your finger), hold to keep moving at a steady speed;
+  it stops when you let go.
 - **Step sizes**: 0.005 · 0.01 · 0.1 · 1 · 5 mm on the dial; 0.01 · 0.1 · 1 · 5 · 10 · 25 mm on the pad.
   Each mode remembers its own step.
 - **Live readout**: work position (large) and machine position (small) for X, Y, Z and A.

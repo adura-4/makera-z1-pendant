@@ -28,13 +28,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.z1pendant.AppViewModel
+import com.z1pendant.platform.nowMs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
  * Jog pad: −Y on top, +Y below, −X left, +X right, current step in the middle; to the right
- * +Z/−Z and +A/−A pairs centred on the middle row. Tap = one step; hold = repeat (after 0.4 s)
- * until let go, at a rate that stays within the axis's max speed.
+ * +Z/−Z and +A/−A pairs centred on the middle row. Tap = one step, sent on release; hold = repeat
+ * (from 0.4 s) until let go, at a rate that stays within the axis's max speed.
  */
 @Composable
 fun JogPad(vm: AppViewModel, step: Double, enabled: Boolean, modifier: Modifier = Modifier) {
@@ -96,16 +97,27 @@ private fun PadButton(vm: AppViewModel, axis: Char, dir: Int, size: Dp, enabled:
                     down.consume()
                     if (!en) { waitForUpOrCancellation(); return@awaitEachGesture }
                     pressed = true
-                    vm.padJog(axis, dir)
+                    // Nothing is sent until it is clear whether this is a tap or a hold. The Z1 plans a
+                    // move that is alone in its queue to end at a standstill and never re-plans a move
+                    // once it runs, so a step sent on touch made every hold stop after its first step.
                     var repeated = false
                     val repeat = scope.launch {
                         delay(400)
-                        while (true) { repeated = true; vm.padJog(axis, dir); delay(vm.padRepeatMs(axis)) }
+                        repeated = true; vm.padHoldStarted(axis)
+                        // On a fixed clock, not a delay after each click: those add up (124 ms instead
+                        // of 120 on a Galaxy S21), and the engine feeds at the stated rate.
+                        var next = nowMs()
+                        while (true) {
+                            vm.padJog(axis, dir)
+                            next += vm.padRepeatMs(axis)
+                            delay(maxOf(0L, next - nowMs()))
+                        }
                     }
-                    waitForUpOrCancellation()
+                    val up = waitForUpOrCancellation()
                     repeat.cancel()
                     pressed = false
                     if (repeated) vm.padReleased()          // stop now: drop clicks not yet sent
+                    else if (up != null) vm.padJog(axis, dir)   // a tap: one step, on release
                 }
             },
         contentAlignment = Alignment.Center,
