@@ -105,7 +105,7 @@ class Decoder:
             if len(self.buf) < 4:
                 return out
             ln = struct.unpack(">H", self.buf[2:4])[0]
-            if ln < 3 or ln > 1100:
+            if ln < 3 or ln > 8199:          # download packets: 8192 data + 7
                 del self.buf[:2]
                 continue
             total = 2 + 2 + ln + 2

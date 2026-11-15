@@ -6,6 +6,8 @@ machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroin
   * UDP broadcast "name,ip,port,busy,version" to 255.255.255.255:3333 once a second.
   * TCP 2222, several clients at once. Every frame is logged.
   * '?' -> 0x81 status, '!' hold, '~' resume, 0x18 halt (-> Alarm, needs $X), 0x19 stop (flush queue).
+  * Jobs: `play <name>` plays <--sd>/<name> with |P:line,percent,seconds| in the status, ~4 s in
+    state Tool for each M6, and frame 0xB7 answering "path|md5" of the playing file.
   * Lines: G0/G1 (G90/G91, F), G4, G10 L20 P0, G92, G53, $H, $X, M220 S, M3/M5 S, M6 T, M999, anything
     else just gets "ok". Replies are 0x90 "ok\\r\\n".
   * Motion runs in real time at the commanded feed (G0 = axis max rate) x feed override, with a
@@ -15,7 +17,9 @@ machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroin
 from __future__ import annotations
 
 import argparse
+import hashlib
 import math
+import os
 import re
 import socket
 import threading
@@ -59,6 +63,11 @@ class Machine:
         self.msgs: list[str] = []                 # pushed to clients as 0x90
         self.wait_since = None                    # when the first block arrived in an empty queue
         self.starts = 0                           # restarts from an empty queue (stop-go count)
+        self.job = None                           # a playing file (see play()); gives |P: in the status
+        self.feed_line = 0                        # file line of the next queued move (job playback)
+        self.tool_target = -1                     # |T: field 3: the tool a tool change asks for
+        self.tool_wait = False                    # waiting for the user to swap the tool (state "Tool")
+        self.sd = "sim_sd"                        # folder standing in for the SD card (/sd/gcodes/<name>)
 
     # --- G-code -------------------------------------------------------------------------
     def line(self, text: str) -> list[str]:
@@ -66,6 +75,8 @@ class Machine:
         if not t:
             return ["ok\r\n"]
         with self.lock:
+            if t.startswith("PLAY"):
+                return self.play(text.strip()[4:].strip())
             if t in ("$X", "M999"):
                 if self.state == "Alarm":
                     self.state = "Idle"
@@ -155,9 +166,83 @@ class Machine:
                     self.lock.release()
                     time.sleep(0.01)
                     self.lock.acquire()
-                self.queue.append((tgt, None if rapid else self.feed))
+                self.queue.append((tgt, None if rapid else self.feed, self.feed_line))
                 return ["ok\r\n"]
             return ["ok\r\n"]
+
+    # --- jobs ------------------------------------------------------------------------------
+    def sd_path(self, path: str) -> str:
+        return os.path.join(self.sd, os.path.basename(path))
+
+    def play(self, path: str) -> list[str]:
+        """Play a file like the firmware's player: lines go to the planner in order, |P: reports
+        line / percent of the file read / seconds run, M6 waits ~4 s in state Tool (standing in for
+        the user's OK), and after the end |P: shows 100 % for about a second."""
+        local = self.sd_path(path)
+        if self.job or not os.path.isfile(local):
+            return [f"error: can't play {path}\r\n"]
+        data = open(local, "rb").read()
+        sd = "/sd/gcodes/" + os.path.basename(path)
+        self.job = {"path": sd, "md5": hashlib.md5(data).hexdigest(), "size": len(data), "read": 0,
+                    "line": 0, "start": time.time(), "paused": 0.0, "done_at": None}
+        threading.Thread(target=self._player, args=(data.decode("utf-8", "replace").splitlines(keepends=True),),
+                         daemon=True).start()
+        return [f"Playing {sd}\r\n", "ok\r\n"]
+
+    def _wait_queue(self, empty=False):
+        while True:
+            with self.lock:
+                if self.state == "Alarm" or not self.job:
+                    return False
+                if not self.hold and (len(self.queue) < QUEUE_MAX - 2 if not empty else (not self.queue and self.cur is None)):
+                    return True
+            time.sleep(0.01)
+
+    def _player(self, lines):
+        j = self.job
+        for n, raw in enumerate(lines, 1):
+            j["read"] += len(raw.encode())
+            code = re.sub(r"\([^)]*\)", "", raw.split(";")[0]).strip().upper().replace(" ", "")
+            if not code:
+                continue
+            if not self._wait_queue():
+                break
+            self.feed_line = n
+            m6 = re.search(r"(?<![A-Z])M0*6(?![0-9.])", code)
+            tm = re.search(r"T(\d+)", code)
+            if m6 and tm and int(tm.group(1)) != self.tool:
+                if not self._wait_queue(empty=True):
+                    break
+                j["line"] = n
+                with self.lock:                     # the swap: Tool state, collet empty, then the new tool
+                    self.tool_target = int(tm.group(1)); self.tool_wait = True
+                    self.spindle_on = False
+                t0 = time.time()
+                time.sleep(1.0)
+                with self.lock:
+                    self.tool = -1
+                time.sleep(3.0)
+                with self.lock:
+                    self.tool = self.tool_target; self.tool_wait = False
+                j["paused"] += time.time() - t0
+                continue
+            if re.fullmatch(r"M0*(2|30)", code):
+                break
+            self.line(raw)
+        self._wait_queue(empty=True)
+        with self.lock:
+            if self.job is j:
+                j["read"] = j["size"]; j["done_at"] = time.time()
+
+    def job_field(self) -> str:
+        j = self.job
+        if not j:
+            return ""
+        if j["done_at"] and time.time() - j["done_at"] > 1.2:
+            self.job = None
+            return ""
+        el = int((j["done_at"] or time.time()) - j["start"] - j["paused"])
+        return f"|P:{j['line']},{j['read'] * 100 // max(1, j['size'])},{el}"
 
     def _end_pos(self):
         for item in reversed(self.queue):
@@ -212,6 +297,9 @@ class Machine:
             with self.lock:
                 if self.state in ("Alarm", "Home"):
                     continue
+                if self.tool_wait:
+                    self.state = "Tool"
+                    continue
                 if self.hold:
                     self.state = "Hold"
                     continue
@@ -236,7 +324,9 @@ class Machine:
                     if time.time() >= dwell_end:
                         self.cur = None
                     continue
-                tgt, feed = self.cur
+                tgt, feed = self.cur[0], self.cur[1]
+                if len(self.cur) > 2 and self.job:
+                    self.job["line"] = self.cur[2]
                 d = [tgt[i] - self.mpos[i] for i in range(4)]
                 dist = math.sqrt(sum(x * x for x in d))
                 if dist < 1e-6:
@@ -273,7 +363,7 @@ class Machine:
             return (f"<{self.state}|MPos:{mp[0]:.4f},{mp[1]:.4f},{mp[2]:.4f},{mp[3]:.4f},0.0000"
                     f"|WPos:{wp[0]:.4f},{wp[1]:.4f},{wp[2]:.4f},{wp[3]:.4f},0.0000"
                     f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},{self.spindle_factor:.1f},0"
-                    f"|T:{self.tool},0.000,-1|W:0.00>")
+                    f"|T:{self.tool},-7.100,{self.tool_target}{self.job_field()}|W:0.00>")
 
 
 class Client(threading.Thread):
@@ -291,6 +381,54 @@ class Client(threading.Thread):
         with self.wlock:
             try:
                 self.sock.sendall(P.build(ptype, text.encode()))
+            except OSError:
+                pass
+
+    dl_owner = None                               # one download at a time, across clients
+
+    def download(self, ptype, payload):
+        """0xB0 "download <path>\\n" -> 0xB1 md5; 0xB2 -> u32 count + u32 8192; 0xB3 u32 seq -> seq + data;
+        0xB4 -> "ok"; 0xB5 cancel. Like the board: one owner, 8 KB packets, any order."""
+        cls = Client
+        if ptype == 0xB0:
+            if cls.dl_owner not in (None, self):
+                self.tx(0x91, "Other client is currently uploading/downloading, please wait!")
+                return
+            path = payload.decode("ascii", "replace").strip().replace("\x01", " ")
+            path = path[len("download"):].strip() if path.startswith("download") else path
+            local = self.m.sd_path(path)
+            try:
+                self.dl_data = open(local, "rb").read()
+            except OSError:
+                self.tx(0xB5, "Error: failed to open file!")
+                return
+            cls.dl_owner = self
+            self.tx(0xB1, hashlib.md5(self.dl_data).hexdigest())
+            return
+        if cls.dl_owner is not self:
+            return
+        if ptype == 0xB2:
+            n = (len(self.dl_data) + 8191) // 8192
+            self.txb(0xB2, n.to_bytes(4, "big") + (8192).to_bytes(4, "big"))
+        elif ptype == 0xB3:
+            seq = int.from_bytes(payload[:4], "big")
+            chunk = self.dl_data[(seq - 1) * 8192: seq * 8192]
+            if seq < 1 or not chunk:
+                self.tx(0xB5, "Machine received cmd timeout!")
+            else:
+                self.txb(0xB3, payload[:4] + chunk)
+        elif ptype == 0xB4:
+            cls.dl_owner = None
+            self.tx(0xB4, "ok\r\n")
+            self.tx(P.NORMAL_INFO, "Info: download success.\r\n")
+        elif ptype == 0xB5:
+            cls.dl_owner = None
+            self.tx(0xB5, "Info: canceled by remote!")
+
+    def txb(self, ptype, data: bytes):
+        with self.wlock:
+            try:
+                self.sock.sendall(P.build(ptype, data))
             except OSError:
                 pass
 
@@ -344,6 +482,12 @@ class Client(threading.Thread):
                     # like the firmware: answered with 0x82, no "ok"
                     self.tx(P.DIAG_RES, "{S:0,10000,0,0,25,23|L:0,0|V:1,28|F:0,0|G:%d,0,0,%d,%d|T:0|C:1|E:0,0,0,0,0,1,1,0|P:0,0|I:0|RSSI:-60}"
                             % (1 if self.m.light else 0, 1 if self.m.vacuum else 0, 80 if self.m.vacuum else 0))
+                elif 0xB0 <= ptype <= 0xB6:
+                    self.download(ptype, payload)
+                elif ptype == 0xB7:
+                    # which file is playing: "path|md5", or "|" (answered by the Wi-Fi board)
+                    j = self.m.job
+                    self.tx(0xB7, f"{j['path']}|{j['md5']}" if j else "|")
                 elif ptype == P.CTRL_MULTI:
                     line = payload.decode("ascii", "replace")
                     log(f"{self.addr} LINE {line!r}")
@@ -351,6 +495,8 @@ class Client(threading.Thread):
                     self.ev.set()
                 else:
                     log(f"{self.addr} type 0x{ptype:02X} {payload!r}")
+        if Client.dl_owner is self:
+            Client.dl_owner = None
         log(f"client {self.addr} gone")
         self.sock.close()
 
@@ -389,8 +535,11 @@ def main():
     ap.add_argument("--port", type=int, default=P.TCP_PORT)
     ap.add_argument("--latency-ms", type=float, default=0)
     ap.add_argument("--no-broadcast", action="store_true")
+    ap.add_argument("--sd", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_sd"),
+                    help="folder standing in for the SD card: 'play <name>' plays <sd>/<name>")
     a = ap.parse_args()
     m = Machine()
+    m.sd = a.sd
     threading.Thread(target=m.run, daemon=True).start()
     if not a.no_broadcast:
         threading.Thread(target=broadcaster, args=(a.name, a.port), daemon=True).start()

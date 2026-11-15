@@ -12,6 +12,15 @@ object MakeraFrame {
     const val STATUS_RES = 0x81
     const val DIAG_RES = 0x82
     const val NORMAL_INFO = 0x90
+    /** File download (Wi-Fi board): 0xB0 start "download <path>\n", 0xB1 md5, 0xB2 size, 0xB3 data, 0xB4 end, 0xB5 cancel/error. */
+    const val DL_START = 0xB0; const val DL_MD5 = 0xB1; const val DL_SIZE = 0xB2
+    const val DL_DATA = 0xB3; const val DL_END = 0xB4; const val DL_CANCEL = 0xB5
+    /** "Other client is currently uploading/downloading" and similar refusals. */
+    const val REFUSED = 0x91
+    /** Longest frame: a download packet is 8192 data bytes + seq + type + CRC. */
+    const val MAX_LEN = 8199
+    /** Empty request → "path|md5" of the playing job file (the Wi-Fi board answers it; confirmed 2026-11-15). */
+    const val JOB_FILE = 0xB7
 
     private val TABLE = IntArray(256) { i ->
         var c = i shl 8
@@ -68,7 +77,7 @@ object MakeraFrame {
                 while (i + 1 < n && !(buf[i] == 0x86.toByte() && buf[i + 1] == 0x68.toByte())) i++
                 if (i + 4 > n) break
                 val ln = ((buf[i + 2].toInt() and 0xFF) shl 8) or (buf[i + 3].toInt() and 0xFF)
-                if (ln < 3 || ln > 2048) { i += 2; badFrames++; continue }
+                if (ln < 3 || ln > MAX_LEN) { i += 2; badFrames++; continue }
                 val total = 6 + ln
                 if (i + total > n) break
                 val crcAt = i + 4 + ln - 2

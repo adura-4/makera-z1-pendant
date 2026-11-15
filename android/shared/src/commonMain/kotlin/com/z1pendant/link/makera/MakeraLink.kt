@@ -1,5 +1,7 @@
 package com.z1pendant.link.makera
 
+import kotlinx.coroutines.sync.withLock
+
 import com.z1pendant.link.ConnState
 import com.z1pendant.link.Dialect
 import com.z1pendant.link.GrblishDialect
@@ -58,6 +60,74 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
     @Volatile private var lastDiagAt = 0L
     override val dialect: Dialect = GrblishDialect
     val firmware = MutableStateFlow<String?>(null)
+    override val jobFile = MutableStateFlow<com.z1pendant.link.JobFile?>(null)
+
+    // ---- file download (the Wi-Fi board's protocol; reference/download_protocol_notes.md) ----
+    // Stop-and-wait: one request, wait for its reply (the board keeps only one request). One
+    // download at a time across all clients; Studio can't upload while we hold it, so it's kept short.
+    private val dlLock = kotlinx.coroutines.sync.Mutex()
+    @kotlin.concurrent.Volatile private var dlReply: kotlinx.coroutines.CompletableDeferred<Pair<Int, ByteArray>>? = null
+
+    private fun onDownloadPacket(type: Int, payload: ByteArray): Boolean {
+        val d = dlReply ?: return false
+        if (type !in MakeraFrame.DL_START..0xB6 && type != MakeraFrame.REFUSED) return false
+        d.complete(type to payload)
+        return true
+    }
+
+    private suspend fun dlRequest(type: Int, payload: ByteArray = ByteArray(0)): Pair<Int, ByteArray>? {
+        repeat(5) {
+            val d = kotlinx.coroutines.CompletableDeferred<Pair<Int, ByteArray>>()
+            dlReply = d
+            sendRaw(MakeraFrame.build(type, payload))
+            val r = kotlinx.coroutines.withTimeoutOrNull(1500) { d.await() }
+            if (r != null) return r
+        }
+        return null
+    }
+
+    private fun u32(v: Long) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
+    private fun u32(b: ByteArray, at: Int = 0): Long =
+        ((b[at].toLong() and 0xFF) shl 24) or ((b[at + 1].toLong() and 0xFF) shl 16) or
+            ((b[at + 2].toLong() and 0xFF) shl 8) or (b[at + 3].toLong() and 0xFF)
+
+    override suspend fun downloadFile(path: String): String? = dlLock.withLock {
+        if (conn.value != ConnState.Connected) return null
+        var owner = false
+        try {
+            val start = dlRequest(MakeraFrame.DL_START, "download ${path.replace(' ', '\u0001')}\n".encodeToByteArray())
+            if (start?.first != MakeraFrame.DL_MD5) {
+                com.z1pendant.platform.PLog.w("MakeraLink", "download $path refused: ${start?.second?.decodeToString()}"); return null
+            }
+            owner = true
+            val size = dlRequest(MakeraFrame.DL_SIZE) ?: return null
+            if (size.first != MakeraFrame.DL_SIZE || size.second.size < 4) return null
+            val count = u32(size.second)
+            if (count > 1024) { com.z1pendant.platform.PLog.w("MakeraLink", "download $path: $count packets, too big"); return null }   // > 8 MB
+            val parts = ArrayList<ByteArray>()
+            for (seq in 1..count) {
+                val r = dlRequest(MakeraFrame.DL_DATA, u32(seq)) ?: return null
+                if (r.first != MakeraFrame.DL_DATA || r.second.size < 4 || u32(r.second) != seq) return null
+                parts += r.second.copyOfRange(4, r.second.size)
+                kotlinx.coroutines.delay(25)              // paced: the board is also streaming the job
+            }
+            dlRequest(MakeraFrame.DL_END)
+            owner = false
+            val bytes = ByteArray(parts.sumOf { it.size }).also { b -> var o = 0; for (x in parts) { x.copyInto(b, o); o += x.size } }
+            // A QuickLZ copy (from /sd/gcodes/.lz) starts with 00 00: not handled yet.
+            if (bytes.size >= 2 && bytes[0] == 0.toByte() && bytes[1] == 0.toByte()) {
+                com.z1pendant.platform.PLog.w("MakeraLink", "download $path came compressed; skipped"); return null
+            }
+            bytes.decodeToString()
+        } finally {
+            if (owner) dlRequest(MakeraFrame.DL_CANCEL)
+            dlReply = null
+        }
+    }
+    override fun queryJobFile() {
+        if (conn.value != ConnState.Connected) return
+        scope.launch { sendRaw(MakeraFrame.build(MakeraFrame.JOB_FILE, ByteArray(0))) }
+    }
 
     private class Pending(val line: String, val quiet: Boolean, val onAck: ((Boolean, String) -> Unit)?, var sentAt: Long = 0)
 
@@ -208,7 +278,7 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             while (true) {
                 val n = ins.readAvailable(buf, 0, buf.size)
                 if (n < 0) break
-                dec.feed(buf, n) { type, payload -> onPacket(type, payload.decodeToString()) }
+                dec.feed(buf, n) { type, payload -> if (!onDownloadPacket(type, payload)) onPacket(type, payload.decodeToString()) }
             }
         } catch (_: Exception) {
         }
@@ -225,6 +295,11 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             }
             MakeraFrame.FIRM_VER -> firmware.value = text.trim()
             MakeraFrame.DIAG_RES -> parseDiag(text)
+            // "path|md5" of the playing file, or "|" when none.
+            MakeraFrame.JOB_FILE -> {
+                val path = text.substringBefore('|').trim(); val md5 = text.substringAfter('|', "").trim()
+                jobFile.value = if (path.isEmpty()) null else com.z1pendant.link.JobFile(path, md5)
+            }
             else -> {
                 for (raw in text.split('\n')) {
                     val line = raw.trim()

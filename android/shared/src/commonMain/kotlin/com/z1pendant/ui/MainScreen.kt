@@ -70,6 +70,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                scroll: androidx.compose.foundation.ScrollState = rememberScrollState()) {
     val conn by vm.link.conn.collectAsState()
     val st by vm.link.status.collectAsState()
+    val job by vm.job.collectAsState()
+    val jobTools by vm.jobTools.collectAsState()
     val lat by vm.link.latencyMs.collectAsState()
     val target by vm.target.collectAsState()
     val axis by vm.axis.collectAsState()
@@ -107,9 +109,24 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                     }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            val pill = if (connected) st?.state ?: "…" else if (conn == ConnState.Lost) "Lost" else "Offline"
-            Text(pill, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                modifier = Modifier.clip(RoundedCornerShape(50)).background(stateColor(st?.state, conn)).padding(horizontal = 14.dp, vertical = 6.dp))
+            // While a job plays: "Run 42%" (also in the job's Idle moments), "Hold 42%", "Tool change".
+            val s0 = st?.state
+            val jp = job?.progress?.percent
+            val toolWait = connected && s0.equals("Tool", true)
+            val pill = when {
+                !connected -> if (conn == ConnState.Lost) "Lost" else "Offline"
+                toolWait -> "Tool change"
+                jp != null && (s0.equals("Hold", true) || s0.equals("Pause", true)) -> "$s0 $jp%"
+                jp != null && !s0.equals("Alarm", true) -> "Run $jp%"
+                else -> s0 ?: "…"
+            }
+            val pillColor = when {
+                toolWait -> MaterialTheme.colorScheme.primary
+                jp != null && pill.startsWith("Run") -> stateColor("Run", conn)
+                else -> stateColor(s0, conn)
+            }
+            Text(pill, color = if (toolWait) MaterialTheme.colorScheme.onPrimary else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                maxLines = 1, modifier = Modifier.clip(RoundedCornerShape(50)).background(pillColor).padding(horizontal = 14.dp, vertical = 6.dp))
             IconButton(onClick = onConsole) { Icon(Icons.Filled.Terminal, "Console") }
             IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Settings") }
         }
@@ -243,7 +260,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         FeedOverride(st?.feedOverride, connected) { vm.setFeedOverride(it) }
-                        SpindleOverride(vm.spindleSlide(st), onSet = vm::setSpindleRpm, onReset = vm::resetSpindleOverride)
+                        SpindleOverride(vm.spindleSlide(st), onSetPct = vm::setSpindlePercent, onReset = vm::resetSpindleOverride)
                         StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, height = 56.dp)
                     }
                 }
@@ -261,7 +278,9 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         var otherH by remember { mutableIntStateOf(-1) }
         val placedDial = remember { IntArray(1) }               // dial height used in the last layout, px
         if (expanded) placedDial[0] = 0
-        Column(Modifier.weight(1f).onSizeChanged { viewH = it.height }.verticalScroll(scroll)) {
+        var jobDetails by remember { mutableStateOf(false) }
+        if (job == null) jobDetails = false
+        if (!jobDetails) Column(Modifier.weight(1f).onSizeChanged { viewH = it.height }.verticalScroll(scroll)) {
         Column(Modifier.onSizeChanged { otherH = it.height - placedDial[0] }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         dro()
         stepSelector()
@@ -318,7 +337,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         val s = st?.state
         val own by vm.ownMotionActive.collectAsState()
         val machineMoving = (s.equals("Run", true) || s.equals("Home", true)) && !own
-        val needsControls = connected && (machineMoving ||
+        // A job (|P:) keeps it open, including its Idle moments around tool changes.
+        val needsControls = connected && (machineMoving || job != null || s.equals("Tool", true) ||
             s.equals("Hold", true) || s.equals("Pause", true) || s.equals("Alarm", true))
         var autoOpened by remember { mutableStateOf(false) }
         LaunchedEffect(needsControls) {
@@ -328,7 +348,12 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         ControlsDrawer(open, feed = st?.feedOverride, connected = connected,
             onOpen = { o -> if (o != open) { vm.controlsOpen.value = o; autoOpened = false; vm.haptics.press() } },
             onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, state = st?.state,
-            spindle = { SpindleOverride(vm.spindleSlide(st), onSet = vm::setSpindleRpm, onReset = vm::resetSpindleOverride) })
+            spindle = { SpindleOverride(vm.spindleSlide(st), onSetPct = vm::setSpindlePercent, onReset = vm::resetSpindleOverride) },
+            jobActive = job != null, details = jobDetails,
+            onDetails = { d -> if (d != jobDetails) { jobDetails = d; if (d) vm.controlsOpen.value = true; vm.haptics.press() } },
+            jobLine = { job?.let { j -> JobLine(j) { jobDetails = true; vm.haptics.press() } } },
+            jobPanel = { job?.let { j -> JobDetails(j, st, jobTools) { jobDetails = false; vm.haptics.press() } } },
+            modifier = if (jobDetails) Modifier.weight(1f) else Modifier)
         }
     }
 }
@@ -339,26 +364,33 @@ private fun ControlsDrawer(
     onFeed: (Int) -> Unit, onHold: () -> Unit, onResume: () -> Unit, onReset: () -> Unit,
     state: String? = null,
     spindle: @Composable () -> Unit = {},
+    jobActive: Boolean = false, details: Boolean = false, onDetails: (Boolean) -> Unit = {},
+    jobLine: @Composable () -> Unit = {}, jobPanel: @Composable () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     val swipeDp = 24.dp
     val swipePx = with(androidx.compose.ui.platform.LocalDensity.current) { swipeDp.toPx() }
     // Vertical swipe anywhere on the drawer; horizontal drags still reach the feed slider.
-    val swipe = Modifier.pointerInput(open) {
+    // Up: open, then (while a job runs) the job details. Down: back one step.
+    val swipe = Modifier.pointerInput(open, jobActive, details) {
         var dy = 0f
         detectVerticalDragGestures(
             onDragStart = { dy = 0f },
             onVerticalDrag = { c, d -> dy += d; c.consume() },
-            onDragEnd = { if (dy < -swipePx) onOpen(true) else if (dy > swipePx) onOpen(false) },
+            onDragEnd = {
+                if (dy < -swipePx) { if (!open) onOpen(true) else if (jobActive) onDetails(true) }
+                else if (dy > swipePx) { if (details) onDetails(false) else onOpen(false) }
+            },
         )
     }
     Column(
-        Modifier.fillMaxWidth().padding(bottom = 4.dp)
+        modifier.fillMaxWidth().padding(bottom = 4.dp)
             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 10.dp, bottomEnd = 10.dp))
             .background(if (open) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
             .then(swipe),
     ) {
         // Handle: grab bar, and the current feed so you can see it without opening.
-        Box(Modifier.fillMaxWidth().height(30.dp).clickable { onOpen(!open) }, contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(30.dp).clickable { if (details) onDetails(false) else onOpen(!open) }, contentAlignment = Alignment.Center) {
             Box(Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
                 .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)))
             if (!open) {
@@ -371,7 +403,13 @@ private fun ControlsDrawer(
         androidx.compose.animation.AnimatedVisibility(open,
             enter = androidx.compose.animation.expandVertically(expandFrom = Alignment.Top),
             exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Top)) {
-            Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp).then(if (details) Modifier.fillMaxHeight() else Modifier),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (details) {
+                    // No scroll here: a vertical drag on the details closes them (swipe down), like the drawer.
+                    Column(Modifier.weight(1f)) { jobPanel() }
+                    Spacer(Modifier.height(4.dp))
+                } else if (jobActive) jobLine()
                 FeedOverride(feed, connected, onFeed)
                 spindle()
                 // Muted while idle; the relevant ones light up (see StopButtons).
@@ -464,49 +502,47 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** Label column of the override rows, wide enough for "Spindle" and "13,000" so the bars line up. */
-private val OVERRIDE_LABEL_W = 64.dp
-
 /**
- * Spindle override in RPM (bar = 0..13,000; past the programmed RPM, i.e. 100 %, the fill is darker).
- * Dragging shows the RPM you'd set in place of "Spindle"; letting go sends it (M223, a % of the
- * programmed RPM) and the label goes back. Right: the override %; tap it to go back to 100 %. Off
- * while the spindle isn't running. The live RPM is on the Spindle tile.
+ * Spindle override (bar in RPM, 0..13,000; past the programmed RPM, i.e. 100 %, the fill is darker).
+ * − / + step 5 % of the programmed RPM; dragging shows the RPM you'd get in place of "Spindle".
+ * Sent as M223 (a % of the programmed RPM). Off while the spindle isn't running.
  */
 @Composable
-fun SpindleOverride(slide: com.z1pendant.SpindleSlide?, onSet: (Int) -> Unit, onReset: () -> Unit) {
+fun SpindleOverride(slide: com.z1pendant.SpindleSlide?, onSetPct: (Double) -> Unit, onReset: () -> Unit) {
     var drag by remember { mutableStateOf<Int?>(null) }
     if (slide == null) drag = null
-    val shown = drag ?: slide?.now ?: 0
-    val pct = when {
+    val hiPct = slide?.let { it.hi / it.target * 100 } ?: 100.0
+    val pend = rememberPendingOverride(slide?.pct, onSetPct, same = { a, b -> kotlin.math.abs(a - b) < 0.11 })
+    val pct: Double? = when {
         slide == null -> null
         drag != null -> slide.percentFor(drag!!)
-        else -> slide.pct
+        else -> pend.value ?: slide.pct
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (drag != null) Text(Fmt.thousands(drag!!), modifier = Modifier.width(OVERRIDE_LABEL_W), maxLines = 1,
-            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-        else Text("Spindle", modifier = Modifier.width(OVERRIDE_LABEL_W), maxLines = 1)
-        OverrideBar(shown.toFloat(), base = slide?.target?.toFloat() ?: 0f,
-            range = 0f..com.z1pendant.SPINDLE_MAX_RPM.toFloat(), enabled = slide != null,
-            onDrag = { v -> slide?.let { drag = it.clamp((v / 100f).roundToInt() * 100) } },
-            onRelease = { drag?.let(onSet); drag = null },
-            modifier = Modifier.weight(1f))
-        OverridePercent(pct?.roundToInt(), enabled = slide != null, onReset = onReset)
-    }
+    val rpm = drag ?: slide?.let { kotlin.math.round(it.target * (pct ?: 100.0) / 100).toInt() } ?: 0
+    OverrideRow(
+        label = "Spindle", dragLabel = drag?.let { Fmt.thousands(it) },
+        value = rpm.toFloat(), base = slide?.target?.toFloat() ?: 0f,
+        range = 0f..com.z1pendant.SPINDLE_MAX_RPM.toFloat(), enabled = slide != null,
+        percent = pct?.let { kotlin.math.round(it).toInt() },
+        onDrag = { v -> slide?.let { drag = it.clamp((v / 100f).roundToInt() * 100) } },
+        onRelease = { val d = drag; drag = null; if (d != null && slide != null) pend.sendNow(slide.percentFor(d)) },
+        onStep = { dir -> pct?.let { pend.step(stepFive(it, dir).coerceIn(50.0, hiPct)) } },
+        resetText = "Back to 100%?", onReset = onReset,
+    )
 }
 
-/** Feed override, 10–200 % in 5 % steps (past 100 % darker). Sent on release; tap the % for 100 %. */
+/** Feed override, 10–200 % (past 100 % darker). − / + step 5 %; drag snaps to 5 %. */
 @Composable
 fun FeedOverride(current: Double?, enabled: Boolean, onSet: (Int) -> Unit) {
     var drag by remember { mutableStateOf<Int?>(null) }
-    val shown = drag ?: (current?.roundToInt() ?: 100)
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Feed", modifier = Modifier.width(OVERRIDE_LABEL_W))
-        OverrideBar(shown.toFloat(), base = 100f, range = 10f..200f, enabled = enabled,
-            onDrag = { v -> drag = ((v / 5f).roundToInt() * 5).coerceIn(10, 200) },
-            onRelease = { drag?.let(onSet); drag = null },
-            modifier = Modifier.weight(1f))
-        OverridePercent(shown, enabled = enabled, onReset = { onSet(100) })
-    }
+    val pend = rememberPendingOverride(current, { onSet(kotlin.math.round(it).toInt()) }, same = { a, b -> kotlin.math.abs(a - b) < 0.5 })
+    val shown = drag ?: (pend.value ?: current ?: 100.0).roundToInt()
+    OverrideRow(
+        label = "Feed", dragLabel = null,
+        value = shown.toFloat(), base = 100f, range = 10f..200f, enabled = enabled, percent = shown,
+        onDrag = { v -> drag = ((v / 5f).roundToInt() * 5).coerceIn(10, 200) },
+        onRelease = { val d = drag; drag = null; if (d != null) pend.sendNow(d.toDouble()) },
+        onStep = { dir -> pend.step(stepFive(shown.toDouble(), dir).coerceIn(10.0, 200.0)) },
+        resetText = "Back to 100%?", onReset = { onSet(100) },
+    )
 }

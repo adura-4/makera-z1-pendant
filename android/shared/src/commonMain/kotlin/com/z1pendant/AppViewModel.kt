@@ -95,6 +95,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         haptics.press()
         spindleRpm.value = rpm; prefs.edit { putInt("spindleRpm", rpm) }
         spindleStartAt = nowMs()
+        ownMotion.sent(nowMs())               // the firmware reads Run while the spindle turns: that's ours
         log("▶ spindle on, $rpm RPM")
         link.dialect.spindleOn(rpm).forEach { link.sendLine(it) }
         spindleAsk.value = false
@@ -116,6 +117,12 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         log("▶ spindle override, ${Fmt.thousands(slide.clamp(rpm))} RPM")
         link.dialect.spindleOverride(slide.percentFor(rpm)).forEach { link.sendLine(it) }
     }
+    /** − / + (and the bar, via [setSpindleRpm]) → M223 S<percent>. */
+    fun setSpindlePercent(p: Double) {
+        val slide = spindleSlide(link.status.value) ?: return
+        log("▶ spindle override ${Fmt.trimmed2(p)} % (${Fmt.thousands(kotlin.math.round(slide.target * p / 100).toInt())} RPM)")
+        link.dialect.spindleOverride(p).forEach { link.sendLine(it) }
+    }
     fun resetSpindleOverride() = link.dialect.spindleOverride(100.0).forEach { link.sendLine(it) }
 
     /** The tool the start box's wheel offers first: the last one set from it (T1 the first time). */
@@ -131,6 +138,33 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         lastSetTool.value = n; prefs.edit { putInt("lastSetTool", n) }
         log("▶ set tool T$n")
         link.dialect.setTool(n).forEach { link.sendLine(it) }
+    }
+
+    // ---- job ----
+    /** A job file playing on the machine (from `|P:`), or null. */
+    val job = MutableStateFlow<JobView?>(null)
+    /** Tools of the running job's file (read from the file once per md5), or null while unknown. */
+    val jobTools = MutableStateFlow<JobTools?>(null)
+    private val toolCache = HashMap<String, JobTools>()
+    private var toolsFor: String? = null
+
+    private fun trackJob(st: MachineStatus?) {
+        val p = st?.job
+        if (p == null) { if (job.value != null) job.value = null; return }
+        if (job.value == null) link.queryJobFile()                 // a job started (or we joined one): which file?
+        val f = link.jobFile.value
+        job.value = JobView(p, f)
+        // Once per file (md5): read its tools.
+        if (f != null && f.md5 != toolsFor) {
+            toolsFor = f.md5
+            jobTools.value = toolCache[f.md5]
+            if (jobTools.value == null) viewModelScope.launch {
+                val text = link.downloadFile(f.path) ?: return@launch
+                val t = JobFileParser.parse(text)
+                toolCache[f.md5] = t
+                if (toolsFor == f.md5) jobTools.value = t
+            }
+        }
     }
 
     /** Stop box → M5. */
@@ -202,6 +236,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         // Own motion is tracked here, once per status, rather than while the screen redraws.
         viewModelScope.launch {
             link.status.collect { st ->
+                trackJob(st)
                 ownMotionActive.value = ownMotion.isOwn(st?.state, link.conn.value == ConnState.Connected, nowMs(),
                     hotkeyRunning = runner.running.value != null, lastJogAt = jog.lastJogAt)
             }
@@ -719,3 +754,9 @@ fun spindleSlideFor(target: Double, pct: Double) = SpindleSlide(target, pct,
  * start box refuses these even where the firmware's own check (0 < T < 100000) would let 9999 through.
  */
 fun isProbeTool(t: Int) = t == 0 || t == 9999 || t >= 999_990
+
+/** What the drawer shows about a running job. */
+data class JobView(val progress: com.z1pendant.link.JobProgress, val file: com.z1pendant.link.JobFile?) {
+    /** Time left from the pace so far: elapsed × (100 − %) / %. Rough: the % is of the file read, not of time. */
+    val leftS: Long? get() = progress.percent.takeIf { it in 1..99 }?.let { progress.elapsedS * (100 - it) / it }
+}

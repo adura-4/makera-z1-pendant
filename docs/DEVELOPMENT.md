@@ -137,6 +137,31 @@ used. It used to count a jog as the pendant's only for 1.5 s after the last clic
 all, so a long jog step or a typed move opened the drawer. The view model re-checks it once per status (`ownMotionActive`),
 not while the screen redraws.
 
+## Jobs (confirmed on the Z1 2026-11-15, log in the parent project's reference/)
+- **A job is playing iff the status has `|P:line,percent,elapsed s|`** (stock: 3 fields). It isn't there
+  for M3, jogs or lines we send; it stays through tool changes and pauses, and through the job's own
+  Idle moments (state reads Idle around tool changes and for ~4 s at the end), so "Idle" doesn't
+  mean done. On a normal finish it reads 100 % for ~1.2 s, then goes; after an abort it just goes.
+  The Wi-Fi board has a canned fallback status with `P:1234,50,1200`: ignored.
+- `line` = 1-based file line of the block running (comments count); `percent` = share of the file
+  read (sits at ~91 % over the last lines, then 100); `elapsed` stops during a tool-change wait.
+- State `Tool` = waiting for a manual tool change; `|T:active,TLO,target|` (target = the tool asked
+  for; active reads −1 while the collet is empty during the swap).
+- The state reads `Run` while the spindle turns even with nothing moving, so a pendant M3 counts as
+  its own motion (no drawer pop).
+- **Which file:** an empty frame of type `0xB7` → `0xB7 "path|md5"` (`"|"` when none). The Wi-Fi
+  board answers it; it never reaches the motion controller. The `progress` text command also works
+  (`file: …, 21 % complete, elapsed time: …, est time: …`).
+- **Download** (Wi-Fi board, stop-and-wait; full spec: parent project `reference/download_protocol_notes.md`):
+  `0xB0 "download <path>\n"` (spaces as 0x01) → `0xB1 md5`; `0xB2` → u32 packet count + u32 8192;
+  `0xB3 u32 seq` (from 1) → seq + up to 8192 bytes; `0xB4` → "ok"; `0xB5` cancels. One transfer at a
+  time across clients (others get `0x91`); 9 s idle aborts it. A QuickLZ copy (`/sd/gcodes/.lz/`,
+  starts `00 00`) isn't handled yet. The app downloads the playing file once per md5, paced 25 ms per
+  packet, and reads its tools (`JobFileParser`: Fusion `(T1 name D=… - type)` and Makera
+  `;@MKR|TOOL|number=…|name=…` headers; `M6` lines, skipping changes to the tool already in).
+- The Wi-Fi board takes about 3 clients at once; more get `0x91` "maximum number of client connections".
+- Bare `S` lines don't change the spindle speed on the stock firmware; only `S… M3` does.
+
 ## Zero / undo
 `zero` sends `G10 L20 P0 <axis>0`. Pressed again while the axis still reads 0.000 and hasn't moved, it
 sends `G10 L20 P0 <axis><previous value>` instead. The Zero hotkeys (X/Y/Z/A, XY, XYZ, selected) share it.
@@ -180,4 +205,6 @@ skipped queue delay doesn't show. `$J F0.05` ran at about 60 mm/min, so its rate
 1200 mm/min. A burst of ten `$J X-0.05` 40 ms apart all ran (0.5 mm exactly).
 
 ## Still unverified
+- The file download on the real machine (protocol from the Makera app + Wi-Fi board decompiles; run on the simulator).
+- Whether the stock firmware takes `M223` with two decimals and what its spindle "target" field means.
 - Y/Z upper soft limits (assumed −1 like X).

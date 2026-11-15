@@ -1,6 +1,16 @@
 package com.z1pendant.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Close
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -109,4 +119,119 @@ fun OverridePercent(percent: Int?, enabled: Boolean, onReset: () -> Unit) {
         fontWeight = if (off100) FontWeight.SemiBold else FontWeight.Normal,
         modifier = Modifier.width(60.dp).then(if (off100) Modifier.clickable(onClick = onReset) else Modifier)
             .padding(vertical = 10.dp))
+}
+
+/** The next multiple of 5 up ([dir] > 0) or down from [v]: 121.25 → 125 / 120, 120 → 125 / 115. */
+fun stepFive(v: Double, dir: Int): Double {
+    val k = v / 5.0
+    return if (dir > 0) (kotlin.math.floor(k + 1e-9) + 1) * 5.0 else (kotlin.math.ceil(k - 1e-9) - 1) * 5.0
+}
+
+/**
+ * An override value that − / + have changed but the machine hasn't confirmed yet. [step] shows the
+ * new value at once and sends it once the taps stop for [quietMs] (so five quick taps send one
+ * command); [sendNow] sends straight away (bar released). The value stays shown until the status
+ * reports it ([same]) or 2.5 s pass, so the row doesn't flick back to the old value meanwhile.
+ */
+class PendingOverride internal constructor() {
+    var value by mutableStateOf<Double?>(null); internal set
+    internal var tapAt by mutableStateOf(0L)
+    internal var send: (Double) -> Unit = {}
+    internal var waiting by mutableStateOf(false)
+    fun step(v: Double) { value = v; waiting = false; tapAt = com.z1pendant.platform.nowMs() }
+    fun sendNow(v: Double) { value = v; send(v); waiting = true }
+}
+
+@Composable
+fun rememberPendingOverride(current: Double?, onSend: (Double) -> Unit, same: (Double, Double) -> Boolean,
+                            quietMs: Long = 500): PendingOverride {
+    val p = remember { PendingOverride() }
+    val cur by rememberUpdatedState(current)
+    p.send = onSend
+    // Debounce the taps.
+    LaunchedEffect(p.tapAt) {
+        if (p.tapAt == 0L) return@LaunchedEffect
+        kotlinx.coroutines.delay(quietMs)
+        p.value?.let { p.send(it); p.waiting = true }
+    }
+    // Hold the sent value until the machine reports it.
+    LaunchedEffect(p.waiting, p.value) {
+        if (!p.waiting) return@LaunchedEffect
+        val want = p.value ?: return@LaunchedEffect
+        kotlinx.coroutines.withTimeoutOrNull(2500) {
+            snapshotFlow { cur }.first { it != null && same(it, want) }
+        }
+        p.value = null; p.waiting = false
+    }
+    return p
+}
+
+/**
+ * One override row: label · − · bar · + · %. The % is blue when it isn't 100; tapping it opens a
+ * "back to 100 %?" prompt that covers this row's − … + span (Reset / ✕; a tap elsewhere closes it).
+ * − and + step once per tap (no auto-repeat, so a held button can't run to the limit).
+ */
+@Composable
+fun OverrideRow(
+    label: String, dragLabel: String?, value: Float, base: Float, range: ClosedFloatingPointRange<Float>,
+    enabled: Boolean, percent: Int?, onDrag: (Float) -> Unit, onRelease: () -> Unit,
+    onStep: (Int) -> Unit, resetText: String, onReset: () -> Unit,
+) {
+    var asking by remember { mutableStateOf(false) }
+    if (!enabled) asking = false
+    val cs = MaterialTheme.colorScheme
+    val labelW = 64.dp; val pctW = 60.dp; val gap = 6.dp
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(gap)) {
+            if (dragLabel != null) Text(dragLabel, modifier = Modifier.width(labelW), maxLines = 1,
+                fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = cs.primary)
+            else Text(label, modifier = Modifier.width(labelW), maxLines = 1)
+            StepButton("−", "$label down", enabled) { onStep(-1) }
+            OverrideBar(value, base, range, enabled, onDrag, onRelease, Modifier.weight(1f))
+            StepButton("+", "$label up", enabled) { onStep(+1) }
+            OverridePercent(percent, enabled) { asking = true }
+        }
+        if (asking) {
+            // Cover this row from the left edge of − to the right edge of +.
+            val spanX = labelW + gap
+            val spanW = maxWidth - labelW - gap - gap - pctW
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.ui.window.Popup(
+                alignment = Alignment.CenterStart,
+                offset = with(density) { androidx.compose.ui.unit.IntOffset(spanX.roundToPx(), 0) },
+                onDismissRequest = { asking = false },
+                properties = androidx.compose.ui.window.PopupProperties(focusable = true),
+            ) {
+                androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = Color(0xFF2A3852), shadowElevation = 8.dp,
+                    modifier = Modifier.width(spanW).height(44.dp)) {
+                    androidx.compose.foundation.layout.Row(Modifier.padding(start = 12.dp, end = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(resetText, fontSize = 13.5.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.Button(onClick = { asking = false; onReset() },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                            modifier = Modifier.height(32.dp)) { Text("Reset", fontSize = 14.sp) }
+                        androidx.compose.material3.IconButton(onClick = { asking = false }, modifier = Modifier.size(36.dp)) {
+                            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Close, "Cancel",
+                                Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepButton(text: String, desc: String, enabled: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    Box(Modifier.size(34.dp).clip(shape)
+        .border(1.dp, cs.outline.copy(alpha = if (enabled) 1f else 0.4f), shape)
+        .clickable(enabled = enabled, onClick = onClick)
+        .semantics { contentDescription = desc },
+        contentAlignment = Alignment.Center) {
+        Text(text, fontSize = 20.sp, color = cs.primary.copy(alpha = if (enabled) 1f else 0.35f))
+    }
 }

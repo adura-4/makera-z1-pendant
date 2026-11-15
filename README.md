@@ -29,13 +29,19 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   G-code, or multi-step sequences. Optional "ask before running" and "only when Idle" guards.
   Bind any hotkey to a physical button: volume keys, Bluetooth remotes and gamepads, USB keyboards.
   Import/export the whole set as a file.
-- **Feed override, spindle speed, Hold, Resume, Reset** in a drawer at the bottom (swipe up). The
-  sliders are plain bars you drag anywhere on (the part past 100 % turns a darker blue), and they
-  send only when you let go. The spindle bar is in RPM (full = 13,000): while you drag, its label
-  shows the RPM you'll get. Tap the % to go back to 100 %. It opens by itself
-  when the machine holds, alarms, or starts moving from somewhere else (e.g. a job from Makera Studio).
-  The buttons stay quiet while idle and light up when they matter: Hold and Reset while moving,
-  Resume on hold, Reset in an alarm.
+- **Feed override, spindle speed, Hold, Resume, Reset** in a drawer at the bottom (swipe up).
+  - **−** / **+** step 5 % per tap (one command once you stop tapping; holding doesn't repeat), or
+    drag the bar anywhere (the part past 100 % turns a darker blue); both send only when you're done.
+    The spindle bar is in RPM (full = 13,000): while you drag, its label shows the RPM you'll get.
+  - Tap the % for a small "Back to 100%?" prompt right on that row.
+  - It opens by itself when a job runs, the machine holds or alarms, or something else moves it.
+  - Hold, Resume and Reset stay quiet while idle and light up when they matter: Hold and Reset while
+    moving, Resume on hold, Reset in an alarm.
+- **Running jobs** (from Makera Studio, the Makera app, or the machine): the pill shows "Run 42%",
+  and the drawer shows the progress and time left. Swipe the drawer up again for the job details:
+  file, percent and line, elapsed, time left and finish time, feed and spindle actual vs set, the
+  tool change it's waiting for, and the job's tools in order with their descriptions (read from the
+  file's CAM header comments), now and next.
 - **Tablets** (iPad, Android tablets): a bigger readout, and the dial / jog pad resize around your
   hotkeys. Turn the tablet sideways for a side-by-side layout with everything on screen at once:
   readout, hotkeys and the stop buttons on the left, steps and a big dial or jog pad on the right.
@@ -60,6 +66,11 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 <p align="center">
   <img src="docs/screenshots/09_tablet_dial.png" width="420" alt="Tablet, landscape, dial">
   <img src="docs/screenshots/10_tablet_jogpad.png" width="420" alt="Tablet, landscape, jog pad">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/job_drawer_demo.gif" width="300" alt="A job running: the drawer, overrides, job details and a tool change">
+  <br><sub>A job running: overrides, the job details, the tool list and a tool change.</sub>
 </p>
 
 <p align="center">

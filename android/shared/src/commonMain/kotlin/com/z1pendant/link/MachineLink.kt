@@ -45,9 +45,26 @@ interface MachineLink {
     /** Show an output as [on] right away (after sending its command), until the next read-back. */
     fun assumeOutput(name: String, on: Boolean)
 
+    /** The running job's file, once [queryJobFile] has been answered (null = none / unknown). */
+    val jobFile: StateFlow<JobFile?> get() = NoJobFile
+    /** Ask which file is playing (answered by the Wi-Fi board, never reaches the motion controller). */
+    fun queryJobFile() {}
+    /** A file on the machine's SD card as text, or null if it can't be read. */
+    suspend fun downloadFile(path: String): String? = null
+
     /** Backend-specific commands, so built-ins don't hard-code one dialect. */
     val dialect: Dialect
 }
+
+/** `|P:` while a job plays: current file line (1-based, counting comments), percent of the file read, seconds run. */
+data class JobProgress(val line: Long, val percent: Int, val elapsedS: Long)
+
+/** The running job's file on the machine (from a 0xB7 query): path on the SD card and its md5. */
+data class JobFile(val path: String, val md5: String) {
+    val name get() = path.substringAfterLast('/')
+}
+
+private val NoJobFile = kotlinx.coroutines.flow.MutableStateFlow<JobFile?>(null)
 
 data class MachineTarget(val name: String, val host: String, val port: Int)
 
@@ -69,6 +86,14 @@ data class MachineStatus(
     val spindleTarget: Double? = null,
     /** Spindle speed override, % (M223). */
     val spindleOverride: Double? = null,
+    /** A job file is playing: `|P:line,percent,elapsed s|` (only then; it stays through tool changes and pauses). */
+    val job: JobProgress? = null,
+    /** Tool the machine is asking for in a tool change (`|T:` field 3); and the active tool's length offset. */
+    val toolTarget: Int? = null,
+    val tlo: Double? = null,
+    /** Feed actually moving at / programmed, mm/min (`|F:actual,set,override|`). */
+    val feedActual: Double? = null,
+    val feedSet: Double? = null,
 ) {
     val isIdle get() = state.equals("Idle", ignoreCase = true)
     val isAlarm get() = state.equals("Alarm", ignoreCase = true)
