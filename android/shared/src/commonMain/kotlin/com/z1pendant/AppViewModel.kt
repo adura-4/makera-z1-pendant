@@ -150,20 +150,32 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     private var toolsFor: String? = null
 
     private var noJobCount = 0
+    /** A job we were watching when the link dropped: if it's gone when we're back, it ended meanwhile. */
+    private var watchedBeforeDrop = false
+
+    /** Link lost: forget the job (it may end, or another may start, before we're back). */
+    private fun forgetJob() {
+        if (job.value != null) watchedBeforeDrop = true
+        job.value = null; jobTools.value = null; toolsFor = null; noJobCount = 0
+    }
 
     private fun trackJob(st: MachineStatus?) {
         // The Wi-Fi board's canned fallback status (P:1234,50,1200) says nothing about the job.
         if (st != null && "|P:1234,50,1200" in st.raw) return
         val p = st?.job
         if (p == null) {
-            // Over only once |P: has been gone for 3 statuses in a row (not one dropped reply).
-            if (job.value != null && st != null && ++noJobCount >= 3) { job.value = null; jobEnded(st) }
+            // Over only once |P: has been gone for 3 statuses in a row (not one dropped reply),
+            // whether we saw it end or it ended while we were away.
+            if ((job.value != null || watchedBeforeDrop) && st != null && ++noJobCount >= 3) {
+                job.value = null; watchedBeforeDrop = false; jobEnded(st)
+            }
             return
         }
         noJobCount = 0
+        watchedBeforeDrop = false                                  // back into a running job: leave its overrides alone
         if (job.value == null) link.queryJobFile()                 // a job started (or we joined one): which file?
         val f = link.jobFile.value
-        job.value = JobView(p, f)
+        job.value = JobView(p, f, jobTools.value?.lines?.takeIf { f != null && f.md5 == toolsFor })
         // Once per file (md5): read its tools.
         if (f != null && f.md5 != toolsFor) {
             toolsFor = f.md5
@@ -267,7 +279,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         viewModelScope.launch {
             link.conn.collectLatest { c ->
                 log("· link $c")
-                if (c != ConnState.Connected) jog.cancelPending()
+                if (c != ConnState.Connected) { jog.cancelPending(); forgetJob() }
             }
         }
         target.value?.let { if (prefs.getBoolean("autoConnect", true)) link.connect(it) }
@@ -779,7 +791,20 @@ fun spindleSlideFor(target: Double, pct: Double) = SpindleSlide(target, pct,
 fun isProbeTool(t: Int) = t == 0 || t == 9999 || t >= 999_990
 
 /** What the drawer shows about a running job. */
-data class JobView(val progress: com.z1pendant.link.JobProgress, val file: com.z1pendant.link.JobFile?) {
-    /** Time left from the pace so far: elapsed × (100 − %) / %. Rough: the % is of the file read, not of time. */
-    val leftS: Long? get() = progress.percent.takeIf { it in 1..99 }?.let { progress.elapsedS * (100 - it) / it }
+data class JobView(val progress: com.z1pendant.link.JobProgress, val file: com.z1pendant.link.JobFile?,
+                   val totalLines: Int? = null) {
+    /**
+     * Percent done. With the file's line count: the line being cut ÷ total lines. The firmware's own
+     * percent is of the file *read*, and it reads ahead (planner queue + the Wi-Fi board's buffer), so
+     * near the end it says 100 while the last moves still run; it's the fallback until the file is in.
+     */
+    val percent: Int get() = totalLines?.takeIf { it > 0 && progress.line > 0 }
+        ?.let { (progress.line * 100 / it).toInt().coerceIn(0, 99) } ?: progress.percent
+
+    /** Time left from the pace so far: elapsed × (left ÷ done), by lines when known, else by the firmware's %. */
+    val leftS: Long? get() {
+        val t = totalLines
+        if (t != null && t > 0 && progress.line > 0) return progress.elapsedS * (t - progress.line).coerceAtLeast(0) / progress.line
+        return progress.percent.takeIf { it in 1..99 }?.let { progress.elapsedS * (100 - it) / it }
+    }
 }

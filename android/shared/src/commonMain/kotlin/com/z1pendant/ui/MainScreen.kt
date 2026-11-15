@@ -111,7 +111,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             }
             // While a job plays: "Run 42%" (also in the job's Idle moments), "Hold 42%", "Tool change".
             val s0 = st?.state
-            val jp = job?.progress?.percent
+            val jp = job?.percent
             val toolWait = connected && s0.equals("Tool", true)
             val pill = when {
                 !connected -> if (conn == ConnState.Lost) "Lost" else "Offline"

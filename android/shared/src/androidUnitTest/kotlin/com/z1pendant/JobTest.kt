@@ -23,6 +23,16 @@ class JobTest {
         assertNull(StatusParser.parse(running.replace("P:86,16,58", "P:1234,50,1200"), 0)!!.job)
     }
 
+    /** Near the end the firmware's % (file read) says 100 while the last lines still run: lines win. */
+    @Test fun progressByLinesWhenFileKnown() {
+        val p = com.z1pendant.link.JobProgress(11_550, 100, 1_155)
+        val v = JobView(p, null, totalLines = 11_600)
+        assertEquals(99, v.percent)
+        assertEquals(5L, v.leftS)                                   // 1155 s × 50 / 11550
+        assertEquals(100, JobView(p, null).percent)                 // no file yet: the firmware's %
+        assertNull(JobView(p, null).leftS)
+    }
+
     @Test fun leftEstimate() {
         assertEquals(304L, JobView(com.z1pendant.link.JobProgress(86, 16, 58), null).leftS)
         assertNull(JobView(com.z1pendant.link.JobProgress(0, 0, 0), null).leftS)

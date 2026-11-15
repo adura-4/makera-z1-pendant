@@ -105,6 +105,30 @@ class JobSimTest {
         }
         link.disconnect()
     }
+
+    /** The pendant leaves mid-job; the job ends while it's away; back on an idle machine → overrides reset. */
+    @Test fun jobEndedWhileAway() = runBlocking {
+        val vm = AppViewModel(FakePlatform())
+        val link = vm.link
+        val target = MachineTarget("sim", "127.0.0.1", port)
+        vm.connect(target)
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        for (l in listOf("\$H", "G53 G0 X-100 Y-100 Z-60", "G10L20P0X0Y0Z0", "M3 S6000", "M223 S85", "M5")) link.sendLine(l)
+        withTimeout(15_000) { while (link.status.value?.let { it.isIdle && it.mpos[0] == -100.0 } != true) delay(50) }
+        link.sendLine("play t.cnc")
+        withTimeout(10_000) { while (vm.job.value == null) delay(20) }
+        vm.disconnect()
+        assertEquals(null, vm.job.value)                            // forgotten while away
+        // Let the job finish without us (another client watches the sim).
+        val spy = com.z1pendant.link.makera.MakeraLink()
+        spy.connect(target)
+        withTimeout(5000) { while (spy.conn.value != ConnState.Connected) delay(20) }
+        withTimeout(40_000) { while (spy.status.value?.job != null || spy.status.value == null) delay(50) }
+        assertEquals(85.0, spy.status.value!!.spindleOverride!!, 0.01)  // nobody reset it yet
+        vm.connect(target)
+        withTimeout(10_000) { while (spy.status.value?.spindleOverride != 100.0) delay(50) }
+        spy.disconnect(); link.disconnect()
+    }
 }
 
 private class FakePlatform : Platform {

@@ -67,8 +67,8 @@ fun JobLine(job: JobView, onOpen: () -> Unit) {
     Row(Modifier.fillMaxWidth().height(28.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onOpen).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(Icons.Filled.Description, null, Modifier.size(16.dp), tint = muted)
-        Text("${job.progress.percent}%", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-        ProgressBar(job.progress.percent, 6.dp, Modifier.weight(1f))
+        Text("${job.percent}%", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        ProgressBar(job.percent, 6.dp, Modifier.weight(1f))
         Text(job.leftS?.let { "${fmtDuration(it)} left" } ?: fmtDuration(job.progress.elapsedS), fontSize = 12.5.sp, color = muted)
         Icon(Icons.Filled.ExpandLess, "Job details", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
     }
@@ -104,11 +104,11 @@ fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onClose: () -
             Icon(Icons.Filled.ExpandMore, "Back", Modifier.size(22.dp), tint = cs.primary)
         }
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("${p.percent}%", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 34.sp)
+            Text("${job.percent}%", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 34.sp)
             Text("line ${Fmt.thousands(p.line.toInt())}" + (tools?.lines?.let { " of ${Fmt.thousands(it)}" } ?: ""),
                 fontSize = 13.sp, color = cs.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         }
-        ProgressBar(p.percent, 12.dp, Modifier.fillMaxWidth())
+        ProgressBar(job.percent, 12.dp, Modifier.fillMaxWidth())
         if (toolChange) {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(cs.secondaryContainer)) {
                 Box(Modifier.width(4.dp).height(52.dp).background(cs.primary))

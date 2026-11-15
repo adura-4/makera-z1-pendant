@@ -145,6 +145,12 @@ not while the screen redraws.
   The Wi-Fi board has a canned fallback status with `P:1234,50,1200`: ignored.
 - `line` = 1-based file line of the block running (comments count); `percent` = share of the file
   read (sits at ~91 % over the last lines, then 100); `elapsed` stops during a tool-change wait.
+  The app shows line ÷ total lines (once the file is read) for the percent and time left: the
+  firmware's % is of the file read, and it reads ahead, so it hit 100 % ~100 lines before the end
+  of a 11,600-line engraving (tiny moves at 30 mm/min) and the time left went blank.
+- On a disconnect the app forgets the job (it may end or change while we're away) and asks for
+  the file again on reconnect. If it was watching a job and comes back to no job, that job ended:
+  overrides go back to 100 % as at a normal end. Back into a running job, it leaves them alone.
 - State `Tool` = waiting for a manual tool change; `|T:active,TLO,target|` (target = the tool asked
   for; active reads −1 while the collet is empty during the swap).
 - The state reads `Run` while the spindle turns even with nothing moving, so a pendant M3 counts as
