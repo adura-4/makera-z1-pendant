@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +45,9 @@ fun SpindleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
     fun set(t: String) { field = TextFieldValue(t, TextRange(t.length)) }
     val rpm = field.text.filter { it.isDigit() }.take(6).toIntOrNull()
     val block = remember(st, rpm) { vm.spindleBlock(rpm) }  // re-checked on every status
+    val lastTool by vm.lastSetTool.collectAsState()
+    var pick by remember { mutableStateOf(lastTool) }       // the tool on the wheel
+    var toolSet by remember { mutableStateOf<Int?>(null) }   // set from this box: "Tool Tn set." once the machine reports it
     var flash by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(flash) { if (flash != null) { delay(220); flash = null } }
     val start = { if (rpm != null && block == null) vm.startSpindle(rpm) }
@@ -86,7 +90,20 @@ fun SpindleDialog(vm: AppViewModel, onDismiss: () -> Unit) {
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
                         keyboardActions = KeyboardActions(onGo = { start() }))
                     if (block != null) Text(block, fontSize = 13.sp, color = cs.error)
-                    else vm.link.dialect.spindleOn(rpm!!).forEach { Text(it, fontFamily = FontFamily.Monospace, fontSize = 15.sp) }
+                    else if (toolSet != null && st?.tool == toolSet) Text("Tool T$toolSet set.", fontSize = 13.sp, color = Color(0xFF86EFAC))
+                    // No usable tool: pick one on the wheel and tell the firmware it's in (M493.2, no motion).
+                    if (vm.spindleToolProblem(st)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            WheelPicker((1..99).map { "T$it" }, initial = lastTool - 1, onPick = { i ->
+                                if (pick != i + 1) { pick = i + 1; vm.haptics.tick() }
+                            })
+                            PendantOutlinedButton(onClick = { vm.setTool(pick); toolSet = pick }, shape = boxShape,
+                                modifier = Modifier.height(48.dp)) { Text("Set tool", fontSize = 16.sp) }
+                        }
+                        vm.link.dialect.setTool(pick).forEach { Text(it, fontFamily = FontFamily.Monospace, fontSize = 15.sp) }
+                    } else if (block == null) {
+                        vm.link.dialect.spindleOn(rpm!!).forEach { Text(it, fontFamily = FontFamily.Monospace, fontSize = 15.sp) }
+                    }
                     Button(onClick = start, enabled = block == null,
                         modifier = Modifier.align(Alignment.CenterHorizontally).fillMaxWidth(0.6f).height(50.dp)) {
                         Text("Start", fontSize = 18.sp)

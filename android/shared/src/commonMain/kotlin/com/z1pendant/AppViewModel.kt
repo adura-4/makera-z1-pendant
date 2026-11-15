@@ -118,6 +118,21 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     }
     fun resetSpindleOverride() = link.dialect.spindleOverride(100.0).forEach { link.sendLine(it) }
 
+    /** The tool the start box's wheel offers first: the last one set from it (T1 the first time). */
+    val lastSetTool = MutableStateFlow(prefs.getInt("lastSetTool", 1).coerceIn(1, 99))
+
+    /** The firmware won't spin with the tool it has (probe, empty collet, or out of range). */
+    fun spindleToolProblem(st: MachineStatus?): Boolean =
+        st?.tool?.let { isProbeTool(it) || it < 0 || it >= 100_000 } == true
+
+    /** Start box → M493.2 T[n] (no motion). */
+    fun setTool(n: Int) {
+        haptics.press()
+        lastSetTool.value = n; prefs.edit { putInt("lastSetTool", n) }
+        log("▶ set tool T$n")
+        link.dialect.setTool(n).forEach { link.sendLine(it) }
+    }
+
     /** Stop box → M5. */
     fun stopSpindle() {
         haptics.press()

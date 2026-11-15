@@ -108,6 +108,8 @@ class Machine:
                 self.vacuum = False
             if 6 in m and "T" in vals:
                 self.tool = int(vals["T"])
+            if 493.2 in m and "T" in vals:          # set current tool, no motion
+                self.tool = int(vals["T"])
             if 3 in m or 4 in m:
                 if self.tool <= 0 or self.tool >= 100000:
                     self.halt()

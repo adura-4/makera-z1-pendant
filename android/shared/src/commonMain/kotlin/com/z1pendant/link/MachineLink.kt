@@ -85,6 +85,8 @@ interface Dialect {
     fun vacuum(on: Boolean): List<String>
     fun spindleOn(rpm: Int): List<String>
     fun spindleOff(): List<String>
+    /** "Tool [n] is in the spindle": no motion; the firmware saves it, and marks its length not measured. */
+    fun setTool(n: Int): List<String>
     /** Spindle speed override, % of the programmed RPM (two decimals). */
     fun spindleOverride(percent: Double): List<String>
     /**
@@ -107,6 +109,8 @@ object GrblishDialect : Dialect {
     override fun vacuum(on: Boolean) = listOf(if (on) "M851" else "M852")
     override fun spindleOn(rpm: Int) = listOf("M3 S$rpm")
     override fun spindleOff() = listOf("M5")
+    // M493.2 T = set the current tool (Makera's app sends it too; community ATCHandler saves it to EEPROM).
+    override fun setTool(n: Int) = listOf("M493.2 T$n")
     override fun spindleOverride(percent: Double) = listOf("M223 S${Fmt.trimmed2(percent)}")
     // G53 = machine coordinates for this line only; G90/G91 and the work offset stay as they are.
     override fun jogTo(axis: Char, machinePos: Double, feedMmMin: Double) =
