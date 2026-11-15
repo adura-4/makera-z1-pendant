@@ -149,6 +149,8 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 **Settings**
 - Machine connection, vibration strength, degrees per click, volume-key jogging, soft-limit clamping,
   keep screen on, and hotkey export/import/reset.
+- No vibration from the dial? The phone's **Use vibration & haptics** must be on (Settings → Sound &
+  vibration → Vibration & haptics). **Touch feedback** can stay off on Android 13 and newer.
 
 ## Build from source
 The full source is here. Make it your own.
