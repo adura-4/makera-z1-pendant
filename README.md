@@ -40,6 +40,10 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 - **Console**: every command sent and every reply, with time stamps, plus a box to type commands.
 - **Toggles that show state**: the Light and Vacuum tiles are bright when on, dim when off (read back
   from the machine).
+- **Spindle**: the Spindle tile is dim while off; tap it for the start box (always asks): pick a preset
+  (up to the Z1's 13,000 RPM max) or type an RPM. It remembers the last one. While it runs, the tile
+  turns blue and shows the live RPM; one tap stops it. It refuses to start with no tool loaded (the
+  firmware would halt the machine).
 - Works alongside Makera Studio: both can be connected at the same time.
 
 <p align="center">

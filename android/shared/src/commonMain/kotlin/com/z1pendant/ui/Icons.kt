@@ -28,6 +28,7 @@ val HotkeyIcons: Map<String, ImageVector> = linkedMapOf(
     "ArrowDownward" to Icons.Filled.ArrowDownward,
     "SwapHoriz" to Icons.Filled.SwapHoriz,
     "Lightbulb" to Icons.Filled.Lightbulb,
+    "Cyclone" to Icons.Filled.Cyclone,
     "Highlight" to Icons.Filled.Highlight,
     "Air" to Icons.Filled.Air,
     "CleaningServices" to Icons.Filled.CleaningServices,

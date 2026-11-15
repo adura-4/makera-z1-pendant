@@ -6,7 +6,7 @@ machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroin
   * UDP broadcast "name,ip,port,busy,version" to 255.255.255.255:3333 once a second.
   * TCP 2222, several clients at once. Every frame is logged.
   * '?' -> 0x81 status, '!' hold, '~' resume, 0x18 halt (-> Alarm, needs $X), 0x19 stop (flush queue).
-  * Lines: G0/G1 (G90/G91, F), G4, G10 L20 P0, G92, G53, $H, $X, M220 S, M3/M5 S, M999, anything
+  * Lines: G0/G1 (G90/G91, F), G4, G10 L20 P0, G92, G53, $H, $X, M220 S, M3/M5 S, M6 T, M999, anything
     else just gets "ok". Replies are 0x90 "ok\\r\\n".
   * Motion runs in real time at the commanded feed (G0 = axis max rate) x feed override, with a
     32-block planner queue; soft limits X -207..-1, Y -206..-1, Z -102..-1 once homed;
@@ -43,7 +43,11 @@ class Machine:
         self.absolute = True
         self.feed = 500.0
         self.fro = 100.0
-        self.spindle = 0.0
+        self.spindle_target = 10000.0          # the real Z1 reports its default target while off
+        self.spindle_on = False
+        self.spindle_cur = 0.0
+        self.spindle_at = time.monotonic()
+        self.tool = 1                          # active tool (M6 T…); 0 = none: M3 then halts, like the Z1
         self.light = True
         self.vacuum = False
         self.state = "Idle"
@@ -97,10 +101,18 @@ class Machine:
                 self.vacuum = True
             if 852 in m:
                 self.vacuum = False
+            if 6 in m and "T" in vals:
+                self.tool = int(vals["T"])
             if 3 in m or 4 in m:
-                self.spindle = vals.get("S", self.spindle or 10000.0)
+                if self.tool <= 0 or self.tool >= 100000:
+                    self.halt()
+                    return ["ERROR: No tool or probe tool!\r\n"]
+                self._spin()
+                self.spindle_target = vals.get("S", self.spindle_target)
+                self.spindle_on = True
             if 5 in m:
-                self.spindle = 0.0
+                self._spin()
+                self.spindle_on = False
             if 10 in g and vals.get("L") == 20:
                 for i, ax in enumerate(AXES):
                     if ax in vals:
@@ -236,15 +248,25 @@ class Machine:
                 else:
                     self.mpos = [self.mpos[i] + d[i] / dist * step for i in range(4)]
 
+    def _spin(self):
+        """Ramp the measured RPM toward the target (on) or 0 (off), about 3000 RPM/s."""
+        now = time.monotonic()
+        goal = self.spindle_target if self.spindle_on else 0.0
+        step = 3000.0 * (now - self.spindle_at)
+        self.spindle_at = now
+        d = goal - self.spindle_cur
+        self.spindle_cur = goal if abs(d) <= step else self.spindle_cur + math.copysign(step, d)
+
     def status(self) -> str:
         with self.lock:
+            self._spin()
             mp = self.mpos
             wp = [mp[i] - self.wco[i] for i in range(4)]
             f = self.cur[1] if self.cur and self.cur[0] != "dwell" and self.cur[1] else 0.0
             return (f"<{self.state}|MPos:{mp[0]:.4f},{mp[1]:.4f},{mp[2]:.4f},{mp[3]:.4f},0.0000"
                     f"|WPos:{wp[0]:.4f},{wp[1]:.4f},{wp[2]:.4f},{wp[3]:.4f},0.0000"
-                    f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle:.1f},{self.spindle:.1f},100.0,0"
-                    f"|T:0,0.000|W:0.00>")
+                    f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},100.0,0"
+                    f"|T:{self.tool},0.000,-1|W:0.00>")
 
 
 class Client(threading.Thread):

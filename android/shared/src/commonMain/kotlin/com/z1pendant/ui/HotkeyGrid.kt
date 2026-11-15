@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
@@ -57,6 +58,8 @@ fun HotkeyGrid(
     cols: Int = 4,
     arranging: Boolean,
     toggleOf: (Hotkey) -> Boolean?,
+    /** A live value that replaces the label (the spindle's RPM while it runs): accent colour, spinning icon. */
+    liveOf: (Hotkey) -> String? = { null },
     onTap: (Hotkey) -> Unit,
     onLong: (Hotkey) -> Unit,
     onMove: (id: String, toIndex: Int) -> Unit,
@@ -165,7 +168,7 @@ fun HotkeyGrid(
                     val dragging = h.id == dragId
                     val lift = if (dragging) (pointer - grab) - topLeft(i) else Offset.Zero
                     HotkeyTileView(
-                        h, arranging, toggleOf(h),
+                        h, arranging, toggleOf(h), liveOf(h),
                         ring = if (h.id == pressId) progress.value else 0f,
                         modifier = Modifier
                             .zIndex(if (dragging) 1f else 0f)
@@ -196,10 +199,11 @@ fun HotkeyGrid(
 }
 
 @Composable
-private fun HotkeyTileView(h: Hotkey, arranging: Boolean, toggle: Boolean?, ring: Float, modifier: Modifier) {
+private fun HotkeyTileView(h: Hotkey, arranging: Boolean, toggle: Boolean?, live: String?, ring: Float, modifier: Modifier) {
     // Toggle tiles (light): bright white = on, dimmed = off. Not a toggle / unknown = normal.
+    // A live tile (spindle running): theme blue, its value in place of the label, the icon turning.
     val fg = when (toggle) {
-        true -> Color.White
+        true -> if (live != null) MaterialTheme.colorScheme.primary else Color.White
         false -> MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.35f)
         null -> MaterialTheme.colorScheme.onSecondaryContainer
     }
@@ -223,10 +227,18 @@ private fun HotkeyTileView(h: Hotkey, arranging: Boolean, toggle: Boolean?, ring
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
     ) {
         Box {
-            HotkeyIcon(h.icon, 26.dp, fg)
+            if (live != null) {
+                val turn by androidx.compose.animation.core.rememberInfiniteTransition(label = "spin").animateFloat(
+                    0f, 360f, androidx.compose.animation.core.infiniteRepeatable(
+                        androidx.compose.animation.core.tween(1100, easing = androidx.compose.animation.core.LinearEasing)),
+                    label = "spin")
+                Box(Modifier.graphicsLayer { rotationZ = turn }) { HotkeyIcon(h.icon, 26.dp, fg) }
+            } else HotkeyIcon(h.icon, 26.dp, fg)
             if (arranging && !h.showOnMain) Icon(Icons.Filled.VisibilityOff, null, Modifier.size(12.dp).align(Alignment.TopEnd))
         }
-        Text(h.label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = fg,
+        if (live != null) Text(live, fontSize = 13.sp, maxLines = 1, color = fg, fontWeight = FontWeight.SemiBold,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+        else Text(h.label, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = fg,
             fontWeight = if (toggle == true) FontWeight.SemiBold else FontWeight.Normal)
         if (h.triggers.isNotEmpty()) {
             Text("⌨${h.triggers.size}",

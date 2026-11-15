@@ -13,6 +13,13 @@ import kotlin.math.abs
  * - [plain] = `v.toBigDecimal().stripTrailingZeros().toPlainString()` (from `Double.toString`).
  */
 object Fmt {
+    /** 12000 → "12,000" (RPM on the spindle tile and in the start box). */
+    fun thousands(n: Int): String {
+        val d = kotlin.math.abs(n).toString()
+        val g = d.reversed().chunked(3).joinToString(",").reversed()
+        return if (n < 0) "-$g" else g
+    }
+
     fun fixed(v: Double, decimals: Int, plus: Boolean = false, width: Int = 0): String {
         val body = when {
             v.isNaN() -> "NaN"

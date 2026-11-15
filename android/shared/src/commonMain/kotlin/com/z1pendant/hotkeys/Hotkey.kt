@@ -32,6 +32,8 @@ enum class BuiltIn(val label: String) {
     STEP_UP("Bigger step"), STEP_DOWN("Smaller step"),
     FEED_UP("Feed override +10%"), FEED_DOWN("Feed override −10%"), FEED_100("Feed override 100%"),
     LIGHT_TOGGLE("Light on/off"), VACUUM_TOGGLE("Vacuum on/off"),
+    /** Off: opens the spindle start box (always asks). Running: M5 at once. */
+    SPINDLE_TOGGLE("Spindle on/off"),
 }
 
 sealed class Step {
@@ -135,7 +137,7 @@ data class Hotkey(
             Hotkey(label = "Z up", icon = "mi:VerticalAlignTop", kind = Kind.GCODE, steps = listOf(Step.GCode("G90\nG53 G0 Z$SAFE_Z"))),
             Hotkey(label = "Light", icon = "mi:Lightbulb", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.LIGHT_TOGGLE)), onlyIdle = false),
             Hotkey(label = "Vacuum", icon = "mi:Air", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.VACUUM_TOGGLE)), onlyIdle = false),
-            Hotkey(label = "Spindle stop", icon = "mi:Stop", kind = Kind.GCODE, steps = listOf(Step.GCode("M5")), onlyIdle = false),
+            Hotkey(label = "Spindle", icon = "mi:Cyclone", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.SPINDLE_TOGGLE)), onlyIdle = false),
             Hotkey(label = "Next axis", icon = "mi:SwapHoriz", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.NEXT_AXIS)), onlyIdle = false, showOnMain = false),
         )
     }

@@ -76,6 +76,15 @@ for a soft limit, a selection click for button presses.
 G[0] = light (M821 on / M822 off), G[3] = vacuum / chip-clear output (`switch.extendout`, M851 on /
 M852 off). The app reads it every 3 s (not while jogging) for the Light and Vacuum toggle tiles.
 
+## Spindle
+Start: `M3 S<rpm>`; stop: `M5`. The status line carries both things the tile needs, every poll:
+`|S:current,target,override%,…|` (current RPM is live; target stays at the default 10000 while off)
+and `|T:tool,offset,target tool,…|` (active tool). The firmware halts the machine on M3 unless
+0 < tool < 100000 (stock: "ERROR: No tool or probe tool!"; community `SpindleControl.cpp`), so the
+start box refuses first. Running = current RPM > 0, or an M3 sent in the last 10 s (spin-up). The Z1
+spindle is 150 W, 0–13,000 RPM (Makera's spec); the config holds motion `delay_on_s 8` after M3 and
+`delay_off_s 4` after M5.
+
 ## Zero / undo
 `zero` sends `G10 L20 P0 <axis>0`. Pressed again while the axis still reads 0.000 and hasn't moved, it
 sends `G10 L20 P0 <axis><previous value>` instead. The Zero hotkeys (X/Y/Z/A, XY, XYZ, selected) share it.

@@ -56,6 +56,51 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     val snack = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val console = MutableStateFlow<List<String>>(emptyList())
     val confirmFor = MutableStateFlow<Hotkey?>(null)
+
+    // ---- spindle ----
+    /** The spindle start box is open (the Spindle tile or a bound button, while it's off). */
+    val spindleAsk = MutableStateFlow(false)
+    /** RPM last started with; the start box opens holding it. */
+    val spindleRpm = MutableStateFlow(prefs.getInt("spindleRpm", 10_000).coerceIn(1, SPINDLE_MAX_RPM))
+    /** nowMs() of the last M3 we sent (0 = none since the last M5): shows the tile as on until the RPM reads back. */
+    @Volatile private var spindleStartAt = 0L
+
+    /** Running = the machine reports RPM, or we just started it and it's spinning up. */
+    fun spindleRunning(st: MachineStatus?): Boolean =
+        (st?.spindleRpm ?: 0.0) > 0.5 || (spindleStartAt > 0 && nowMs() - spindleStartAt < SPINDLE_PENDING_MS)
+
+    /** Why the spindle can't start at [rpm] now, or null. Checked before anything is sent. */
+    fun spindleBlock(rpm: Int?): String? {
+        val st = link.status.value
+        val tool = st?.tool
+        return when {
+            link.conn.value != ConnState.Connected -> "Not connected"
+            st == null -> "No machine status"
+            !st.isIdle -> "Machine is ${st.state}, not Idle"
+            // The firmware halts the machine on M3 without a real tool (0 = none; 100000+ = probe).
+            tool != null && (tool <= 0 || tool >= 100_000) -> "No tool loaded: the machine would halt. Load a tool first."
+            rpm == null || rpm < 1 -> "Enter an RPM"
+            rpm > SPINDLE_MAX_RPM -> "The Z1 spindle tops out at ${Fmt.thousands(SPINDLE_MAX_RPM)} RPM"
+            else -> null
+        }
+    }
+
+    /** Start box → M3. */
+    fun startSpindle(rpm: Int) {
+        spindleBlock(rpm)?.let { snack.tryEmit(it); haptics.thud(); return }
+        haptics.press()
+        spindleRpm.value = rpm; prefs.edit { putInt("spindleRpm", rpm) }
+        spindleStartAt = nowMs()
+        log("▶ spindle on, $rpm RPM")
+        link.dialect.spindleOn(rpm).forEach { link.sendLine(it) }
+        spindleAsk.value = false
+    }
+
+    private fun spindleToggle(): List<String>? {
+        if (!spindleRunning(link.status.value)) { spindleAsk.value = true; return null }   // always asks
+        spindleStartAt = 0L
+        return link.dialect.spindleOff()                                                    // stop: no question
+    }
     /** Bound buttons and volume-jog only act while the main screen is showing. */
     @Volatile var onMainScreen = true
     val editMode = MutableStateFlow(false)
@@ -346,6 +391,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             BuiltIn.FEED_100 -> d.feedOverride(100)
             BuiltIn.LIGHT_TOGGLE -> toggleOutput("light") { d.light(it) }
             BuiltIn.VACUUM_TOGGLE -> toggleOutput("vacuum") { d.vacuum(it) }
+            BuiltIn.SPINDLE_TOGGLE -> spindleToggle()
         }
     }
 
@@ -391,8 +437,15 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
                 st.copy(text = st.text.lines().joinToString("\n") { if (zFix.matches(it)) "G53 G0 Z${Hotkey.SAFE_Z}" else it })
             else st
         })
+        // The old "Spindle stop" default (M5 only) becomes the Spindle toggle tile, in the same place,
+        // shown in the grid (a hidden stop button was easy to leave hidden; the toggle is a tile).
+        fun spindle(h: Hotkey) = if (h.label == "Spindle stop" && isOnly(h, "M5"))
+            h.copy(label = "Spindle", icon = "mi:Cyclone", kind = com.z1pendant.hotkeys.Kind.BUILTIN,
+                steps = listOf(com.z1pendant.hotkeys.Step.Builtin(BuiltIn.SPINDLE_TOGGLE)), confirm = false,
+                onlyIdle = false, showOnMain = true)
+            else h
         val out = fold(fold(list, "Light on", "M821", "Light off", "M822", "Light", BuiltIn.LIGHT_TOGGLE),
-            "Vacuum on", "M851", "Vacuum off", "M852", "Vacuum", BuiltIn.VACUUM_TOGGLE).map(::fixZ)
+            "Vacuum on", "M851", "Vacuum off", "M852", "Vacuum", BuiltIn.VACUUM_TOGGLE).map(::fixZ).map(::spindle)
         if (out != list) hotkeyFile.writeText(HotkeyJson.export(out))
         return out
     }
@@ -455,10 +508,13 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     /** Tap on a tile, a bound button, or the editor's Test button. */
     fun requestRun(h: Hotkey, test: Boolean = false) {
         runner.blockReason(h)?.let { snack.tryEmit("${h.label}: $it"); haptics.thud(); return }
-        if (h.confirm && !test) { confirmFor.value = h; return }
+        // The spindle tile asks with its own start box, never the generic one.
+        if (h.confirm && !test && !isSpindleToggle(h)) { confirmFor.value = h; return }
         haptics.press()
         runNow(h)
     }
+    private fun isSpindleToggle(h: Hotkey) = h.steps.size == 1 &&
+        (h.steps[0] as? com.z1pendant.hotkeys.Step.Builtin)?.action == BuiltIn.SPINDLE_TOGGLE
     fun confirmRun() { confirmFor.value?.let { haptics.press(); runNow(it) }; confirmFor.value = null }
     /** Console marks which hotkey the commands that follow belong to. */
     private fun runNow(h: Hotkey) { log("▶ hotkey: ${h.label}"); runner.run(h) }
@@ -548,3 +604,10 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
 
     override fun onCleared() { jog.stop(); link.disconnect() }
 }
+
+/** Makera Z1 spindle: 150 W, 0–13,000 RPM (Makera's spec). */
+const val SPINDLE_MAX_RPM = 13_000
+/** The start box's preset RPMs; the top one is the spindle's max. */
+val SPINDLE_PRESETS = listOf(4_000, 6_000, 8_000, 10_000, 12_000, SPINDLE_MAX_RPM)
+/** After an M3, the tile shows "on" this long while the RPM is still reading 0 (spin-up, status lag). */
+const val SPINDLE_PENDING_MS = 10_000L

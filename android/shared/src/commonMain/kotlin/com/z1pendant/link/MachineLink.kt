@@ -63,6 +63,8 @@ data class MachineStatus(
     val homed: Boolean?,
     val raw: String,
     val atMs: Long,                    // nowMs() when received
+    /** Active tool number from `|T:tool,offset,…|`; null if not reported. */
+    val tool: Int? = null,
 ) {
     val isIdle get() = state.equals("Idle", ignoreCase = true)
     val isAlarm get() = state.equals("Alarm", ignoreCase = true)
@@ -77,6 +79,8 @@ interface Dialect {
     fun feedOverride(percent: Int): List<String>
     fun light(on: Boolean): List<String>
     fun vacuum(on: Boolean): List<String>
+    fun spindleOn(rpm: Int): List<String>
+    fun spindleOff(): List<String>
     fun jogMove(axis: Char, dist: Double, feedMmMin: Double): String
     fun absoluteMode(): String
 }
@@ -92,6 +96,8 @@ object GrblishDialect : Dialect {
     override fun light(on: Boolean) = listOf(if (on) "M821" else "M822")
     // Z1 config: switch.extendout (P2.2, the vacuum / chip-clear output) on M851 / off M852.
     override fun vacuum(on: Boolean) = listOf(if (on) "M851" else "M852")
+    override fun spindleOn(rpm: Int) = listOf("M3 S$rpm")
+    override fun spindleOff() = listOf("M5")
     override fun jogMove(axis: Char, dist: Double, feedMmMin: Double) =
         "G91G1$axis${fmt(dist)}F${Fmt.fixed(feedMmMin, 0)}"
     override fun absoluteMode() = "G90"

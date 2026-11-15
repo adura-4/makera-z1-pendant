@@ -216,7 +216,9 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         val hotkeyGrid: @Composable (List<Hotkey>, Int) -> Unit = { shown, cols ->
             if (editMode) Text("Drag tiles to rearrange · tap one to edit · Save when done", fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            HotkeyGrid(shown, cols = cols, arranging = editMode, toggleOf = { toggleState(it, outputs, connected) },
+            HotkeyGrid(shown, cols = cols, arranging = editMode,
+                toggleOf = { if (isSpindle(it)) (if (connected) vm.spindleRunning(st) else null) else toggleState(it, outputs, connected) },
+                liveOf = { if (isSpindle(it) && connected && vm.spindleRunning(st)) Fmt.thousands((st?.spindleRpm ?: 0.0).roundToInt()) else null },
                 onTap = { h -> if (editMode) onEdit(h) else vm.requestRun(h) },
                 onLong = { h -> vm.haptics.majorTick(); onEdit(h) },
                 onMove = { id, to -> vm.moveInArrangement(id, to) },
@@ -433,6 +435,9 @@ private fun Modifier.tapOrHold(
         }
     }
 }
+
+fun isSpindle(h: Hotkey) = h.steps.size == 1 &&
+    (h.steps[0] as? com.z1pendant.hotkeys.Step.Builtin)?.action == com.z1pendant.hotkeys.BuiltIn.SPINDLE_TOGGLE
 
 /** On/off for toggle tiles (light, vacuum); null = not a toggle, or state unknown. */
 fun toggleState(h: Hotkey, outputs: Map<String, Boolean>, connected: Boolean): Boolean? {
