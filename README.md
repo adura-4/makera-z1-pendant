@@ -42,6 +42,7 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   file, percent and line, elapsed, time left and finish time, feed and spindle actual vs set, the
   tool change it's waiting for, and the job's tools in order with their descriptions (read from the
   file's CAM header comments), now and next.
+  When the job ends, feed and spindle overrides go back to 100 % so they don't carry into the next job.
 - **Tablets** (iPad, Android tablets): a bigger readout, and the dial / jog pad resize around your
   hotkeys. Turn the tablet sideways for a side-by-side layout with everything on screen at once:
   readout, hotkeys and the stop buttons on the left, steps and a big dial or jog pad on the right.

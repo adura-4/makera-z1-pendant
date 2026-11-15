@@ -56,6 +56,7 @@ kotlin {
                 implementation("junit:junit:4.13.2")
                 implementation("org.json:json:20240303")      // the original org.json format, to check compatibility
                 implementation("io.mockk:mockk:1.14.6")       // SystemClock on the host JVM (link test vs z1sim.py)
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")   // Dispatchers.setMain for view-model tests
             }
         }
     }

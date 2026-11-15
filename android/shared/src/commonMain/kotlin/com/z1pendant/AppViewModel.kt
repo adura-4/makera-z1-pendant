@@ -149,9 +149,18 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     private val toolCache = HashMap<String, JobTools>()
     private var toolsFor: String? = null
 
+    private var noJobCount = 0
+
     private fun trackJob(st: MachineStatus?) {
+        // The Wi-Fi board's canned fallback status (P:1234,50,1200) says nothing about the job.
+        if (st != null && "|P:1234,50,1200" in st.raw) return
         val p = st?.job
-        if (p == null) { if (job.value != null) job.value = null; return }
+        if (p == null) {
+            // Over only once |P: has been gone for 3 statuses in a row (not one dropped reply).
+            if (job.value != null && st != null && ++noJobCount >= 3) { job.value = null; jobEnded(st) }
+            return
+        }
+        noJobCount = 0
         if (job.value == null) link.queryJobFile()                 // a job started (or we joined one): which file?
         val f = link.jobFile.value
         job.value = JobView(p, f)
@@ -166,6 +175,18 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
                 if (toolsFor == f.md5) jobTools.value = t
             }
         }
+    }
+
+    /**
+     * A job finished (or was stopped): put feed and spindle overrides back to 100 %, so an override
+     * set during this job (or left over from before) doesn't carry into the next one. The firmware
+     * keeps them until changed.
+     */
+    private fun jobEnded(st: MachineStatus) {
+        val d = link.dialect
+        val fro = st.feedOverride; val sro = st.spindleOverride
+        if (fro != null && kotlin.math.abs(fro - 100) > 0.05) { log("▶ job ended: feed override back to 100 %"); d.feedOverride(100).forEach { link.sendLine(it) } }
+        if (sro != null && kotlin.math.abs(sro - 100) > 0.05) { log("▶ job ended: spindle override back to 100 %"); d.spindleOverride(100.0).forEach { link.sendLine(it) } }
     }
 
     /** Stop box → M5. */

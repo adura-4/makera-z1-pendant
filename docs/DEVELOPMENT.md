@@ -159,6 +159,11 @@ not while the screen redraws.
   starts `00 00`) isn't handled yet. The app downloads the playing file once per md5, paced 25 ms per
   packet, and reads its tools (`JobFileParser`: Fusion `(T1 name D=… - type)` and Makera
   `;@MKR|TOOL|number=…|name=…` headers; `M6` lines, skipping changes to the tool already in).
+- When a job ends (`|P:` gone for 3 statuses), the app puts feed and spindle overrides back to 100 %:
+  the firmware keeps them across jobs, and an 85 % left over from earlier made a later job's S13000
+  run at ~11,050.
+- `?` in tool names (e.g. `(T4  30? ? 0.3 engraver …)`) are in the file itself: Fusion's post writes
+  ASCII and replaces °, ×, ″ … with `?`. Name tools in ASCII in Fusion to avoid it.
 - The Wi-Fi board takes about 3 clients at once; more get `0x91` "maximum number of client connections".
 - Bare `S` lines don't change the spindle speed on the stock firmware; only `S… M3` does.
 
