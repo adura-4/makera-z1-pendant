@@ -57,7 +57,7 @@ class FmtTest {
     @Test fun dialectFormatsLikeBefore() {
         fun oldFmt(v: Double) = "%.4f".format(Locale.US, v).trimEnd('0').let { if (it.endsWith(".")) it + "0" else it }
         for (v in specials + randoms(4)) assertEquals("fmt of $v", oldFmt(v), GrblishDialect.fmt(v))
-        assertEquals("G91G1X0.01F123", GrblishDialect.jogMove('X', 0.01, 123.4))
-        assertEquals("G91G1Z-1.0F1000", GrblishDialect.jogMove('Z', -1.0, 999.5))
+        assertEquals("G53G1X-112.59F123", GrblishDialect.jogTo('X', -112.59, 123.4))
+        assertEquals("G53G1Z-1.0F1000", GrblishDialect.jogTo('Z', -1.0, 999.5))
     }
 }

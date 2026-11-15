@@ -50,7 +50,16 @@ data class JogConfig(
 )
 
 /**
- * Turns handwheel/button clicks into short relative moves.
+ * Turns handwheel/button clicks into short moves.
+ *
+ * Moves are sent as absolute machine positions (`G53 G1 X…`), not relative ones, so a jog never
+ * leaves the machine in G91: if the link drops or the app dies mid-jog, nothing is left for the
+ * next sender (Makera Studio, a hotkey) to trip over. G53 applies to its own line only.
+ *
+ * A jog session starts from a machine position the machine reported after the first click (never
+ * an older reading), and adds the clicks to it. While it runs, the reported position must stay on
+ * the path the session commanded and the other axes must stay put; if not, something else moved
+ * the machine, and the session ends (no more moves; [onDrop]) until a fresh start.
  *
  * Every [JogConfig.tickMs] the clicks collected since the last tick become ONE move. Its feed is
  * hand speed plus a correction that holds about [JogConfig.bufferS] of motion queued, so the
@@ -71,14 +80,19 @@ class JogEngine(
 ) {
     private val burst = LinkedHashMap<Char, Double>()
     @Volatile var axis: Char = 'X'
-        set(v) { if (v != field) { pending.store(0); target = null }; field = v }
+        set(v) { if (v != field) { pending.store(0); endSession() }; field = v }
     @Volatile var step: Double = 0.1
     @Volatile var enabled = true
 
     private val pending = AtomicInt(0)
     @Volatile private var target: Double? = null
     @Volatile private var targetAxis: Char = 'X'
-    @Volatile private var needAbsolute = false
+    /** nowMs() of the first click waiting for a session to start (0 = none). */
+    @Volatile private var firstClickAt = 0L
+    /** The session's commanded path on its axis (start and every target), and the other axes at the start. */
+    private var pathLo = 0.0
+    private var pathHi = 0.0
+    private var startPos: List<Double> = emptyList()
     @Volatile private var lastSendAt = 0L
     /** nowMs() of the last jog move sent (0 = never). */
     val lastJogAt: Long get() = lastSendAt
@@ -104,8 +118,9 @@ class JogEngine(
     /** Signed number of detents. */
     fun click(n: Int) {
         if (!enabled) return
-        pending.addAndFetch(n)
         val t = nowMs()
+        if (target == null && firstClickAt == 0L) firstClickAt = t
+        pending.addAndFetch(n)
         synchronized(clickLock) {
             repeat(abs(n).coerceAtMost(100)) { clickTimes.addLast(t) }
             while (clickTimes.size > 400) clickTimes.removeFirst()
@@ -121,9 +136,11 @@ class JogEngine(
     /** Drop whatever is pending (e.g. app backgrounded, finger lifted with "stop on release"). */
     fun cancelPending() { pending.store(0) }
 
+    private fun endSession() { target = null; firstClickAt = 0L }
+
     private fun axisIndex(a: Char) = "XYZA".indexOf(a)
 
-    private fun tick() {
+    internal fun tick() {
         val now = nowMs()
         val st = link.status.value
         val connected = link.conn.value == ConnState.Connected
@@ -134,7 +151,7 @@ class JogEngine(
                 pending.store(0); onDrop()
                 PLog.i("JogEngine", "dropped $n clicks: conn=$connected state=${st?.state}")
             }
-            target = null
+            endSession()
             return
         }
         // Fresh positions while jogging keep the lead estimate tight.
@@ -142,11 +159,11 @@ class JogEngine(
         link.setPollIntervalMs(if (active) 50 else 200)
 
         if (n == 0) {
-            if (needAbsolute && now - lastSendAt > 250 && link.pendingLines == 0) {
-                link.sendLine(link.dialect.absoluteMode(), quiet = true); needAbsolute = false
-                if (burst.isNotEmpty()) { onJogDone(LinkedHashMap(burst)); burst.clear() }
+            if (burst.isNotEmpty() && now - lastSendAt > 250 && link.pendingLines == 0) {
+                onJogDone(LinkedHashMap(burst)); burst.clear()
             }
-            if (st.isIdle && link.pendingLines == 0 && now - lastSendAt > 300) target = null
+            if (st.isIdle && link.pendingLines == 0 && now - lastSendAt > 300) endSession()
+            if (target == null) firstClickAt = 0L          // clicks were cancelled before a session started
             return
         }
 
@@ -156,7 +173,16 @@ class JogEngine(
         val pos = st.mpos.getOrNull(ai) ?: return
         if (target == null || targetAxis != a) {
             if (!st.isIdle || link.pendingLines > 0) return     // let the previous axis/macro finish
+            // Start from where the machine says it is now: a status that arrived after the first
+            // click, not one from before (stale after a Wi-Fi gap, or from before another sender moved it).
+            if (st.atMs <= firstClickAt) return
             target = pos; targetAxis = a
+            pathLo = pos; pathHi = pos; startPos = st.mpos.toList()
+        } else if (offPath(st.mpos, ai, pos)) {
+            pending.store(0); endSession(); onDrop()
+            PLog.w("JogEngine", "machine left the jog path (axis $a at ${Fmt.fixed(pos, 3)}, path " +
+                "${Fmt.fixed(pathLo, 3)}..${Fmt.fixed(pathHi, 3)}): something else moved it; jog stopped")
+            return
         }
         if (link.pendingLines >= 2) return
 
@@ -217,10 +243,25 @@ class JogEngine(
         val feed = (vCmd * 60.0).coerceIn(config.minFeedMmMin, lim.maxRateMmMin)
         lastCmdV = feed / 60.0
         pending.addAndFetch(-(dir * clicks).toInt().let { if (it == 0) 0 else it })
-        link.sendLine(link.dialect.jogMove(a, dist, feed), quiet = true)
+        val to = target!! + dist
+        link.sendLine(link.dialect.jogTo(a, to, feed), quiet = true)
         burst[a] = (burst[a] ?: 0.0) + dist
-        target = target!! + dist
+        target = to
+        pathLo = min(pathLo, to); pathHi = maxOf(pathHi, to)
         lastSendAt = now
-        needAbsolute = true
+    }
+
+    /**
+     * True when the reported machine position can't come from this session's moves: the jogged
+     * axis outside the commanded path, or another axis moved. [PATH_TOLERANCE] covers status rounding.
+     */
+    private fun offPath(mpos: List<Double>, ai: Int, pos: Double): Boolean {
+        if (pos < pathLo - PATH_TOLERANCE || pos > pathHi + PATH_TOLERANCE) return true
+        return startPos.indices.any { i -> i != ai && i < mpos.size && abs(mpos[i] - startPos[i]) > PATH_TOLERANCE }
+    }
+
+    companion object {
+        /** mm (° for A): status positions come with 3–4 decimals. */
+        const val PATH_TOLERANCE = 0.02
     }
 }

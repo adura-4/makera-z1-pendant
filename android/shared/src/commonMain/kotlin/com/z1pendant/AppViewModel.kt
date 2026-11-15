@@ -163,7 +163,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
 
     private val host = object : BuiltinHost {
         override fun runBuiltin(b: BuiltIn): List<String>? = builtin(b)
-        override fun beforeGcode() { /* jog engine sends G90 once it's quiet; wait for that */ }
+        override fun beforeGcode() { /* nothing to restore: jogs never change the modal state (G53 moves) */ }
         override fun setJogEnabled(on: Boolean) { jog.enabled = on; if (!on) jog.cancelPending() }
     }
     val runner = HotkeyRunner(link, viewModelScope, host) { id -> hotkeys.value.firstOrNull { it.id == id } }
@@ -371,9 +371,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
                     "(allowed ${f(lo)} to ${f(hi)})", endW)
             }
         }
-        val v = Fmt.scaledPlain(value, 4)            // = BigDecimal(value).setScale(4, HALF_UP).stripTrailingZeros()
-        val lines = if (relative) listOf("G91 G0 $axis$v", "G90") else listOf("G90 G0 $axis$v")
-        return MovePlan(lines, null, endW)
+        return MovePlan(moveLines(axis, value, relative, endM), null, endW)
     }
 
     fun runMove(axis: Char, value: Double, relative: Boolean) {
@@ -381,6 +379,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         val why = when {
             link.conn.value != ConnState.Connected -> "not connected"
             st == null || !st.isIdle -> "machine is ${st?.state ?: "unknown"}, not Idle"
+            // Move by is computed from the reported position: it must be a current one.
+            relative && nowMs() - st.atMs > FRESH_STATUS_MS -> "no fresh position from the machine"
             runner.running.value != null -> "“${runner.running.value!!.label}” is still running"
             else -> planMove(axis, value, relative).error
         }
@@ -632,6 +632,21 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     private fun isVolume(c: Int) = c == KeyCodes.VOLUME_UP || c == KeyCodes.VOLUME_DOWN
 
     override fun onCleared() { jog.stop(); link.disconnect() }
+
+    companion object {
+        /** A typed Move by needs a status at most this old (the machine is polled every 200 ms when idle). */
+        const val FRESH_STATUS_MS = 1000L
+
+        /**
+         * G-code for a typed move. Go to: work position [value] (`G90 G0`). Move by: the machine
+         * position it ends at, [endMachine], as `G53 G0` (machine coordinates for this line only),
+         * so no G91 is ever left behind if the link drops before a G90 could follow.
+         * Numbers: BigDecimal(v).setScale(4, HALF_UP).stripTrailingZeros().
+         */
+        fun moveLines(axis: Char, value: Double, relative: Boolean, endMachine: Double): List<String> =
+            if (relative) listOf("G53 G0 $axis${Fmt.scaledPlain(endMachine, 4)}")
+            else listOf("G90 G0 $axis${Fmt.scaledPlain(value, 4)}")
+    }
 }
 
 /** Makera Z1 spindle: 150 W, 0–13,000 RPM (Makera's spec). */

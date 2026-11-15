@@ -87,8 +87,11 @@ interface Dialect {
     fun spindleOff(): List<String>
     /** Spindle speed override, % of the programmed RPM (two decimals). */
     fun spindleOverride(percent: Double): List<String>
-    fun jogMove(axis: Char, dist: Double, feedMmMin: Double): String
-    fun absoluteMode(): String
+    /**
+     * One jog move to machine position [machinePos] on [axis]. Must not change the machine's modal
+     * state (no G91), so nothing is left behind if the link drops mid-jog.
+     */
+    fun jogTo(axis: Char, machinePos: Double, feedMmMin: Double): String
 }
 
 object GrblishDialect : Dialect {
@@ -105,9 +108,9 @@ object GrblishDialect : Dialect {
     override fun spindleOn(rpm: Int) = listOf("M3 S$rpm")
     override fun spindleOff() = listOf("M5")
     override fun spindleOverride(percent: Double) = listOf("M223 S${Fmt.trimmed2(percent)}")
-    override fun jogMove(axis: Char, dist: Double, feedMmMin: Double) =
-        "G91G1$axis${fmt(dist)}F${Fmt.fixed(feedMmMin, 0)}"
-    override fun absoluteMode() = "G90"
+    // G53 = machine coordinates for this line only; G90/G91 and the work offset stay as they are.
+    override fun jogTo(axis: Char, machinePos: Double, feedMmMin: Double) =
+        "G53G1$axis${fmt(machinePos)}F${Fmt.fixed(feedMmMin, 0)}"
 
     fun fmt(v: Double) = Fmt.trimmed4(v)
 }

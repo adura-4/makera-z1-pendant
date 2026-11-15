@@ -13,7 +13,7 @@ import kotlinx.coroutines.withTimeout
 /** What the runner needs from the rest of the app for built-in steps. */
 interface BuiltinHost {
     fun runBuiltin(b: BuiltIn): List<String>?    // G-code to send, or null if handled locally
-    fun beforeGcode()                              // e.g. jog engine restores G90 first
+    fun beforeGcode()                              // a backend hook before hotkey G-code (nothing to do on the Makera)
     fun setJogEnabled(on: Boolean)
 }
 
