@@ -243,6 +243,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         FeedOverride(st?.feedOverride, connected) { vm.setFeedOverride(it) }
+                        SpindleOverride(vm.spindleSlide(st), st?.spindleRpm, onSet = vm::setSpindleRpm, onReset = vm::resetSpindleOverride)
                         StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset, height = 56.dp)
                     }
                 }
@@ -333,7 +334,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         }
         ControlsDrawer(open, feed = st?.feedOverride, connected = connected,
             onOpen = { o -> if (o != open) { vm.controlsOpen.value = o; autoOpened = false; vm.haptics.press() } },
-            onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset, state = st?.state)
+            onFeed = { vm.setFeedOverride(it) }, onHold = vm::hold, onResume = vm::resume, onReset = vm::reset, state = st?.state,
+            spindle = { SpindleOverride(vm.spindleSlide(st), st?.spindleRpm, onSet = vm::setSpindleRpm, onReset = vm::resetSpindleOverride) })
         }
     }
 }
@@ -343,6 +345,7 @@ private fun ControlsDrawer(
     open: Boolean, feed: Double?, connected: Boolean, onOpen: (Boolean) -> Unit,
     onFeed: (Int) -> Unit, onHold: () -> Unit, onResume: () -> Unit, onReset: () -> Unit,
     state: String? = null,
+    spindle: @Composable () -> Unit = {},
 ) {
     val swipeDp = 24.dp
     val swipePx = with(androidx.compose.ui.platform.LocalDensity.current) { swipeDp.toPx() }
@@ -377,6 +380,7 @@ private fun ControlsDrawer(
             exit = androidx.compose.animation.shrinkVertically(shrinkTowards = Alignment.Top)) {
             Column(Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 FeedOverride(feed, connected, onFeed)
+                spindle()
                 // Muted while idle; the relevant ones light up (see StopButtons).
                 StopButtons(state, connected, onHold, onResume, onReset)
             }
@@ -467,12 +471,41 @@ fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
+/** Label column of the override rows, wide enough for "Spindle" and "13,000" so the bars line up. */
+private val OVERRIDE_LABEL_W = 64.dp
+
+/**
+ * Spindle override in RPM (bar = 0..13,000). Dragging shows the RPM you'd set in place of
+ * "Spindle"; letting go sends it (M223, a % of the programmed RPM) and the label goes back. Right:
+ * the live RPM (like the tile). "100" = back to the programmed RPM. Off while the spindle isn't running.
+ */
+@Composable
+fun SpindleOverride(slide: com.z1pendant.SpindleSlide?, liveRpm: Double?, onSet: (Int) -> Unit, onReset: () -> Unit) {
+    var drag by remember { mutableStateOf<Int?>(null) }
+    if (slide == null) drag = null
+    val max = com.z1pendant.SPINDLE_MAX_RPM.toFloat()
+    val shown = drag ?: slide?.now ?: 0
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (drag != null) Text(Fmt.thousands(drag!!), modifier = Modifier.width(OVERRIDE_LABEL_W), maxLines = 1,
+            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+        else Text("Spindle", modifier = Modifier.width(OVERRIDE_LABEL_W), maxLines = 1)
+        Slider(value = shown.toFloat().coerceIn(0f, max),
+            onValueChange = { v -> slide?.let { drag = it.clamp((v / 100f).roundToInt() * 100) } },
+            onValueChangeFinished = { drag?.let(onSet); drag = null },
+            valueRange = 0f..max, enabled = slide != null, modifier = Modifier.weight(1f))
+        Text(if (slide != null) Fmt.thousands((liveRpm ?: 0.0).roundToInt()) else "—", fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp, modifier = Modifier.width(54.dp), maxLines = 1)
+        TextButton(onClick = onReset, enabled = slide != null && slide.pct != 100.0,
+            contentPadding = PaddingValues(4.dp)) { Text("100") }
+    }
+}
+
 @Composable
 fun FeedOverride(current: Double?, enabled: Boolean, onSet: (Int) -> Unit) {
     var drag by remember { mutableStateOf<Float?>(null) }
     val shown = drag ?: (current?.toFloat() ?: 100f)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Feed", modifier = Modifier.width(44.dp))
+        Text("Feed", modifier = Modifier.width(OVERRIDE_LABEL_W))
         Slider(value = shown.coerceIn(10f, 200f), onValueChange = { drag = ((it / 5f).roundToInt() * 5).toFloat() },
             onValueChangeFinished = { drag?.let { onSet(it.toInt()) }; drag = null },
             valueRange = 10f..200f, enabled = enabled, modifier = Modifier.weight(1f))

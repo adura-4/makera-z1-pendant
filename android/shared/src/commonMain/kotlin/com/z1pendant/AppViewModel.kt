@@ -98,6 +98,24 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         spindleAsk.value = false
     }
 
+    /**
+     * Spindle override slider (drawer), in RPM. null = slider off (not connected, spindle not
+     * running, or no programmed RPM reported).
+     */
+    fun spindleSlide(st: MachineStatus?): SpindleSlide? {
+        if (link.conn.value != ConnState.Connected || st == null || !spindleRunning(st)) return null
+        val target = st.spindleTarget?.takeIf { it > 0 } ?: return null
+        return spindleSlideFor(target, st.spindleOverride ?: 100.0)
+    }
+
+    /** Release on the slider → M223 S<the % of the programmed RPM that gives [rpm]>. */
+    fun setSpindleRpm(rpm: Int) {
+        val slide = spindleSlide(link.status.value) ?: return
+        log("▶ spindle override, ${Fmt.thousands(slide.clamp(rpm))} RPM")
+        link.dialect.spindleOverride(slide.percentFor(rpm)).forEach { link.sendLine(it) }
+    }
+    fun resetSpindleOverride() = link.dialect.spindleOverride(100.0).forEach { link.sendLine(it) }
+
     /** Stop box → M5. */
     fun stopSpindle() {
         haptics.press()
@@ -622,3 +640,20 @@ const val SPINDLE_MAX_RPM = 13_000
 val SPINDLE_PRESETS = listOf(4_000, 6_000, 8_000, 10_000, 12_000, SPINDLE_MAX_RPM)
 /** After an M3, the tile shows "on" this long while the RPM is still reading 0 (spin-up, status lag). */
 const val SPINDLE_PENDING_MS = 10_000L
+
+/** Spindle override slider in RPM, for programmed RPM [target] at override [pct] %. */
+data class SpindleSlide(val target: Double, val pct: Double, val lo: Int, val hi: Int) {
+    /** What the spindle is set to now: programmed × override. */
+    val now: Int get() = kotlin.math.round(target * pct / 100).toInt()
+    fun clamp(rpm: Int) = rpm.coerceIn(lo, hi)
+    /** Override % that gives [rpm], to 0.01 % (lands within ~1 RPM of the drag). */
+    fun percentFor(rpm: Int) = kotlin.math.round(clamp(rpm) / target * 10000) / 100
+}
+
+/**
+ * Bottom: half the programmed RPM (Makera's own slider stops at 50 %). Top: the spindle's max, or
+ * 300 % of programmed (the firmware's override limit), whichever is lower.
+ */
+fun spindleSlideFor(target: Double, pct: Double) = SpindleSlide(target, pct,
+    lo = kotlin.math.round(target * 0.5).toInt(),
+    hi = kotlin.math.round(minOf(SPINDLE_MAX_RPM.toDouble(), target * 3.0)).toInt())

@@ -86,6 +86,11 @@ doesn't say who started the spindle. Running = current RPM > 0, or an M3 sent in
 spindle is 150 W, 0–13,000 RPM (Makera's spec); the config holds motion `delay_on_s 8` after M3 and
 `delay_off_s 4` after M5.
 
+Override slider (drawer): in RPM, full bar = 13,000. Release sends `M223 S<desired / programmed × 100>`
+to 0.01 % (programmed = the status's target field; assumed to exclude the override, as in the community
+`SpindleControl`, **unverified on stock**). Range: 50 % of programmed (Makera's slider floor) up to
+13,000 or 300 % (firmware limit), whichever is lower. Makera's own app slider is 50–200 %.
+
 ## Zero / undo
 `zero` sends `G10 L20 P0 <axis>0`. Pressed again while the axis still reads 0.000 and hasn't moved, it
 sends `G10 L20 P0 <axis><previous value>` instead. The Zero hotkeys (X/Y/Z/A, XY, XYZ, selected) share it.

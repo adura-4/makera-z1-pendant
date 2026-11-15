@@ -13,6 +13,15 @@ import kotlin.math.abs
  * - [plain] = `v.toBigDecimal().stripTrailingZeros().toPlainString()` (from `Double.toString`).
  */
 object Fmt {
+    /** Two decimals, trailing zeros dropped: 121.25 → "121.25", 162.5 → "162.5", 125.0 → "125". */
+    fun trimmed2(v: Double): String {
+        val t = kotlin.math.round(v * 100).toLong()
+        val a = kotlin.math.abs(t)
+        val frac = (a % 100).toString().padStart(2, '0').trimEnd('0')
+        val s = if (frac.isEmpty()) "${a / 100}" else "${a / 100}.$frac"
+        return if (t < 0) "-$s" else s
+    }
+
     /** 12000 → "12,000" (RPM on the spindle tile and in the start box). */
     fun thousands(n: Int): String {
         val d = kotlin.math.abs(n).toString()

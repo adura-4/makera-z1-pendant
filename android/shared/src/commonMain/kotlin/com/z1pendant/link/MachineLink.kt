@@ -65,6 +65,10 @@ data class MachineStatus(
     val atMs: Long,                    // nowMs() when received
     /** Active tool number from `|T:tool,offset,…|`; null if not reported. */
     val tool: Int? = null,
+    /** Programmed spindle RPM (`|S:current,target,override,…|` field 2); the default 10000 while off. */
+    val spindleTarget: Double? = null,
+    /** Spindle speed override, % (M223). */
+    val spindleOverride: Double? = null,
 ) {
     val isIdle get() = state.equals("Idle", ignoreCase = true)
     val isAlarm get() = state.equals("Alarm", ignoreCase = true)
@@ -81,6 +85,8 @@ interface Dialect {
     fun vacuum(on: Boolean): List<String>
     fun spindleOn(rpm: Int): List<String>
     fun spindleOff(): List<String>
+    /** Spindle speed override, % of the programmed RPM (two decimals). */
+    fun spindleOverride(percent: Double): List<String>
     fun jogMove(axis: Char, dist: Double, feedMmMin: Double): String
     fun absoluteMode(): String
 }
@@ -98,6 +104,7 @@ object GrblishDialect : Dialect {
     override fun vacuum(on: Boolean) = listOf(if (on) "M851" else "M852")
     override fun spindleOn(rpm: Int) = listOf("M3 S$rpm")
     override fun spindleOff() = listOf("M5")
+    override fun spindleOverride(percent: Double) = listOf("M223 S${Fmt.trimmed2(percent)}")
     override fun jogMove(axis: Char, dist: Double, feedMmMin: Double) =
         "G91G1$axis${fmt(dist)}F${Fmt.fixed(feedMmMin, 0)}"
     override fun absoluteMode() = "G90"

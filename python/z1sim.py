@@ -44,6 +44,7 @@ class Machine:
         self.feed = 500.0
         self.fro = 100.0
         self.spindle_target = 10000.0          # the real Z1 reports its default target while off
+        self.spindle_factor = 100.0            # M223 spindle override, %
         self.spindle_on = False
         self.spindle_cur = 0.0
         self.spindle_at = time.monotonic()
@@ -90,6 +91,10 @@ class Machine:
                 self.absolute = False
             if "F" in vals and not (10 in g or 4 in g):
                 self.feed = vals["F"]
+            if 223 in m and "S" in vals:
+                self._spin()
+                self.spindle_factor = max(10.0, min(300.0, vals["S"]))
+                return ["ok\r\n"]
             if 220 in m and "S" in vals:
                 self.fro = max(10.0, min(300.0, vals["S"]))
                 return ["ok\r\n"]
@@ -251,7 +256,7 @@ class Machine:
     def _spin(self):
         """Ramp the measured RPM toward the target (on) or 0 (off), about 3000 RPM/s."""
         now = time.monotonic()
-        goal = self.spindle_target if self.spindle_on else 0.0
+        goal = min(13000.0, self.spindle_target * self.spindle_factor / 100) if self.spindle_on else 0.0
         step = 3000.0 * (now - self.spindle_at)
         self.spindle_at = now
         d = goal - self.spindle_cur
@@ -265,7 +270,7 @@ class Machine:
             f = self.cur[1] if self.cur and self.cur[0] != "dwell" and self.cur[1] else 0.0
             return (f"<{self.state}|MPos:{mp[0]:.4f},{mp[1]:.4f},{mp[2]:.4f},{mp[3]:.4f},0.0000"
                     f"|WPos:{wp[0]:.4f},{wp[1]:.4f},{wp[2]:.4f},{wp[3]:.4f},0.0000"
-                    f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},100.0,0"
+                    f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},{self.spindle_factor:.1f},0"
                     f"|T:{self.tool},0.000,-1|W:0.00>")
 
 
