@@ -79,8 +79,10 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             link.conn.value != ConnState.Connected -> "Not connected"
             st == null -> "No machine status"
             !st.isIdle -> "Machine is ${st.state}, not Idle"
-            // The firmware halts the machine on M3 without a real tool (0 = none; 100000+ = probe).
-            tool != null && (tool <= 0 || tool >= 100_000) -> "No tool loaded: the machine would halt. Load a tool first."
+            tool != null && isProbeTool(tool) -> "The probe is loaded (T$tool). Load a cutting tool first."
+            tool != null && tool < 0 -> "No tool loaded (empty collet). Load a tool first."
+            // Anything else the firmware won't spin (it halts the machine on M3 unless 0 < T < 100000).
+            tool != null && tool >= 100_000 -> "Tool T$tool can't run the spindle. Load a cutting tool first."
             rpm == null || rpm < 1 -> "Enter an RPM"
             rpm > SPINDLE_MAX_RPM -> "The Z1 spindle tops out at ${Fmt.thousands(SPINDLE_MAX_RPM)} RPM"
             else -> null
@@ -692,3 +694,10 @@ data class SpindleSlide(val target: Double, val pct: Double, val lo: Int, val hi
 fun spindleSlideFor(target: Double, pct: Double) = SpindleSlide(target, pct,
     lo = kotlin.math.round(target * 0.5).toInt(),
     hi = kotlin.math.round(minOf(SPINDLE_MAX_RPM.toDouble(), target * 3.0)).toInt())
+
+/**
+ * Probe tool numbers (community firmware ATCHandler: "a 3-axis probe must be installed (tool 0,
+ * 9999 or tool >= 999990)"); -1 = empty collet. Spinning a probe would wreck it, so the spindle
+ * start box refuses these even where the firmware's own check (0 < T < 100000) would let 9999 through.
+ */
+fun isProbeTool(t: Int) = t == 0 || t == 9999 || t >= 999_990

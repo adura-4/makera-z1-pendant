@@ -33,6 +33,11 @@ class SpindleTest {
         assertEquals("-12,000", Fmt.thousands(-12000))
     }
 
+    @Test fun probeToolNumbers() {
+        for (t in listOf(0, 9999, 999990, 999995)) assert(isProbeTool(t)) { "T$t is a probe" }
+        for (t in listOf(-1, 1, 4, 6, 9998, 99999)) assert(!isProbeTool(t)) { "T$t is not a probe" }
+    }
+
     @Test fun topPresetIsTheMax() = assertEquals(SPINDLE_MAX_RPM, SPINDLE_PRESETS.last())
 
     @Test fun overrideStatusFields() {
