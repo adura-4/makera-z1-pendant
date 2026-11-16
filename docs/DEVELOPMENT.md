@@ -16,13 +16,17 @@ For installing and using the app, see the [README](../README.md).
       runner with guards (ask first, Idle only).
     - `ui/*`: all the Compose UI: main screen, handwheel, jog pad, hotkey grid and editor, Move box,
       settings, console. `AppViewModel.kt`: state and actions.
+    - `probe/`: the probe wizard's model (`ProbeModel.kt`: setups, Makera's M480 commands, the
+      pendant's own touch sequences, which probe is in by its setter height) and controller
+      (`ProbeController.kt`: load/calibrate, runs, undo and set-zero).
     - `platform/Platform.kt`: what each phone supplies (preferences, hotkeys.json, haptics, clock,
       back button, hotkey file picker); `util/Fmt.kt`: number formatting identical to Java's.
   - `shared/src/androidMain`: SharedPreferences "z1pendant", filesDir/hotkeys.json, vibrator, file pickers.
   - `shared/src/iosMain`: NSUserDefaults, Documents/hotkeys.json, Taptic feedback, and
     `MainViewController()` for the iOS app. Not compiled on Windows; the Xcode project comes later on a Mac.
-  - `shared/src/androidUnitTest`: formatter vs Java, hotkey JSON vs org.json, frames, and the link
-    against `z1sim.py` (`gradlew :shared:testDebugUnitTest`).
+  - `shared/src/androidUnitTest`: formatter vs Java, hotkey JSON vs org.json, frames, probing
+    sequences, and the link and the probe wizard's controller against `z1sim.py`
+    (`gradlew :shared:testDebugUnitTest`).
   - `app/`: the Android shell: `MainActivity` (key events, Wi-Fi low-latency lock, keep-screen-on,
     adb test hooks), manifest, icon.
 - `python/z1proto.py`: wire protocol (frames, CRC, status and discovery parsers) with a self-test.
@@ -31,6 +35,10 @@ For installing and using the app, see the [README](../README.md).
 - `python/z1sim.py`: machine simulator: discovery broadcast, TCP 2222, G0/G1/G90/G91/G10 L20/G53/$H/$X,
   M220, M821/M822, M851/M852, `diagnose`, hold/resume/halt, a 32-block queue with the firmware's 100 ms
   start delay, and soft limits X −207..−1, Y −206..−1, Z −102..−1 that alarm like the real machine.
+- `python/z1sim_probe.py`: probing for the simulator: a block and a pocket to probe, G38.2/G38.6 with
+  `[PRB:]`, Makera's M480.1–.10 routines, M491 and `M6 T9999` with the tool-change wait (M490.2
+  continues) and the setter calibration. `simprobe dead` makes the probe never trigger;
+  `simprobe len <dz>` makes the setter trip dz mm higher, standing in for another probe.
 
 ## Protocol (Makera app decompile + community firmware `MakeraFrame.h`)
 `86 68 | len u16 BE | type | payload | CRC u16 BE | 55 AA`, len = 1 + payload + 2,

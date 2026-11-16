@@ -47,6 +47,7 @@ fun PendantTheme(content: @Composable () -> Unit) {
 fun App(vm: AppViewModel) {
     var settings by remember { mutableStateOf(false) }
     var console by remember { mutableStateOf(false) }
+    var probing by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Hotkey?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
     val confirm by vm.confirmFor.collectAsState()
@@ -61,7 +62,7 @@ fun App(vm: AppViewModel) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         // Full-screen pages live in the activity window (not Dialogs) so dispatchKeyEvent sees
         // every button press, which the "press any button to bind" flow relies on.
-        vm.onMainScreen = !(editorOpen || settings || console)
+        vm.onMainScreen = !(editorOpen || settings || console || probing)
         // Windows 600 dp or wider (iPad, Android tablet) get the wide layout; see LocalWide.
         androidx.compose.runtime.CompositionLocalProvider(LocalWide provides (maxWidth >= 600.dp),
             LocalLandscape provides (maxWidth >= 840.dp && maxWidth > maxHeight)) {
@@ -69,8 +70,9 @@ fun App(vm: AppViewModel) {
                 editorOpen -> HotkeyEditor(vm, editing) { editorOpen = false; editing = null; vm.capture.value = null }
                 settings -> SettingsScreen(vm) { settings = false }
                 console -> ConsoleScreen(vm) { console = false }
+                probing -> ProbeWizard(vm) { probing = false }
                 else -> MainScreen(vm, onSettings = { settings = true }, onConsole = { console = true },
-                    onEdit = { editing = it; editorOpen = true }, scroll = mainScroll)
+                    onEdit = { editing = it; editorOpen = true }, scroll = mainScroll, onProbe = { probing = true })
             }
         }
         SnackbarHost(snackHost, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing))

@@ -67,7 +67,7 @@ val LocalLandscape = androidx.compose.runtime.staticCompositionLocalOf { false }
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, onEdit: (Hotkey?) -> Unit,
-               scroll: androidx.compose.foundation.ScrollState = rememberScrollState()) {
+               scroll: androidx.compose.foundation.ScrollState = rememberScrollState(), onProbe: () -> Unit = {}) {
     val conn by vm.link.conn.collectAsState()
     val st by vm.link.status.collectAsState()
     val job by vm.job.collectAsState()
@@ -214,6 +214,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             ) else JogPad(vm, step = stepList[si], enabled = connected && running == null,
                 modifier = Modifier.align(Alignment.Center))
             ModeButton(padMode, Modifier.align(Alignment.TopStart)) { vm.setJogPad(!padMode) }
+            ProbeButton(Modifier.align(Alignment.TopEnd)) { vm.haptics.press(); onProbe() }
         }
         // Hotkeys: Edit (drag to rearrange) turns into Save; + adds one. Hold a tile 2 s to edit it.
         val hotkeyActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {

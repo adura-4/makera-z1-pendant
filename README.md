@@ -56,6 +56,15 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   turns blue and shows the live RPM, also during a job; tap it to stop (it asks first, every time). It refuses to start with no tool or the probe loaded
   (the firmware would halt the machine) and offers a − T1 + stepper to set the tool number (no motion).
 - Works alongside Makera Studio: both can be connected at the same time.
+- **Probing**: outside corner, inside corner, hole center, block center (round or square) and Top only,
+  with the 3D probe, the probe rod (metal parts) or the laser probe (Top only).
+  - **Set work zero** runs Makera's own probing routine (`M480`), the same one Makera Studio uses.
+    **Measure only** makes the same touches itself, changes nothing, and shows what it found; then
+    set any of the axes as work zero, or leave it. Set work zero has an undo for X and Y.
+  - Every time you open probing, the probe is calibrated on the tool setter first. It has to trigger
+    there, so a dead probe or an unplugged cable is caught before it touches your part.
+  - Each probe trips the setter at its own height, learned the first time you use it. If the probe
+    in the spindle isn't the one you picked, it says which one is in and asks you to swap.
 
 <p align="center">
   <img src="docs/screenshots/04_move.png" width="200" alt="Move box">
@@ -67,6 +76,15 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 <p align="center">
   <img src="docs/screenshots/09_tablet_dial.png" width="420" alt="Tablet, landscape, dial">
   <img src="docs/screenshots/10_tablet_jogpad.png" width="420" alt="Tablet, landscape, jog pad">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/11_probe_pick.png" width="160" alt="Probing: pick the probe and what to probe">
+  <img src="docs/screenshots/12_probe_check.png" width="160" alt="The wrong probe is in: swap it">
+  <img src="docs/screenshots/13_probe_position.png" width="160" alt="Move the probe into place">
+  <img src="docs/screenshots/14_probe_running.png" width="160" alt="Probing an outside corner">
+  <img src="docs/screenshots/15_probe_result.png" width="160" alt="Work zero set">
+  <br><sub>Probing: pick the probe and the operation, check the probe, move it into place, probe, result.</sub>
 </p>
 
 <p align="center">
@@ -178,6 +196,22 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 **Console** (icon next to the state pill)
 - Shows what was sent (→), the machine's replies (←), hotkeys run (▶) and a one-line summary of each
   jog. Type any command at the bottom.
+
+**Probing** (target button, top-right of the dial)
+1. **Probe**: pick the probe (3D probe, probe rod, laser probe) and the operation. The laser probe
+   only senses straight down, so it can only do Top only; the probe rod only triggers on metal.
+2. **Check the probe**: if the probe isn't in, **Load the …** runs the tool change (`M6 T9999`) and
+   waits while you swap. Then it calibrates on the tool setter. It does this every time you open
+   probing, because a probe can be swapped by hand without the machine knowing.
+   - If the reading belongs to a different probe, it says which one is in. **Load the …** swaps in
+     the one you picked; **Use the … instead** appears only if the probe that's in can do what you
+     picked (all three can do Top only).
+3. **Move the probe into place** with the dial or jog pad. The hint says where to park it.
+4. **Settings**: start offsets (how far it moves out from where it's parked), side depth and tip
+   diameter, then **Set work zero** or **Measure only**. It asks once before it moves.
+5. **Probing**: the touches as they happen. **Stop** halts the machine at once (then Unlock).
+   **Result**: the new zero, or what was measured. **Probe again** keeps the calibration; a run
+   that never touched anything asks for a new calibration, since the probe may be dead.
 
 **Settings**
 - Machine connection, vibration strength, degrees per click, volume-key jogging, soft-limit clamping,

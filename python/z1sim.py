@@ -8,6 +8,8 @@ machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroin
   * '?' -> 0x81 status, '!' hold, '~' resume, 0x18 halt (-> Alarm, needs $X), 0x19 stop (flush queue).
   * Jobs: `play <name>` plays <--sd>/<name> with |P:line,percent,seconds| in the status, ~4 s in
     state Tool for each M6, and frame 0xB7 answering "path|md5" of the playing file.
+  * 3D probing (z1sim_probe.py): a part to probe, G38.2/G38.6 with [PRB:], M480.1-.10, M491, M6 T with
+    the tool-change wait (M490.2 continues) and the probe calibrated on the setter; `simprobe dead`.
   * Lines: G0/G1 (G90/G91, F), G4, G10 L20 P0, G92, G53, $H, $X, M220 S, M3/M5 S, M6 T, M999, anything
     else just gets "ok". Replies are 0x90 "ok\\r\\n".
   * Motion runs in real time at the commanded feed (G0 = axis max rate) x feed override, with a
@@ -27,6 +29,7 @@ import time
 from collections import deque
 
 import z1proto as P
+from z1sim_probe import ProbeSim
 
 AXES = "XYZA"
 MAX_RATE = {"X": 3000.0, "Y": 3000.0, "Z": 1000.0, "A": 1800.0}   # mm/min (deg/min for A)
@@ -39,7 +42,7 @@ def log(msg):
     print(f"{time.strftime('%H:%M:%S')}.{int(time.time() * 1000) % 1000:03d} {msg}", flush=True)
 
 
-class Machine:
+class Machine(ProbeSim):
     def __init__(self):
         self.lock = threading.RLock()
         self.mpos = [-100.0, -100.0, -50.0, 0.0]
@@ -68,6 +71,9 @@ class Machine:
         self.tool_target = -1                     # |T: field 3: the tool a tool change asks for
         self.tool_wait = False                    # waiting for the user to swap the tool (state "Tool")
         self.sd = "sim_sd"                        # folder standing in for the SD card (/sd/gcodes/<name>)
+        self.last_prb = None
+        self.speed = 1.0                          # --speed: motion runs this many times faster
+        self.probe_init()                         # 3D probing (z1sim_probe.py)
 
     # --- G-code -------------------------------------------------------------------------
     def line(self, text: str) -> list[str]:
@@ -102,6 +108,9 @@ class Machine:
                 self.absolute = False
             if "F" in vals and not (10 in g or 4 in g):
                 self.feed = vals["F"]
+            r = self.probe_line(t, g, m, vals)    # G38.x, M480, M491, M6 T, M490.x … (z1sim_probe.py)
+            if r is not None:
+                return r
             if 223 in m and "S" in vals:
                 self._spin()
                 self.spindle_factor = max(50.0, min(200.0, vals["S"]))   # stock Z1 clamp
@@ -166,7 +175,11 @@ class Machine:
                     self.lock.release()
                     time.sleep(0.01)
                     self.lock.acquire()
-                self.queue.append((tgt, None if rapid else self.feed, self.feed_line))
+                cut = self.guard_cut(start, tgt)    # probe in: a move into the part stops there and alarms
+                if cut is not None:
+                    self.queue.append((cut, None if rapid else self.feed, self.feed_line, "guard"))
+                else:
+                    self.queue.append((tgt, None if rapid else self.feed, self.feed_line))
                 return ["ok\r\n"]
             return ["ok\r\n"]
 
@@ -331,19 +344,25 @@ class Machine:
                 dist = math.sqrt(sum(x * x for x in d))
                 if dist < 1e-6:
                     self.mpos = list(tgt)
-                    self.cur = None
+                    self._finished()
                     continue
                 if feed is None:
                     feed = min(MAX_RATE[AXES[i]] for i in range(4) if abs(d[i]) > 1e-9)
                 else:
                     feed = feed * self.fro / 100.0
                     feed = min([feed] + [MAX_RATE[AXES[i]] for i in range(4) if abs(d[i]) > 1e-9])
-                step = feed / 60.0 * dt
+                step = feed / 60.0 * dt * self.speed
                 if step >= dist:
                     self.mpos = list(tgt)
-                    self.cur = None
+                    self._finished()
                 else:
                     self.mpos = [self.mpos[i] + d[i] / dist * step for i in range(4)]
+
+    def _finished(self):
+        guard = len(self.cur) > 3 and self.cur[3] == "guard"
+        self.cur = None
+        if guard:
+            self._alarm("unexpected probe trigger")
 
     def _spin(self):
         """Ramp the measured RPM toward the target (on) or 0 (off), about 3000 RPM/s."""
@@ -363,7 +382,7 @@ class Machine:
             return (f"<{self.state}|MPos:{mp[0]:.4f},{mp[1]:.4f},{mp[2]:.4f},{mp[3]:.4f},0.0000"
                     f"|WPos:{wp[0]:.4f},{wp[1]:.4f},{wp[2]:.4f},{wp[3]:.4f},0.0000"
                     f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},{self.spindle_factor:.1f},0"
-                    f"|T:{self.tool},-7.100,{self.tool_target}{self.job_field()}|W:0.00>")
+                    f"|T:{self.tool},{self.tlo:.3f},{self.tool_target}{self.job_field()}|W:0.00>")
 
 
 class Client(threading.Thread):
@@ -535,11 +554,13 @@ def main():
     ap.add_argument("--port", type=int, default=P.TCP_PORT)
     ap.add_argument("--latency-ms", type=float, default=0)
     ap.add_argument("--no-broadcast", action="store_true")
+    ap.add_argument("--speed", type=float, default=1.0, help="run motion this many times faster (tests)")
     ap.add_argument("--sd", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_sd"),
                     help="folder standing in for the SD card: 'play <name>' plays <sd>/<name>")
     a = ap.parse_args()
     m = Machine()
     m.sd = a.sd
+    m.speed = a.speed
     threading.Thread(target=m.run, daemon=True).start()
     if not a.no_broadcast:
         threading.Thread(target=broadcaster, args=(a.name, a.port), daemon=True).start()

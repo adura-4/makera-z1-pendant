@@ -257,6 +257,11 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     }
     val runner = HotkeyRunner(link, viewModelScope, host) { id -> hotkeys.value.firstOrNull { it.id == id } }
 
+    /** 3D probing: setup, probe in / calibrated this session, and runs (Makera's routine or Measure only). */
+    val probe = com.z1pendant.probe.ProbeController(link, viewModelScope, prefs,
+        onSend = { ownMotion.sent(nowMs()) },
+        setJogEnabled = { on -> jog.enabled = on; if (!on) jog.cancelPending() })
+
     init {
         haptics.strength = hapticStrength.value
         jog.axis = axis.value
