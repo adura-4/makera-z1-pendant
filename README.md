@@ -7,7 +7,7 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 <p align="center">
   <img src="docs/screenshots/01_dial.png" width="240" alt="Dial mode">
   <img src="docs/screenshots/02_jogpad.png" width="240" alt="Jog pad mode">
-  <img src="docs/screenshots/03_drawer.png" width="240" alt="Feed override, Hold, Resume, Reset">
+  <img src="docs/screenshots/03_drawer.png" width="240" alt="Feed override, Hold, Resume, Stop">
 </p>
 
 > **Not affiliated with Makera.** This is an independent, community project. It moves a real machine:
@@ -29,38 +29,62 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   G-code, or multi-step sequences. Optional "ask before running" and "only when Idle" guards.
   Bind any hotkey to a physical button: volume keys, Bluetooth remotes and gamepads, USB keyboards.
   Import/export the whole set as a file.
-- **Feed override, spindle speed, Hold, Resume, Reset** in a drawer at the bottom (swipe up).
+- **Feed override, spindle speed, Hold, Resume, Stop** in a drawer at the bottom (swipe up).
   - **−** / **+** step 5 % per tap (one command once you stop tapping; holding doesn't repeat), or
     drag the bar anywhere (the part past 100 % turns a darker blue); both send only when you're done.
     The spindle bar is in RPM (full = 13,000): while you drag, its label shows the RPM you'll get.
   - Tap the % for a small "Back to 100%?" prompt right on that row.
   - It opens by itself when a job runs, the machine holds or alarms, or something else moves it.
-  - Hold, Resume and Reset stay quiet while idle and light up when they matter: Hold and Reset while
-    moving, Resume on hold, Reset in an alarm.
+  - Hold, Resume and Stop stay quiet while idle and light up when they matter: Hold and Stop while
+    moving, Resume on hold, Stop in an alarm. During a job, Stop reads **Cancel job**.
+- **Files**: browse the machine's SD card, upload from your phone, rename, delete, and tap a file for
+  its sheet: **Run**, and **Job info** (its tools and header).
 - **Run a job**: the Run tile (or Run in a file's sheet) sets up and starts a job the way Makera Studio does.
-  A map of the bed shows the toolpath box, the origin, the Z probe point and the leveling grid as you go.
-  1. **Origin**: keep the current zero, **Anchor 1** plus an offset (with "Same as CAM" from the file's
-     header), where the spindle is, or the 3D probe (its wizard comes back here).
+  It only opens while the machine is Idle. A map of the bed shows the **cutting area** (the box the cutting
+  moves cover), the origin, where the spindle is, the anchor bracket, the Z probe point and the leveling
+  grid as you go, and warns if the job would run past the bed.
+  1. **Origin**: keep the current zero, **Anchor 1** plus an offset (0, 0 is the bracket's inside
+     corner), where the spindle is, or the **3D probe**: Next opens probing, and you can only go on once
+     it has set an X/Y zero.
   2. **Checks**: Probe Z at start (required with Anchor 1), the margin scan (**Scan now**, and/or at the
-     start of the job) and auto leveling. All of them use the **laser probe**: the pendant swaps it in or
-     measures it on the tool setter first, and only carries on when its length is the laser probe's.
+     start of the job) and auto leveling (start height, edge inset, grid points). They start off on every
+     run. All of them use the **laser probe**: the pendant swaps it in or measures it on the tool setter
+     first, and only carries on when its length is the laser probe's. During the swap, the main button
+     reads **Next** and continues it.
   3. **Assist**: auto vacuum, auto blow, bed clean, anti-static (they stay on in the machine).
-  4. **Run**: a summary, then **Start job**. The old leveling mesh is always cleared first. It refuses a
-     toolpath that runs past the bed, or a file that would cut before its first tool change.
+  4. **Run**: the estimated machine time, the number of tool changes, each tool in the order it's used
+     with its own time, the **precheck routine** (what runs before the first cut, if anything), origin
+     and assist, then **Start job**. The old leveling mesh is always cleared first. It refuses a cutting
+     area that runs past the bed, or a file that would cut before its first tool change.
+  - **Leveling safety**: the grid keeps the inset in from the cutting area's edge (lead-ins and facing
+    passes run past the stock), and each touch may only go 2 mm below the stock top (Settings → Run). A
+    touch that finds nothing stops the job instead of running down to the vise.
   During the job, a **Mesh** chip in the job details opens this job's leveling grid as a heat map, and a
   popup says which tool to put in at each tool change (also after reconnecting), with Continue.
-- **Running jobs** (from Makera Studio, the Makera app, or the machine): the pill shows "Run 42%",
-  and the drawer shows the progress and time left. Swipe the drawer up again for the job details:
-  file, percent and line, elapsed, time left and finish time, feed and spindle actual vs set, the
-  tool change it's waiting for, and the job's tools in order with their descriptions (read from the
-  file's CAM header comments), now and next.
-  When the job ends, feed and spindle overrides go back to 100 % so they don't carry into the next job.
+- **Running jobs** (from the pendant, Makera Studio, the Makera app, or the machine): the pill shows
+  "Run 42%", and the drawer shows the progress and time left. A job started from the pendant opens the
+  job details by themselves; swipe down for the slim line. The details: file, percent and line,
+  elapsed, time left and finish time, feed and spindle actual vs set, the tool change it's waiting for,
+  and the job's tools in order (with descriptions when the file's comments have them), now and next with
+  when the next one is due.
+  - Time left comes from the file itself: the pendant adds up every move at its feed (and the rapids),
+    then follows how fast the machine is really going and your feed override. Times read like
+    **13m 22s**, or **1h 05m** past an hour.
+  - When the job ends, feed and spindle overrides go back to 100 % so they don't carry into the next job.
+- **Cancel job**: during a job the red button reads **Cancel job**. It sends the same halt as Makera
+  Studio's Stop (it doesn't reset the machine), clears the alarm that follows, and takes you back to the
+  main screen.
+- **Alarms**: if the machine goes into Alarm (e-stop, probe fail, soft limit…), a sheet says why and has
+  **Clear alarm**. Tap the red Alarm status to open it again; the drawer shows the same strip. If a job
+  was left open (after an e-stop), clearing the alarm ends it.
 - **Tablets** (iPad, Android tablets): a bigger readout, and the dial / jog pad resize around your
   hotkeys. Turn the tablet sideways for a side-by-side layout with everything on screen at once:
   readout, hotkeys and the stop buttons on the left, steps and a big dial or jog pad on the right.
 - **Soft-limit protection**: jogs are clamped and typed moves refused before they reach the
   machine's soft limits, so they don't trip an alarm.
 - **Console**: every command sent and every reply, with time stamps, plus a box to type commands.
+- **Machine name**: shows at the top even when you connect by IP address (read from the machine).
+  Settings can hide its serial number, for screen recordings.
 - **Toggles that show state**: the Light and Vacuum tiles are bright when on, dim when off (read back
   from the machine).
 - **Spindle**: the Spindle tile is dim while off; tap it for the start box (always asks): pick a preset
@@ -201,9 +225,18 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
   your phone, remote or gamepad. **Test run** tries it out.
 
 **Bottom drawer**
-- Swipe up on the handle at the bottom for Feed override, **Hold**, **Resume** and **Reset**.
-- **Reset** asks first: it's an emergency stop (Ctrl-X). Motion and the spindle stop, a running job
-  is cancelled, and the machine halts until you Unlock. To pause and carry on, use **Hold**.
+- Swipe up on the handle at the bottom for Feed override, **Hold**, **Resume** and **Stop**.
+- **Stop** (**Cancel job** during a job) asks first. It stops everything at once (Ctrl-X, the same as
+  Makera Studio's Stop): motion and the spindle stop and a running job is cancelled. The pendant then
+  clears the alarm for you, so you can move again. To pause and carry on, use **Hold**.
+
+**Alarms**
+- When the machine alarms, a sheet opens with the reason and **Clear alarm**. After an e-stop, release
+  it first. Tap the red **Alarm** status any time to open the sheet again.
+
+**Files** (folder icon next to the state pill)
+- Tap a folder to open it, a file for its sheet (**Run**, **Job info**, **Rename**, **Delete**). Hold a
+  file to select several. **Run** is off for the file the machine is playing, and while it isn't Idle.
 
 **Console** (icon next to the state pill)
 - Shows what was sent (→), the machine's replies (←), hotkeys run (▶) and a one-line summary of each
@@ -226,8 +259,9 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
    that never touched anything asks for a new calibration, since the probe may be dead.
 
 **Settings**
-- Machine connection, vibration strength, degrees per click, volume-key jogging, soft-limit clamping,
-  keep screen on, and hotkey export/import/reset.
+- Machine connection, hide the serial number, vibration strength, degrees per click, volume-key
+  jogging, soft-limit clamping, keep screen on, the leveling depth limit (how far below the stock top a
+  leveling touch may go, 2 mm by default), and hotkey export/import/reset.
 - No vibration from the dial? The phone's **Use vibration & haptics** must be on (Settings → Sound &
   vibration → Vibration & haptics). **Touch feedback** can stay off on Android 13 and newer.
 
@@ -246,7 +280,11 @@ The full source is here. Make it your own.
   key, so an APK you build can't update one installed from the releases page (uninstall that first).
 - **Python tools** (`python/`, Python 3, no extra packages):
   - `z1sim.py`: a machine simulator. Point the app at your computer's IP to try everything with no machine.
+    `z1sim_probe.py` adds a part on the table for probing, and the sim keeps an SD card folder for Files.
   - `z1client.py`: a command-line client (discover, read status, send a line).
+  - `z1upload.py`: send a file to the machine's SD card over Wi-Fi, or fetch one back (`test_z1upload.py`
+    runs it against the simulator).
+  - `fsprobe.py`: prints the Wi-Fi board's raw replies to file commands (research tool).
   - `z1proto.py`: the protocol code, with a self-test.
 
 How it works under the hood (protocol, jog engine, what's been confirmed on a real Z1):
