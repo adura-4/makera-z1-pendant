@@ -124,6 +124,20 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 </p>
 
 <p align="center">
+  <img src="docs/screenshots/16_files.png" width="200" alt="Files: the SD card, and a file's sheet with Run">
+  <img src="docs/screenshots/17_run_origin.png" width="200" alt="Run: the origin, with the bed map">
+  <img src="docs/screenshots/18_run_checks.png" width="200" alt="Run: Z probe, margin scan and auto leveling">
+  <img src="docs/screenshots/19_run_summary.png" width="200" alt="Run: time, tools and the precheck routine">
+  <br><sub>Files, then Run: the origin, the checks, and the summary with Start job.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/20_job_details.png" width="240" alt="A job running: progress, time left, tools, Cancel job">
+  <img src="docs/screenshots/21_alarm.png" width="240" alt="The alarm sheet with Clear alarm">
+  <br><sub>A job running (with Cancel job), and the alarm sheet.</sub>
+</p>
+
+<p align="center">
   <img src="docs/screenshots/job_drawer_demo.gif" width="300" alt="A job running: the drawer, overrides, job details and a tool change">
   <br><sub>A job running: overrides, the job details, the tool list and a tool change.</sub>
 </p>
