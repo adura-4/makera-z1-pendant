@@ -37,6 +37,18 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   - It opens by itself when a job runs, the machine holds or alarms, or something else moves it.
   - Hold, Resume and Reset stay quiet while idle and light up when they matter: Hold and Reset while
     moving, Resume on hold, Reset in an alarm.
+- **Run a job**: the Run tile (or Run in a file's sheet) sets up and starts a job the way Makera Studio does.
+  A map of the bed shows the toolpath box, the origin, the Z probe point and the leveling grid as you go.
+  1. **Origin**: keep the current zero, **Anchor 1** plus an offset (with "Same as CAM" from the file's
+     header), where the spindle is, or the 3D probe (its wizard comes back here).
+  2. **Checks**: Probe Z at start (required with Anchor 1), the margin scan (**Scan now**, and/or at the
+     start of the job) and auto leveling. All of them use the **laser probe**: the pendant swaps it in or
+     measures it on the tool setter first, and only carries on when its length is the laser probe's.
+  3. **Assist**: auto vacuum, auto blow, bed clean, anti-static (they stay on in the machine).
+  4. **Run**: a summary, then **Start job**. The old leveling mesh is always cleared first. It refuses a
+     toolpath that runs past the bed, or a file that would cut before its first tool change.
+  During the job, a **Mesh** chip in the job details opens this job's leveling grid as a heat map, and a
+  popup says which tool to put in at each tool change (also after reconnecting), with Continue.
 - **Running jobs** (from Makera Studio, the Makera app, or the machine): the pill shows "Run 42%",
   and the drawer shows the progress and time left. Swipe the drawer up again for the job details:
   file, percent and line, elapsed, time left and finish time, feed and spindle actual vs set, the

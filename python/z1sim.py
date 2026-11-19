@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import math
 import os
+import shutil
 import re
 import socket
 import threading
@@ -45,6 +46,7 @@ def log(msg):
 class Machine(ProbeSim):
     def __init__(self):
         self.lock = threading.RLock()
+        self.name = "Makera_Z1P_SIM"                 # --name; also the config's wifi.machine_name
         self.mpos = [-100.0, -100.0, -50.0, 0.0]
         self.wco = [0.0, 0.0, 0.0, 0.0]          # work offset: wpos = mpos - wco
         self.absolute = True
@@ -74,6 +76,10 @@ class Machine(ProbeSim):
         self.last_prb = None
         self.speed = 1.0                          # --speed: motion runs this many times faster
         self.probe_init()                         # 3D probing (z1sim_probe.py)
+        # Run flow (captured from Studio 2026-11-17): buffer + M495, assist modes, leveling grid.
+        self.buffered = None
+        self.assist = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}   # M331[.n] on / M332[.n] off
+        self.mesh = None                               # rows of Z corrections (front first)
 
     # --- G-code -------------------------------------------------------------------------
     def line(self, text: str) -> list[str]:
@@ -83,6 +89,28 @@ class Machine(ProbeSim):
         with self.lock:
             if t.startswith("PLAY"):
                 return self.play(text.strip()[4:].strip())
+            if t.startswith("CONFIG-GET"):
+                key = text.split()[-1]
+                v = {"coordinate.anchor1_x": "-190.69", "coordinate.anchor1_y": "-194.58",
+                     "wifi.machine_name": self.name}.get(key)
+                return [f"sd: {key} is set to {v}\r\n" if v else f"sd: {key} is not in config\r\n", "ok\r\n"]
+            if t.startswith("BUFFER"):
+                self.buffered = text.strip()[6:].strip()
+                return [f"Command buffered: {self.buffered}\n\r\n", "ok\r\n"]
+            mm = re.fullmatch(r"M33([12])(?:\.(\d))?", t)
+            if mm:
+                idx = int(mm.group(2) or 0); on = mm.group(1) == "1"
+                self.assist[idx] = 1 if on else 0
+                name = ["extend out", "auto blowing", "auto bed cleaning", "extout", "static electricity removal"][idx]
+                return [f"turning {name} mode {'on' if on else 'off'}\r\n", "ok\r\n"]
+            if t == "M370":
+                self.mesh = None; return ["ok\r\n"]
+            if t == "M375.1":
+                if not self.mesh:
+                    return ["No grid\r\n", "ok\r\n"]
+                return ["".join(" ".join(f"{v:.4f}" for v in row) + " \n" for row in self.mesh), "ok\r\n"]
+            if t.startswith("M495"):
+                return self.m495(t)
             if t in ("$X", "M999"):
                 if self.state == "Alarm":
                     self.state = "Idle"
@@ -140,6 +168,11 @@ class Machine(ProbeSim):
             if 5 in m:
                 self._spin()
                 self.spindle_on = False
+            if 10 in g and vals.get("L") == 2:     # the work offset itself, machine coordinates
+                for i, ax in enumerate(AXES):
+                    if ax in vals:
+                        self.wco[i] = vals[ax]
+                return ["ok\r\n"]
             if 10 in g and vals.get("L") == 20:
                 for i, ax in enumerate(AXES):
                     if ax in vals:
@@ -185,19 +218,87 @@ class Machine(ProbeSim):
 
     # --- jobs ------------------------------------------------------------------------------
     def sd_path(self, path: str) -> str:
-        return os.path.join(self.sd, os.path.basename(path))
+        """/sd/gcodes/<rel> -> <sd folder>/<rel> (subfolders kept); any other path -> its file name."""
+        rel = path[len("/sd/gcodes/"):] if path.startswith("/sd/gcodes/") else os.path.basename(path)
+        parts = [p for p in rel.split("/") if p]
+        if not parts or ".." in parts:
+            return os.path.join(self.sd, "_invalid_")
+        return os.path.join(self.sd, *parts)
+
+    def sd_dir(self, path: str) -> str | None:
+        """/sd/gcodes[/<rel>] -> the folder on disk; None outside /sd/gcodes."""
+        p = path.rstrip("/")
+        if p == "/sd/gcodes":
+            return self.sd
+        if not p.startswith("/sd/gcodes/"):
+            return None
+        return self.sd_path(p)
+
+    def fs_command(self, text: str) -> list[tuple[int, str]]:
+        """The Wi-Fi board's own ls -s / mkdir / mv / rm, with the replies measured on the Z1
+        (reference/file_commands_notes.md): 0x83 listing chunks, 0x84 'ok' or 'Load directory finished.',
+        0x85 errors, 0x90 info. Spaces inside paths travel as 0x01."""
+        parts = text.strip().split(" ")
+        cmd, args = parts[0], [a.replace("\x01", " ") for a in parts[1:] if a]
+        if cmd == "ls":
+            local = self.sd_dir(args[-1] if args and args[-1] != "-s" else "/sd/gcodes")
+            lines = []
+            if local and os.path.isdir(local):
+                for name in sorted(os.listdir(local)):
+                    full = os.path.join(local, name)
+                    ts = time.strftime("%Y%m%d%H%M%S", time.gmtime(os.path.getmtime(full)))
+                    enc = name.replace(" ", "\x01")
+                    lines.append(f"{enc}/ 0 {ts}\r\n" if os.path.isdir(full) else f"{enc}  {os.path.getsize(full)} {ts}\r\n")
+            out, chunk = [], ""
+            for line in lines:
+                if chunk and len(chunk) + len(line) > 400:
+                    out.append((0x83, chunk)); chunk = ""
+                chunk += line
+            if chunk:
+                out.append((0x83, chunk))
+            return out + [(0x84, "Load directory finished.\r\n")]
+        if cmd == "mkdir" and len(args) == 1:
+            local = self.sd_dir(args[0])
+            try:
+                os.mkdir(local)
+                return [(0x84, "ok\r\n"), (0x90, f"created directory {args[0]}\r\n")]
+            except (OSError, TypeError):
+                return [(0x85, f"could not create directory {args[0]}\r\n")]
+        if cmd == "mv" and len(args) == 2:
+            a, b = self.sd_dir(args[0]), self.sd_dir(args[1])
+            try:
+                os.rename(a, b)
+                return [(0x84, "ok\r\n"), (0x90, f"renamed {args[0]} to {args[1]}\r\n")]
+            except (OSError, TypeError):
+                return [(0x85, f"Could not rename {args[0]} to {args[1]}\r\n")]
+        if cmd == "rm" and len(args) == 1:
+            local = self.sd_dir(args[0])
+            try:
+                if local and os.path.isdir(local):
+                    shutil.rmtree(local)
+                else:
+                    os.remove(local)
+                return [(0x84, "ok\r\n")]
+            except (OSError, TypeError):
+                return [(0x85, f"Could not delete {args[0]} \r\n")]
+        return [(0x85, f"{cmd}: bad arguments\r\n")]
 
     def play(self, path: str) -> list[str]:
         """Play a file like the firmware's player: lines go to the planner in order, |P: reports
         line / percent of the file read / seconds run, M6 waits ~4 s in state Tool (standing in for
         the user's OK), and after the end |P: shows 100 % for about a second."""
+        path = path.replace(chr(1), " ")          # the board space character
         local = self.sd_path(path)
         if self.job or not os.path.isfile(local):
             return [f"error: can't play {path}\r\n"]
         data = open(local, "rb").read()
-        sd = "/sd/gcodes/" + os.path.basename(path)
+        sd = path if path.startswith("/sd/gcodes/") else "/sd/gcodes/" + os.path.basename(path)
         self.job = {"path": sd, "md5": hashlib.md5(data).hexdigest(), "size": len(data), "read": 0,
                     "line": 0, "start": time.time(), "paused": 0.0, "done_at": None}
+        pre = self.buffered; self.buffered = None
+        if pre:                                    # the buffered line runs before line 1
+            self.msgs.append(pre + "\n\r\n")
+            self.m495(pre.upper().replace(" ", ""))
         threading.Thread(target=self._player, args=(data.decode("utf-8", "replace").splitlines(keepends=True),),
                          daemon=True).start()
         return [f"Playing {sd}\r\n", "ok\r\n"]
@@ -213,6 +314,8 @@ class Machine(ProbeSim):
 
     def _player(self, lines):
         j = self.job
+        while self.script_busy:                   # the buffered M495 first
+            time.sleep(0.05)
         for n, raw in enumerate(lines, 1):
             j["read"] += len(raw.encode())
             code = re.sub(r"\([^)]*\)", "", raw.split(";")[0]).strip().upper().replace(" ", "")
@@ -381,8 +484,196 @@ class Machine(ProbeSim):
             f = self.cur[1] if self.cur and self.cur[0] != "dwell" and self.cur[1] else 0.0
             return (f"<{self.state}|MPos:{mp[0]:.4f},{mp[1]:.4f},{mp[2]:.4f},{mp[3]:.4f},0.0000"
                     f"|WPos:{wp[0]:.4f},{wp[1]:.4f},{wp[2]:.4f},{wp[3]:.4f},0.0000"
-                    f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},{self.spindle_factor:.1f},0"
+                    f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},{self.spindle_factor:.1f},"
+                    f"{self.assist[0]},29.0,22.8,{self.assist[1]},{self.assist[2]},{self.assist[3]},{self.assist[4]}"
+                    + (f"|O:{max(abs(v) for r in self.mesh for v in r):.3f}" if self.mesh else "") +
                     f"|T:{self.tool},{self.tlo:.3f},{self.tool_target}{self.job_field()}|W:0.00>")
+
+
+class Transfers:
+    """The Wi-Fi board's file transfers, as decompiled (reference/upload_protocol_notes.md):
+    * One owner: the connection slot that sent the accepted 0xB0 (FUN_42012fa0). A 0xB0 from anyone else
+      gets 0x91. 0xB1-0xB6 from the owner go into a one-frame mailbox (a newer frame overwrites);
+      from anyone else they're dropped.
+    * Every accepted 0xB0 is queued for one task that runs the handlers one after another, and each
+      handler clears the owner when it ends, even with more queued (so a queued one runs ownerless).
+    * Connection slots are reused: a transfer whose client dropped keeps running until 9 s pass with no
+      frame, and the next connection given that slot inherits it.
+    * Upload (FUN_4201f750): open "wb", wait for the client's MD5, ask for the view (empty B2), ask for
+      packets (B3 seq). Cancel ends it silently; cancel or timeout removes the file and its MD5 entry.
+    * Download (FUN_4201ec70): B1 md5 first; B2 -> count + u16 8192; B3 seq -> data; B4 -> ok."""
+
+    TIMEOUT = 9.0
+    REASK = 3.5
+
+    def __init__(self, machine):
+        self.m = machine
+        self.lock = threading.Lock()
+        self.slots = {}
+        self.owner = 0
+        self.queue = deque()
+        self.mail = None
+        self.drop_upload_seq = 0              # "simxfer drop <seq>": lose the first copy of that data packet
+        threading.Thread(target=self._task, daemon=True).start()
+
+    def connect(self, client) -> int:
+        with self.lock:
+            slot = next(i for i in range(1, 100) if i not in self.slots)
+            self.slots[slot] = client
+            return slot
+
+    def disconnect(self, slot):
+        with self.lock:
+            self.slots.pop(slot, None)
+
+    def send(self, slot, ptype, data: bytes):
+        c = self.slots.get(slot)
+        if c:
+            c.txb(ptype, data)
+
+    def frame(self, slot, ptype, payload):
+        with self.lock:
+            if ptype == 0xB0:
+                if self.owner not in (0, slot):
+                    self.send(slot, 0x91, b"Other client is currently uploading/downloading files. Please try again later.")
+                    return
+                self.owner = slot
+                self.queue.append((slot, payload))
+            elif self.owner == slot:
+                self.mail = (ptype, payload)
+
+    def _task(self):
+        while True:
+            with self.lock:
+                job = self.queue.popleft() if self.queue else None
+            if not job:
+                time.sleep(0.01)
+                continue
+            slot, payload = job
+            text = payload.decode("ascii", "replace").strip().strip("\x00").replace("\x01", " ")
+            try:
+                if text.startswith("upload"):
+                    self._upload(slot, text[len("upload"):].strip())
+                else:
+                    self._download(slot, text[len("download"):].strip() if text.startswith("download") else text)
+            finally:
+                with self.lock:
+                    self.owner = 0
+                    self.mail = None
+
+    def _get(self):
+        with self.lock:
+            m, self.mail = self.mail, None
+        if m is None:
+            time.sleep(0.01)
+        return m
+
+    def _upload(self, slot, path):
+        local = self.m.sd_path(path)
+        try:
+            f = open(local, "wb")
+        except OSError:
+            self.send(slot, 0xB5, f"Error: failed to open file [{path}]!".encode())
+            return
+        md5file = None
+        state, seq, count = "md5", 0, 0
+        last = asked = time.time()
+
+        def abort():
+            f.close()
+            for x in (local, md5file):
+                if x:
+                    try:
+                        os.remove(x)
+                    except OSError:
+                        pass
+
+        def request():
+            if state == "md5":
+                self.send(slot, 0xB1, b"")
+            elif state == "view":
+                self.send(slot, 0xB2, b"")
+            else:
+                self.send(slot, 0xB3, seq.to_bytes(4, "big"))
+
+        while True:
+            now = time.time()
+            if now - last > self.TIMEOUT:
+                self.send(slot, 0xB5, b"Info: Machine receive file time out!\r\n")
+                return abort()
+            if now - asked > self.REASK:
+                request()
+                asked = now
+            m = self._get()
+            if m is None:
+                continue
+            ptype, payload = m
+            last = asked = time.time()
+            if ptype == 0xB5:
+                return abort()                         # the board sends nothing back for an upload cancel
+            if state == "md5" and ptype == 0xB1:
+                rel = os.path.relpath(local, self.m.sd)
+                md5file = os.path.join(self.m.sd, ".md5", rel)
+                os.makedirs(os.path.dirname(md5file), exist_ok=True)
+                with open(md5file, "wb") as mf:
+                    mf.write(payload[:32])
+                state = "view"
+                request()
+            elif state == "view" and ptype == 0xB2:
+                count = int.from_bytes(payload[:4], "big")
+                state, seq = "data", 1
+                request()
+            elif state == "data" and ptype == 0xB3 and int.from_bytes(payload[:4], "big") == seq:
+                if self.drop_upload_seq == seq:
+                    self.drop_upload_seq = 0
+                    continue
+                data = payload[4:]
+                if len(data) > 8192:
+                    self.send(slot, 0xB6, b"Error: File Write error!retry...")
+                    continue
+                f.write(data)
+                if count <= seq:
+                    f.close()
+                    self.send(slot, 0xB4, b"ok\r\n")
+                    self.send(slot, 0x90, f"Info: upload success: {path}.".encode())
+                    return
+                seq += 1
+                request()
+
+    def _download(self, slot, path):
+        try:
+            data = open(self.m.sd_path(path), "rb").read()
+        except OSError:
+            self.send(slot, 0xB5, f"Error: failed to open file [{path}]!".encode())
+            return
+        self.send(slot, 0xB1, hashlib.md5(data).hexdigest().encode())
+        last = time.time()
+        while True:
+            if time.time() - last > self.TIMEOUT:
+                self.send(slot, 0xB5, b"Error: Machine received cmd timeout!")
+                return
+            m = self._get()
+            if m is None:
+                continue
+            ptype, payload = m
+            last = time.time()
+            if ptype == 0xB2:
+                n = (len(data) + 8191) // 8192
+                self.send(slot, 0xB2, n.to_bytes(4, "big") + (8192).to_bytes(2, "big"))
+            elif ptype == 0xB3:
+                seq = int.from_bytes(payload[:4], "big")
+                chunk = data[(seq - 1) * 8192: seq * 8192]
+                if seq < 1 or not chunk:
+                    self.send(slot, 0xB5, b"Error: Machine received cmd timeout!")
+                    return
+                self.send(slot, 0xB3, payload[:4] + chunk)
+            elif ptype == 0xB4:
+                self.send(slot, 0xB4, b"ok\r\n")
+                self.send(slot, 0x90, f"Info: download success: {path}.".encode())
+                return
+            elif ptype == 0xB5:
+                self.send(slot, 0xB5, b"Info: canceled by remote!")
+                return
 
 
 class Client(threading.Thread):
@@ -402,47 +693,6 @@ class Client(threading.Thread):
                 self.sock.sendall(P.build(ptype, text.encode()))
             except OSError:
                 pass
-
-    dl_owner = None                               # one download at a time, across clients
-
-    def download(self, ptype, payload):
-        """0xB0 "download <path>\\n" -> 0xB1 md5; 0xB2 -> u32 count + u32 8192; 0xB3 u32 seq -> seq + data;
-        0xB4 -> "ok"; 0xB5 cancel. Like the board: one owner, 8 KB packets, any order."""
-        cls = Client
-        if ptype == 0xB0:
-            if cls.dl_owner not in (None, self):
-                self.tx(0x91, "Other client is currently uploading/downloading, please wait!")
-                return
-            path = payload.decode("ascii", "replace").strip().replace("\x01", " ")
-            path = path[len("download"):].strip() if path.startswith("download") else path
-            local = self.m.sd_path(path)
-            try:
-                self.dl_data = open(local, "rb").read()
-            except OSError:
-                self.tx(0xB5, "Error: failed to open file!")
-                return
-            cls.dl_owner = self
-            self.tx(0xB1, hashlib.md5(self.dl_data).hexdigest())
-            return
-        if cls.dl_owner is not self:
-            return
-        if ptype == 0xB2:
-            n = (len(self.dl_data) + 8191) // 8192
-            self.txb(0xB2, n.to_bytes(4, "big") + (8192).to_bytes(4, "big"))
-        elif ptype == 0xB3:
-            seq = int.from_bytes(payload[:4], "big")
-            chunk = self.dl_data[(seq - 1) * 8192: seq * 8192]
-            if seq < 1 or not chunk:
-                self.tx(0xB5, "Machine received cmd timeout!")
-            else:
-                self.txb(0xB3, payload[:4] + chunk)
-        elif ptype == 0xB4:
-            cls.dl_owner = None
-            self.tx(0xB4, "ok\r\n")
-            self.tx(P.NORMAL_INFO, "Info: download success.\r\n")
-        elif ptype == 0xB5:
-            cls.dl_owner = None
-            self.tx(0xB5, "Info: canceled by remote!")
 
     def txb(self, ptype, data: bytes):
         with self.wlock:
@@ -465,6 +715,7 @@ class Client(threading.Thread):
     def run(self):
         log(f"client {self.addr} connected")
         threading.Thread(target=self.worker, daemon=True).start()
+        self.slot = self.m.xfer.connect(self)
         last_ver = 0.0
         self.sock.settimeout(0.1)
         while True:
@@ -502,11 +753,21 @@ class Client(threading.Thread):
                     self.tx(P.DIAG_RES, "{S:0,10000,0,0,25,23|L:0,0|V:1,28|F:0,0|G:%d,0,0,%d,%d|T:0|C:1|E:0,0,0,0,0,1,1,0|P:0,0|I:0|RSSI:-60}"
                             % (1 if self.m.light else 0, 1 if self.m.vacuum else 0, 80 if self.m.vacuum else 0))
                 elif 0xB0 <= ptype <= 0xB6:
-                    self.download(ptype, payload)
+                    self.m.xfer.frame(self.slot, ptype, payload)
                 elif ptype == 0xB7:
                     # which file is playing: "path|md5", or "|" (answered by the Wi-Fi board)
                     j = self.m.job
                     self.tx(0xB7, f"{j['path']}|{j['md5']}" if j else "|")
+                elif ptype == P.CTRL_MULTI and payload.startswith(b"time "):
+                    # the Wi-Fi board sets its clock (Makera's app sends this on connect)
+                    self.tx(P.NORMAL_INFO, f"time = {payload[5:].decode().strip()}\r\n")
+                elif ptype == P.CTRL_MULTI and payload.split(b" ")[0] in (b"ls", b"mkdir", b"mv", b"rm"):
+                    # answered by the Wi-Fi board itself, like the real one (no line queue, no LPC)
+                    for t, text in self.m.fs_command(payload.decode("latin-1")):
+                        self.tx(t, text)
+                elif ptype == P.CTRL_MULTI and payload.startswith(b"simxfer drop "):
+                    self.m.xfer.drop_upload_seq = int(payload.split()[2])
+                    self.tx(P.NORMAL_INFO, "ok\r\n")
                 elif ptype == P.CTRL_MULTI:
                     line = payload.decode("ascii", "replace")
                     log(f"{self.addr} LINE {line!r}")
@@ -514,8 +775,7 @@ class Client(threading.Thread):
                     self.ev.set()
                 else:
                     log(f"{self.addr} type 0x{ptype:02X} {payload!r}")
-        if Client.dl_owner is self:
-            Client.dl_owner = None
+        self.m.xfer.disconnect(self.slot)
         log(f"client {self.addr} gone")
         self.sock.close()
 
@@ -559,6 +819,8 @@ def main():
                     help="folder standing in for the SD card: 'play <name>' plays <sd>/<name>")
     a = ap.parse_args()
     m = Machine()
+    m.name = a.name
+    m.xfer = Transfers(m)
     m.sd = a.sd
     m.speed = a.speed
     threading.Thread(target=m.run, daemon=True).start()

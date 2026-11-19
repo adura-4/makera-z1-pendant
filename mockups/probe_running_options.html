@@ -1,0 +1,167 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Probing screen options</title>
+<style>
+  :root{--bg:#0B1120;--sc:#1E293B;--sv:#172033;--primary:#38BDF8;--muted:#94A3B8;--text:#E6E9EF;--green:#22C55E;--red:#DC2626}
+  body{background:#e9edf2;font-family:Roboto,"Segoe UI",Arial,sans-serif;margin:0;padding:22px}
+  h1{font:600 18px "Segoe UI",Arial;color:#1f2937;margin:0 0 4px}
+  .lead{font:14px "Segoe UI",Arial;color:#374151;margin:0 0 16px;max-width:1200px;line-height:1.45}
+  .row{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+  .k{font:600 13px "Segoe UI",Arial;color:#1f2937;margin-bottom:6px;width:360px}
+  .note{font:12px "Segoe UI",Arial;color:#4b5563;width:360px;margin-top:6px;line-height:1.4}
+  .phone{width:360px;height:760px;background:var(--bg);border-radius:30px;color:var(--text);padding:18px 14px 14px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px}
+  .hdr{display:flex;align-items:center;gap:8px;font-size:18px}
+  .hdr .x{margin-left:auto;color:#475569;font-size:22px}
+  .ticks{display:flex;gap:4px}.ticks i{flex:1;height:4px;border-radius:2px;background:var(--primary)}
+  .grow{flex:1}
+  .stop{height:58px;border-radius:99px;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-size:19px;font-weight:600}
+  .stopnote{font-size:11.5px;color:var(--muted);text-align:center}
+  .card{background:var(--sv);border-radius:12px;padding:6px 12px}
+  .dr{display:flex;align-items:center;height:36px}.dr b{width:26px;color:var(--muted);font-size:20px}.dr span{flex:1;text-align:right;font:600 24px "Roboto Mono",monospace}
+  .mono{font-family:"Roboto Mono",monospace}
+  .steps{display:flex;flex-direction:column;gap:2px;background:var(--sc);border-radius:14px;padding:10px 12px}
+  .st{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:15px}
+  .st .ic{width:22px;height:22px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .st.done{color:var(--muted)}.st.done .ic{background:var(--green);color:#0B1120;font-weight:700}
+  .st.now{color:var(--text);font-weight:500}.st.now .ic{border:2px solid var(--primary);box-shadow:0 0 10px rgba(56,189,248,.6)}
+  .st.now .ic::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--primary)}
+  .st.wait{color:#64748b}.st.wait .ic{border:2px solid #334155}
+  .st .v{margin-left:auto;font:13px "Roboto Mono",monospace;color:var(--muted)}
+  .st.now .v{color:var(--primary)}
+  .chips{display:flex;gap:6px;justify-content:center}
+  .chip{background:var(--sc);border-radius:99px;padding:5px 11px;font:13px "Roboto Mono",monospace;color:#cbd5e1}
+  .chip b{color:var(--muted);font-family:Roboto;margin-right:4px}
+  .big{font-size:20px;font-weight:500;text-align:center}
+  .sub{font-size:13px;color:var(--muted);text-align:center}
+</style></head><body>
+<h1>Probing screen (after Start): alternatives, plus B + C mixes (E, F) at the end</h1>
+<p class="lead">Outside corner, front-left, Set work zero, caught while it's touching the X side. In B–D Stop moves to the bottom, where your thumb is, and the step list / picture comes from the lines the machine reports while it runs.</p>
+<div class="row">
+
+<!-- A: current -->
+<div><div class="k">A · What it is now</div><div class="phone">
+  <div class="hdr"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#38BDF8"/></svg>Probing<span class="x">✕</span></div>
+  <div class="ticks"><i></i><i></i><i></i><i></i><i></i></div>
+  <div style="height:30px"></div>
+  <svg width="44" height="44" viewBox="0 0 44 44" style="align-self:center"><circle cx="22" cy="22" r="18" fill="none" stroke="#38BDF8" stroke-width="4" stroke-dasharray="40 120" stroke-linecap="round"/></svg>
+  <div class="big">Touching the X side</div>
+  <div class="card"><div class="dr"><b>X</b><span>-157.380</span></div><div class="dr"><b>Y</b><span>-145.000</span></div><div class="dr"><b>Z</b><span>-2.000</span></div></div>
+  <div class="stop">■ Stop</div>
+  <div class="stopnote">Stop halts the machine at once (reset). You'll need to Unlock afterwards.</div>
+  <div class="grow"></div>
+</div><div class="note">Spinner, step text, a plain readout, Stop in the middle.</div></div>
+
+<!-- B: checklist -->
+<div><div class="k">B · Step list (like Check the probe)</div><div class="phone">
+  <div class="hdr"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#38BDF8"/></svg>Probing<span class="x">✕</span></div>
+  <div class="ticks"><i></i><i></i><i></i><i></i><i></i></div>
+  <div style="display:flex;align-items:center;gap:12px;padding:6px 2px">
+    <svg width="74" height="74" viewBox="0 0 60 60"><g stroke="#94a3b8" stroke-width=".8" stroke-linejoin="round"><polygon points="30,47 30,47 16.9,39.5 16.9,28.6 30,36.2" fill="#334155"/><polygon points="30,47 43.1,39.5 43.1,28.6 30,36.2" fill="#253041"/><polygon points="30,36.2 43.1,28.6 30,21 16.9,28.6" fill="#475569"/></g><g stroke="#38BDF8" stroke-width="1.4" fill="none"><ellipse cx="30" cy="36.2" rx="4.4" ry="2.5"/><line x1="23" y1="40.2" x2="37" y2="32.2"/><line x1="23" y1="32.2" x2="37" y2="40.2"/></g></svg>
+    <div><div style="font-size:16px;font-weight:500">Outside corner · front-left</div><div class="sub" style="text-align:left">Set work zero · Makera's routine</div></div>
+  </div>
+  <div class="steps">
+    <div class="st done"><span class="ic">✓</span>Touch the top<span class="v">Z0 set</span></div>
+    <div class="st now"><span class="ic"></span>Touch the X side<span class="v">slow touch</span></div>
+    <div class="st wait"><span class="ic"></span>Touch the Y side</div>
+    <div class="st wait"><span class="ic"></span>Move over the corner</div>
+  </div>
+  <div class="chips"><span class="chip"><b>X</b>-157.380</span><span class="chip"><b>Y</b>-145.000</span><span class="chip"><b>Z</b>-2.000</span></div>
+  <div class="grow"></div>
+  <div class="stop">■ Stop</div>
+  <div class="stopnote">Halts the machine at once (reset). Unlock afterwards.</div>
+</div><div class="note">You see where it is in the routine and what's left. Position shrinks to three small chips (machine position).</div></div>
+
+<!-- C: top view -->
+<div><div class="k">C · Live picture from above</div><div class="phone">
+  <div class="hdr"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#38BDF8"/></svg>Probing<span class="x">✕</span></div>
+  <div class="ticks"><i></i><i></i><i></i><i></i><i></i></div>
+  <svg width="332" height="300" viewBox="0 0 120 108" style="background:#111a2b;border-radius:16px">
+    <text x="6" y="10" fill="#64748b" font-size="5.5" font-family="Roboto">from above</text>
+    <rect x="44" y="12" width="70" height="66" rx="1.5" fill="#334155" stroke="#94a3b8" stroke-width=".8"/>
+    <circle cx="58" cy="62" r="2.2" fill="none" stroke="#e2e8f0" stroke-width=".8"/>
+    <path d="M58 62 H16" stroke="#38BDF8" stroke-width=".8" stroke-dasharray="2 1.5" fill="none"/>
+    <path d="M16 62 H40" stroke="#38BDF8" stroke-width="1.2" fill="none"/>
+    <circle cx="41.2" cy="62" r="2.6" fill="#38BDF8"/>
+    <circle cx="41.2" cy="62" r="5" fill="none" stroke="#38BDF8" stroke-width=".6" opacity=".5"/>
+    <path d="M58 62 V96" stroke="#475569" stroke-width=".8" stroke-dasharray="2 1.5" fill="none"/>
+    <circle cx="58" cy="98" r="2" fill="none" stroke="#475569" stroke-width=".8"/>
+    <g stroke="#22C55E" stroke-width="1"><line x1="56" y1="60" x2="60" y2="64"/><line x1="60" y1="60" x2="56" y2="64"/></g>
+    <text x="62" y="58" fill="#22C55E" font-size="5" font-family="Roboto">top ✓</text>
+  </svg>
+  <div class="big">Touching the X side</div>
+  <div class="sub">slow touch · then the Y side</div>
+  <div class="chips"><span class="chip"><b>X</b>-157.380</span><span class="chip"><b>Y</b>-145.000</span><span class="chip"><b>Z</b>-2.000</span></div>
+  <div class="grow"></div>
+  <div class="stop">■ Stop</div>
+</div><div class="note">A top view like the settings drawings: the ball moves along the dashed paths, touches tick green. Grey = still to come.</div></div>
+
+<!-- D: ring -->
+<div><div class="k">D · Progress ring</div><div class="phone">
+  <div class="hdr"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#38BDF8"/></svg>Probing<span class="x">✕</span></div>
+  <div class="ticks"><i></i><i></i><i></i><i></i><i></i></div>
+  <div style="height:16px"></div>
+  <svg width="230" height="230" viewBox="0 0 100 100" style="align-self:center">
+    <circle cx="50" cy="50" r="42" fill="none" stroke="#1E293B" stroke-width="7"/>
+    <circle cx="50" cy="50" r="42" fill="none" stroke="#38BDF8" stroke-width="7" stroke-linecap="round" stroke-dasharray="99 264" transform="rotate(-90 50 50)"/>
+    <text x="50" y="45" text-anchor="middle" fill="#E6E9EF" font-size="14" font-weight="600" font-family="Roboto">2 of 4</text>
+    <text x="50" y="60" text-anchor="middle" fill="#38BDF8" font-size="7.5" font-family="Roboto">Touching the X side</text>
+  </svg>
+  <div class="sub">Next: the Y side, then over the corner</div>
+  <div class="chips"><span class="chip"><b>X</b>-157.380</span><span class="chip"><b>Y</b>-145.000</span><span class="chip"><b>Z</b>-2.000</span></div>
+  <div class="grow"></div>
+  <div class="stop">■ Stop</div>
+</div><div class="note">One glance from across the shop: how far along it is. Least detail.</div></div>
+
+<div><div class="k">E · B + C: picture on top, steps under it</div><div class="phone">
+  <div class="hdr"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#38BDF8"/></svg>Probing<span class="x">✕</span></div>
+  <div class="ticks"><i></i><i></i><i></i><i></i><i></i></div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:15px;font-weight:500">Outside corner · front-left</span><span class="sub">Set work zero</span></div>
+  <svg width="332" height="210" viewBox="0 0 120 95" preserveAspectRatio="xMidYMid meet" style="background:#111a2b;border-radius:16px;flex:none">
+    <text x="6" y="9" fill="#64748b" font-size="5.5" font-family="Roboto">from above</text>
+    <rect x="44" y="12" width="70" height="56" rx="1.5" fill="#334155" stroke="#94a3b8" stroke-width=".8"/>
+    <circle cx="58" cy="54" r="2.2" fill="none" stroke="#e2e8f0" stroke-width=".8"/>
+    <path d="M58 54 H16" stroke="#38BDF8" stroke-width=".8" stroke-dasharray="2 1.5" fill="none"/>
+    <path d="M16 54 H40" stroke="#38BDF8" stroke-width="1.2" fill="none"/>
+    <circle cx="41.2" cy="54" r="2.6" fill="#38BDF8"/>
+    <circle cx="41.2" cy="54" r="5" fill="none" stroke="#38BDF8" stroke-width=".6" opacity=".5"/>
+    <path d="M58 54 V84" stroke="#475569" stroke-width=".8" stroke-dasharray="2 1.5" fill="none"/>
+    <circle cx="58" cy="86" r="2" fill="none" stroke="#475569" stroke-width=".8"/>
+    <g stroke="#22C55E" stroke-width="1"><line x1="56" y1="52" x2="60" y2="56"/><line x1="60" y1="52" x2="56" y2="56"/></g>
+    <g stroke="#475569" stroke-width=".8"><circle cx="44" cy="68" r="2.4" fill="none"/></g>
+  </svg>
+  <div class="steps">
+    <div class="st done"><span class="ic">✓</span>Touch the top<span class="v">Z0 set</span></div>
+    <div class="st now"><span class="ic"></span>Touch the X side<span class="v">slow touch</span></div>
+    <div class="st wait"><span class="ic"></span>Touch the Y side</div>
+    <div class="st wait"><span class="ic"></span>Move over the corner</div>
+  </div>
+  <div class="chips"><span class="chip"><b>X</b>-157.380</span><span class="chip"><b>Y</b>-145.000</span><span class="chip"><b>Z</b>-2.000</span></div>
+  <div class="grow"></div>
+  <div class="stop">■ Stop</div><div class="stopnote">Halts the machine at once (reset). Unlock afterwards.</div>
+</div><div class="note">The top view shows where the ball is and what's been touched (green ✓); the list says which step that is and what's next. Chips = machine position.</div></div><div><div class="k">F · B + C: big picture, steps as a strip</div><div class="phone">
+  <div class="hdr"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#38BDF8" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#38BDF8"/></svg>Probing<span class="x">✕</span></div>
+  <div class="ticks"><i></i><i></i><i></i><i></i><i></i></div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:15px;font-weight:500">Outside corner · front-left</span><span class="sub">Set work zero</span></div>
+  <svg width="332" height="290" viewBox="0 0 120 95" preserveAspectRatio="xMidYMid meet" style="background:#111a2b;border-radius:16px;flex:none">
+    <text x="6" y="9" fill="#64748b" font-size="5.5" font-family="Roboto">from above</text>
+    <rect x="44" y="12" width="70" height="56" rx="1.5" fill="#334155" stroke="#94a3b8" stroke-width=".8"/>
+    <circle cx="58" cy="54" r="2.2" fill="none" stroke="#e2e8f0" stroke-width=".8"/>
+    <path d="M58 54 H16" stroke="#38BDF8" stroke-width=".8" stroke-dasharray="2 1.5" fill="none"/>
+    <path d="M16 54 H40" stroke="#38BDF8" stroke-width="1.2" fill="none"/>
+    <circle cx="41.2" cy="54" r="2.6" fill="#38BDF8"/>
+    <circle cx="41.2" cy="54" r="5" fill="none" stroke="#38BDF8" stroke-width=".6" opacity=".5"/>
+    <path d="M58 54 V84" stroke="#475569" stroke-width=".8" stroke-dasharray="2 1.5" fill="none"/>
+    <circle cx="58" cy="86" r="2" fill="none" stroke="#475569" stroke-width=".8"/>
+    <g stroke="#22C55E" stroke-width="1"><line x1="56" y1="52" x2="60" y2="56"/><line x1="60" y1="52" x2="56" y2="56"/></g>
+    <g stroke="#475569" stroke-width=".8"><circle cx="44" cy="68" r="2.4" fill="none"/></g>
+  </svg>
+  <div style="display:flex;gap:6px">
+    <div style="flex:1;background:#1E293B;border-radius:10px;padding:8px 6px;text-align:center;font-size:12px;color:#94A3B8"><div style="color:#22C55E;font-size:15px">✓</div>Top</div>
+    <div style="flex:1;background:#132a3e;border:1px solid #38BDF8;border-radius:10px;padding:8px 6px;text-align:center;font-size:12px;color:#38BDF8"><div style="font-size:15px">●</div>X side</div>
+    <div style="flex:1;background:#1E293B;border-radius:10px;padding:8px 6px;text-align:center;font-size:12px;color:#64748b"><div style="font-size:15px">○</div>Y side</div>
+    <div style="flex:1;background:#1E293B;border-radius:10px;padding:8px 6px;text-align:center;font-size:12px;color:#64748b"><div style="font-size:15px">○</div>Corner</div>
+  </div>
+  <div class="big" style="font-size:18px">Touching the X side <span class="sub" style="font-size:13px">· slow touch</span></div>
+  <div class="chips"><span class="chip"><b>X</b>-157.380</span><span class="chip"><b>Y</b>-145.000</span><span class="chip"><b>Z</b>-2.000</span></div>
+  <div class="grow"></div>
+  <div class="stop">■ Stop</div><div class="stopnote">Halts the machine at once (reset). Unlock afterwards.</div>
+</div><div class="note">The picture gets the room; the steps become a 4-tile strip (like the probe/corner pickers) with the current one lit, and one line says what's happening now.</div></div></div></body></html>

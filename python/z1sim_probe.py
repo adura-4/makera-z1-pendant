@@ -182,6 +182,44 @@ class ProbeSim:
             return ["ok\r\n"]
         return None
 
+    def m495(self, t: str) -> list[str]:
+        """Lock held. The firmware's M495 (community ATCHandler): margin scan (C D), Z probe (O F),
+        leveling (A B I J H), then P = go to the toolpath corner. Needs tool 0 for any of the three."""
+        vals = {k: float(v) for k, v in re.findall(r"([A-Z])([-+]?\d*\.?\d+)", t[4:])}
+        if "X" not in vals or "Y" not in vals:
+            return ["ERROR: Miss Automation Parameter: X/Y\r\n", "ok\r\n"]
+        if not self.homed:
+            return ["ok\r\n"]                          # silently nothing, like the firmware
+        x, y = vals["X"], vals["Y"]
+        margin = "C" in vals and "D" in vals; zp = "O" in vals; lev = all(k in vals for k in "ABIJH")
+        def gen():
+            if (margin or zp or lev) and self.tool != 0:
+                self.msgs.append("Change to probe tool first!\r\n")
+                yield from self._change(0)
+                yield from self._cali(True, back=False)
+            if margin:
+                self.msgs.append("Auto scan margin\r\n")
+                yield "M494.1"; yield "G53 G0 Z-3.000"; yield f"G90 G0 X{x:.3f} Y{y:.3f}"
+                cx, cy = vals["C"], vals["D"]
+                for px, py in ((x, cy), (cx, cy), (cx, y), (x, y)):
+                    yield f"G90 G1 X{px:.3f} Y{py:.3f} F1000.000"
+                yield "WAIT"; yield "M494.2"
+            if zp:
+                self.msgs.append(f"Auto z probe, offset: {vals['O']:.3f}, {vals['F']:.3f}\r\n")
+                yield "G53 G0 Z-3.000"; yield f"G90 G0 X{x + vals['O']:.3f} Y{y + vals['F']:.3f}"
+                yield "G38.2 Z-100.000 F500.000"; yield "G10 L20 P0 Z0.000"; yield "G91 G0 Z1.000"; yield "G90"
+            if lev:
+                nx, ny = int(vals["I"]), int(vals["J"])
+                self.msgs.append(f"Auto leveling, grid: {nx} * {ny} height: {vals['H']:.2f}\r\n")
+                yield f"G90 G0 X{x:.3f} Y{y:.3f}"
+                yield f"G32R1X0Y0A{vals['A']:.3f}B{vals['B']:.3f}I{nx}J{ny}H{vals['H']:.3f}"
+                self.mesh = [[round(0.02 * ((i * 7 + j * 3) % 5 - 2), 4) for i in range(nx)] for j in range(ny)]
+            if "P" in vals:
+                self.msgs.append("Goto path origin first\r\n")
+                yield "G53 G0 Z-3.000"; yield f"G90 G0 X{x:.3f} Y{y:.3f}"
+        self._script(gen(), echo=True)
+        return ["ok\r\n"]
+
     def _alarm_raw(self, text):
         self.queue.clear(); self.cur = None; self.state = "Alarm"; self.msgs.append(text)
 

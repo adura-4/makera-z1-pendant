@@ -39,6 +39,71 @@ For installing and using the app, see the [README](../README.md).
   `[PRB:]`, Makera's M480.1–.10 routines, M491 and `M6 T9999` with the tool-change wait (M490.2
   continues) and the setter calibration. `simprobe dead` makes the probe never trigger;
   `simprobe len <dz>` makes the setter trip dz mm higher, standing in for another probe.
+- `python/z1upload.py`: send a file to the SD card (`/sd/gcodes/…`) or fetch one, over Wi-Fi. One file,
+  standard library only, so a Fusion add-in can carry it. Refuses while a job runs and never overwrites
+  the playing file. The simulator answers uploads like the Wi-Fi board (`simxfer drop <seq>` loses one
+  data packet); `python/test_z1upload.py` runs the cases against it. Like Makera's app it sets the Wi-Fi
+  board's clock first (`time <Unix seconds>`), so files aren't dated 1980.
+- `LiveDownloadTest` (unit tests) checks the app's file download on a real machine, read-only; it runs only
+  with `Z1_LIVE_HOST=<ip>` (and optionally `Z1_LIVE_FILE=/sd/gcodes/<name>`) set.
+- `python/fsprobe.py`: send the Wi-Fi board's file commands (`ls -s`, `mkdir`, `mv`, `rm`) and print every reply
+  frame raw. The simulator answers them like the board (`Machine.fs_command`).
+
+## Files screen
+The top bar's folder icon opens `FilesScreen` (`ui/FilesScreen.kt`, state in `files/FilesController.kt`; mockup
+`mockups/files_mock.html`): browse `/sd/gcodes` and its folders, Job info, rename, delete (also several at once),
+new folder, upload from the phone (Android document picker, iOS Files picker via `rememberFilePicker`).
+Everything is answered by the Wi-Fi board; nothing moves the machine.
+- Commands, measured on the Z1 2026-11-16 (`reference/file_commands_notes.md` in the parent project): `ls -s <dir>`
+  answers 0x83 chunks (`name/ 0 YYYYMMDDhhmmss` for folders, `name  size YYYYMMDDhhmmss` for files, UTC, spaces
+  as 0x01) and 0x84 `Load directory finished.`; `mkdir`, `mv <from> <to>`, `rm` answer 0x84 `ok` (plus 0x90 info) or
+  0x85 with the reason. `rm` on a folder deletes everything in it. `mv`/`rm` keep the `.md5` cache in step.
+  0x84 is also an "ok": `MakeraLink.fsCommand` takes these frames while a command waits, so it's never taken as
+  a G-code ack.
+- Upload is `z1upload.py`'s protocol in Kotlin (`MakeraLink.uploadFile`): cancel any leftover transfer, set the
+  clock, B0 + B1 (MD5, `util/Md5.kt`), then answer the board's B2/B3 requests; 0x91 or a leftover is retried for 15 s.
+- Job info reads only the file's header (`MachineLink.readFileHead`, stopped once a line of G-code has arrived):
+  stock height and Z zero from the Carvera community post's header, each tool once (`JobFileParser`)
+  (`files/JobInfo.kt`). Only what Fusion's own post output carries: the stock's X × Y size isn't in it, so
+  the pendant doesn't show one, and rows the file doesn't have are left out.
+- Rules: nothing writes to the card (upload, delete, rename, new folder) while the Z1 is running, paused, changing
+  tools or homing, and never the playing file. Names are cleaned like the Fusion plugin's (spaces → `_`). An upload
+  to a taken name asks: replace, keep both (`name_2.cnc`), or cancel. Newest first by default.
+- Tests: `FilesParseTest` (listing, labels, names, Job info, MD5 against Java's), `FilesSimTest` (list, mkdir,
+  upload into a folder, cancel, rename, header read, delete, the controller's rules) and `LiveFilesTest` (opt-in
+  with `Z1_LIVE_HOST`, works only in a throwaway `_pendant_live_test` folder; `Z1_LIVE_INFO_FILE` adds a Job info read).
+
+## Run a job
+`ui/RunScreen.kt` (state in `run/RunController.kt`, pure parts in `run/RunModel.kt`; mockup
+`mockups/run_mock.html`). Opened from the Run tile (`BuiltIn.RUN_JOB`, which opens Files as "Select File";
+added once to existing hotkey sets) or a file's sheet.
+- How Studio starts a job, captured 2026-11-17 (`reference/captures/studio_job_start_20261117.md` in the parent
+  project): `buffer M495 X<minX>Y<minY>[C<maxX>D<maxY>][O<dx>F<dy>][A<w>B<h>I<nx>J<ny>H<h>]P1`, then
+  `play <path>`. X/Y are the toolpath's min corner in work coordinates (feed moves' end points,
+  `Toolpath.extents`, which matches Studio on can_lid_op1.cnc); P1 = go there at safe Z first. M495 never
+  sets an origin: Studio uses `G10L2P0X…Y…` (machine coordinates) separately. The pendant sends `M370`
+  (clear the old leveling grid) before the buffer line.
+- Origin, applied on Next from step 1: Anchor 1 = `G10L2P0X<anchor1+offX>Y<anchor1+offY>` with Anchor 1 read
+  live (`config-get sd coordinate.anchor1_x/_y`); where the spindle is = `G10L20P0X0Y0` (sent once per choice).
+  "Same as CAM" = the community post's "X/Y Offset" header lines (the WCS from Fusion's part attach point:
+  only right if the setup's part position is set and the stock sits in the bracket).
+- The firmware's M495 (community `ATCHandler.cpp`) inserts its own M6 T0 unless the active tool is 0, and
+  refuses an uncalibrated probe. So before Scan now or a start that probes, the pendant gets the laser probe
+  in itself: `M6 T0` (swap + setter calibration) or, "already in", `M493.2 T0` then `M491` (setting the
+  number marks the length unmeasured, so this order). `ProbeController.checkAs = LASER` compares the setter
+  height with the laser probe's learned length; another probe's length stops it. The check holds while the
+  machine says T0.
+- Scan now = `M495 X Y C D` on its own; done on "Done ATC" (or the M494.2 after the trace); the live dot is the
+  machine position. Not homed: the firmware silently does nothing, so no echo in 4 s reads as a failure.
+- Assist switches: `M331[.n]` on / `M332[.n]` off, state from `|S:` fields 4, 7, 8, 10 (n = 0, 1, 2, 4).
+  Plain M331 answers "extend out mode" on this firmware.
+- Mesh: `|O:` in the status while a grid is active (the chip); `M375.1` prints it (`Mesh.parse` takes the plain
+  rows and the human-readable table).
+- Tool change popup (`ToolChangePopup`): state `Tool`, the wanted tool from `|T:` field 3, Continue = `M490.2`.
+- Tests: `RunModelTest` (extents, the M495 line against Studio's, origin lines, CAM offset, M6 guard, mesh,
+  assist/mesh status fields). The simulator (`python/z1sim.py`) answers config-get, buffer, M495 (scan, Z probe,
+  leveling, P), M331/M332, M370/M375.1 and G10 L2; run on the Dell it's reached from the phone with
+  `adb reverse tcp:2222 tcp:2222` and 127.0.0.1 (the Dell's firewall blocks 2222).
 
 ## Protocol (Makera app decompile + community firmware `MakeraFrame.h`)
 `86 68 | len u16 BE | type | payload | CRC u16 BE | 55 AA`, len = 1 + payload + 2,
@@ -229,6 +294,8 @@ skipped queue delay doesn't show. `$J F0.05` ran at about 60 mm/min, so its rate
 1200 mm/min. A burst of ten `$J X-0.05` 40 ms apart all ran (0.5 mm exactly).
 
 ## Still unverified
+- The Run flow on the real Z1 (built and run against the simulator 2026-11-17): M495 with O/F/A/B/I/J/H letters,
+  Scan now outside a job, the "Done ATC" end of a direct M495, the `|O:` format, and `M375.1`'s output.
 - The file download on the real machine (protocol from the Makera app + Wi-Fi board decompiles; run on the simulator).
 - Whether the stock firmware takes `M223` with two decimals and what its spindle "target" field means.
 - Y/Z upper soft limits (assumed −1 like X).

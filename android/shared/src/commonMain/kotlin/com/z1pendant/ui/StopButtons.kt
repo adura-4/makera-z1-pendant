@@ -28,7 +28,7 @@ private val RED = Color(0xFFDC2626); private val RED_TEXT = Color(0xFFF87171)
  */
 @Composable
 fun StopButtons(state: String?, connected: Boolean, onHold: () -> Unit, onResume: () -> Unit, onReset: () -> Unit,
-                height: Dp = 52.dp, modifier: Modifier = Modifier) {
+                height: Dp = 52.dp, modifier: Modifier = Modifier, jobActive: Boolean = false) {
     val s = state?.lowercase()
     val moving = connected && (s == "run" || s == "home" || s == "jog")
     val held = connected && (s == "hold" || s == "pause" || s == "door")
@@ -36,7 +36,8 @@ fun StopButtons(state: String?, connected: Boolean, onHold: () -> Unit, onResume
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         StopButton("Hold", lit = moving, AMBER, AMBER_TEXT, connected, onHold, height)
         StopButton("Resume", lit = held, GREEN, GREEN_TEXT, connected, onResume, height)
-        StopButton("Reset", lit = moving || held || alarm, RED, RED_TEXT, connected, onReset, height)
+        // The same halt either way (Studio's Stop): during a job it reads as what it does to the job.
+        StopButton(if (jobActive) "Cancel job" else "Stop", lit = moving || held || alarm, RED, RED_TEXT, connected, onReset, height)
     }
 }
 

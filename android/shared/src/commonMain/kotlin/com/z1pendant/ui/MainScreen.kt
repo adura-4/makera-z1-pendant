@@ -1,5 +1,6 @@
 package com.z1pendant.ui
 
+import com.z1pendant.util.Serial
 import androidx.compose.ui.layout.onSizeChanged
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -66,7 +68,7 @@ val LocalLandscape = androidx.compose.runtime.staticCompositionLocalOf { false }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, onEdit: (Hotkey?) -> Unit,
+fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, onFiles: () -> Unit = {}, onEdit: (Hotkey?) -> Unit,
                scroll: androidx.compose.foundation.ScrollState = rememberScrollState(), onProbe: () -> Unit = {}) {
     val conn by vm.link.conn.collectAsState()
     val st by vm.link.status.collectAsState()
@@ -74,6 +76,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     val jobTools by vm.jobTools.collectAsState()
     val lat by vm.link.latencyMs.collectAsState()
     val target by vm.target.collectAsState()
+    val hideSerial by vm.hideSerial.collectAsState()
     val axis by vm.axis.collectAsState()
     val stepIdx by vm.stepIndex.collectAsState()
     val hotkeys by vm.hotkeys.collectAsState()
@@ -99,14 +102,14 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // ---- header ----
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).clickable(onClick = onSettings)) {
-                Text(target?.name ?: "No machine", fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(target?.name?.let { Serial.shown(it, hideSerial) } ?: "No machine", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     when (conn) {
                         ConnState.Connected -> "${target?.host} · ${lat?.let { "$it ms" } ?: "—"}"
                         ConnState.Connecting -> "connecting to ${target?.host}…"
                         ConnState.Lost -> "link lost · reconnecting…"
                         ConnState.Disconnected -> "tap to connect"
-                    }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
             // While a job plays: "Run 42%" (also in the job's Idle moments), "Hold 42%", "Tool change".
@@ -126,7 +129,11 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 else -> stateColor(s0, conn)
             }
             Text(pill, color = if (toolWait) MaterialTheme.colorScheme.onPrimary else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                maxLines = 1, modifier = Modifier.clip(RoundedCornerShape(50)).background(pillColor).padding(horizontal = 14.dp, vertical = 6.dp))
+                maxLines = 1, modifier = Modifier.clip(RoundedCornerShape(50)).background(pillColor)
+                    // Alarm: tap for what happened and Clear alarm.
+                    .then(if (connected && s0.equals("Alarm", true)) Modifier.clickable { vm.alarmSheet.value = true } else Modifier)
+                    .padding(horizontal = 14.dp, vertical = 6.dp))
+            IconButton(onClick = onFiles) { Icon(Icons.Filled.Folder, "Files") }
             IconButton(onClick = onConsole) { Icon(Icons.Filled.Terminal, "Console") }
             IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Settings") }
         }
@@ -212,7 +219,9 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 onClick = { vm.wheelClicks(it) },
                 modifier = Modifier.size(size).align(Alignment.Center),
             ) else JogPad(vm, step = stepList[si], enabled = connected && running == null,
-                modifier = Modifier.align(Alignment.Center))
+                // Below the mode and probe buttons in the top corners: the pad is as wide as the
+                // stage, so its +A tile ran under the probe button when the stage got short (2026-11-19).
+                modifier = Modifier.align(Alignment.Center).padding(top = 52.dp))
             ModeButton(padMode, Modifier.align(Alignment.TopStart)) { vm.setJogPad(!padMode) }
             ProbeButton(Modifier.align(Alignment.TopEnd)) { vm.haptics.press(); onProbe() }
         }
@@ -262,7 +271,9 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         FeedOverride(st?.feedOverride, connected) { vm.setFeedOverride(it) }
                         SpindleOverride(vm.spindleSlide(st), onSetPct = vm::setSpindlePercent, onReset = vm::resetSpindleOverride)
-                        StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, height = 56.dp)
+                        if (connected && st?.isAlarm == true) AlarmStrip(vm, st)
+                        StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, height = 56.dp,
+                            jobActive = job != null)
                     }
                 }
                 Column(Modifier.weight(0.52f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -281,6 +292,12 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         if (expanded) placedDial[0] = 0
         var jobDetails by remember { mutableStateOf(false) }
         if (job == null) jobDetails = false
+        // A job just started: the drawer opens fully expanded (the job is what matters now); the
+        // user can drag it down (Jimmy, 2026-11-18).
+        val jobStarted by vm.jobStarted.collectAsState()
+        LaunchedEffect(jobStarted, job != null) {
+            if (jobStarted && job != null) { jobDetails = true; vm.controlsOpen.value = true; vm.jobStarted.value = false }
+        }
         if (!jobDetails) Column(Modifier.weight(1f).onSizeChanged { viewH = it.height }.verticalScroll(scroll)) {
         Column(Modifier.onSizeChanged { otherH = it.height - placedDial[0] }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         dro()
@@ -353,7 +370,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             jobActive = job != null, details = jobDetails,
             onDetails = { d -> if (d != jobDetails) { jobDetails = d; if (d) vm.controlsOpen.value = true; vm.haptics.press() } },
             jobLine = { job?.let { j -> JobLine(j) { jobDetails = true; vm.haptics.press() } } },
-            jobPanel = { job?.let { j -> JobDetails(j, st, jobTools) { jobDetails = false; vm.haptics.press() } } },
+            jobPanel = { job?.let { j -> JobDetails(j, st, jobTools, onMesh = { vm.run.meshShow.value = true }) { jobDetails = false; vm.haptics.press() } } },
+            alarm = { if (connected && st?.isAlarm == true) AlarmStrip(vm, st) },
             modifier = if (jobDetails) Modifier.weight(1f) else Modifier)
         }
     }
@@ -367,6 +385,8 @@ private fun ControlsDrawer(
     spindle: @Composable () -> Unit = {},
     jobActive: Boolean = false, details: Boolean = false, onDetails: (Boolean) -> Unit = {},
     jobLine: @Composable () -> Unit = {}, jobPanel: @Composable () -> Unit = {},
+    /** Above the stop buttons: the alarm strip while in Alarm. */
+    alarm: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val swipeDp = 24.dp
@@ -397,7 +417,7 @@ private fun ControlsDrawer(
             if (!open) {
                 Text("Feed ${feed?.toInt() ?: 100}%", fontSize = 12.sp, fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp))
-                Text("Hold · Resume · Reset", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(if (jobActive) "Hold · Resume · Cancel" else "Hold · Resume · Stop", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp))
             }
         }
@@ -413,8 +433,9 @@ private fun ControlsDrawer(
                 } else if (jobActive) jobLine()
                 FeedOverride(feed, connected, onFeed)
                 spindle()
+                alarm()
                 // Muted while idle; the relevant ones light up (see StopButtons).
-                StopButtons(state, connected, onHold, onResume, onReset)
+                StopButtons(state, connected, onHold, onResume, onReset, jobActive = jobActive)
             }
         }
     }

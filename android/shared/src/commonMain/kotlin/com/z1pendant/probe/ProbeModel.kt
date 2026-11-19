@@ -166,6 +166,12 @@ fun ProbeSetup.stepAfterTouches(n: Int): Int {
     return labels.lastIndex
 }
 
+/** Of [total] touches so far, how many fall in step [index] (0 when an echo moved the run on early). */
+fun ProbeSetup.touchesInStep(index: Int, total: Int): Int {
+    val before = stepLabels().take(index).sumOf { Steps.touches(it) }
+    return (total - before).coerceIn(0, Steps.touches(stepLabels().getOrElse(index) { "" }).coerceAtLeast(0))
+}
+
 /** One touch, from `[PRB:x,y,z:1]`: machine coordinates of the spindle when the probe triggered. */
 data class Touch(val x: Double, val y: Double, val z: Double)
 

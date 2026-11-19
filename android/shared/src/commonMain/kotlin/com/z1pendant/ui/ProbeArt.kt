@@ -319,10 +319,12 @@ private const val BALL_R = 2.8f
  * The run from above (front = bottom), drawn for the front-left corner and mirrored for the others:
  * the part, where the probe started, the paths to each touch, and the ball at the current step.
  * Steps before [index] are done (green), the current one is blue, later ones grey. Top only is a
- * side view.
+ * side view. A hole or block step touches two sides, in the order the machine does them: −X (left)
+ * then +X (right), −Y (front) then +Y (back). [stepTouch], the touches made in the step so far (fast
+ * + slow per side), says which side the ball is on.
  */
 @Composable
-fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, index: Int, modifier: Modifier) = Canvas(modifier) {
+fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, index: Int, modifier: Modifier, stepTouch: Int = 0) = Canvas(modifier) {
     val S = com.z1pendant.probe.Steps
     fun col(label: String) = labels.indexOf(label).let { i -> when { i < 0 -> TODO; i < index -> DONE; i == index -> BL; else -> TODO } }
     fun isNow(label: String) = labels.indexOf(label) == index
@@ -332,10 +334,11 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
     fun DrawScope.path(c: Color, p: List<Offset>) {
         for (i in 0 until p.size - 1) drawLine(c, p[i], p[i + 1], 0.9f, pathEffect = if (i == 0 && p.size > 2) dashed else null, cap = StrokeCap.Round)
     }
-    fun DrawScope.touch(c: Color, at: Offset, now: Boolean) {
+    /** The ball at [at] while it touches; once done, a tick on the part's [edge] (what the touch found). */
+    fun DrawScope.touch(c: Color, at: Offset, now: Boolean, edge: Offset = at) {
         when {
             now -> ball(at)
-            c == DONE -> { drawLine(DONE, at + Offset(-2f, -2f), at + Offset(2f, 2f), 1f); drawLine(DONE, at + Offset(2f, -2f), at + Offset(-2f, 2f), 1f) }
+            c == DONE -> { drawLine(DONE, edge + Offset(-2f, -2f), edge + Offset(2f, 2f), 1f); drawLine(DONE, edge + Offset(2f, -2f), edge + Offset(-2f, 2f), 1f) }
             else -> drawCircle(TODO, BALL_R, at, style = Stroke(0.8f))
         }
     }
@@ -347,6 +350,12 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
         if (isNow(label)) ball(at)
     }
     fun DrawScope.topMark(at: Offset) = touch(col(S.TOP), at, isNow(S.TOP))
+    /** A two-sided step: [first] side, then [second]; the first is ticked once the ball has moved on. */
+    fun DrawScope.twoSides(label: String, first: Offset, second: Offset, firstEdge: Offset, secondEdge: Offset) {
+        val c = col(label); val now = isNow(label); val onSecond = now && stepTouch >= 2
+        touch(if (onSecond) DONE else c, first, now && !onSecond, firstEdge)
+        touch(c, second, onSecond, secondEdge)
+    }
 
     drawRoundRect(Color(0xFF111A2B), size = size, cornerRadius = CornerRadius(16.dp.toPx()))
     fit(0f, 0f, 120f, 95f) {
@@ -361,8 +370,8 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
                     drawRoundRect(ST, Offset(44f, 12f), Size(70f, 56f), CornerRadius(1.5f), style = Stroke(0.8f))
                     val s = Offset(58f, 54f); start(s)
                     val xc = col(S.X_SIDE); val yc = col(S.Y_SIDE)
-                    path(xc, listOf(s, Offset(16f, 54f), Offset(41.2f, 54f))); touch(xc, Offset(41.2f, 54f), isNow(S.X_SIDE))
-                    path(yc, listOf(s, Offset(58f, 88f), Offset(58f, 70.8f))); touch(yc, Offset(58f, 70.8f), isNow(S.Y_SIDE))
+                    path(xc, listOf(s, Offset(16f, 54f), Offset(41.2f, 54f))); touch(xc, Offset(41.2f, 54f), isNow(S.X_SIDE), Offset(44f, 54f))
+                    path(yc, listOf(s, Offset(58f, 88f), Offset(58f, 70.8f))); touch(yc, Offset(58f, 70.8f), isNow(S.Y_SIDE), Offset(58f, 68f))
                     topMark(s)
                     target(Offset(44f, 68f), S.CORNER)
                 }
@@ -372,8 +381,8 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
                     val s = Offset(30f, 70f); start(s); val p = Offset(54f, 46f)
                     val xc = col(S.X_WALL); val yc = col(S.Y_WALL)
                     drawLine(xc, s, p, 0.9f, pathEffect = dashed)
-                    path(xc, listOf(p, Offset(42.8f, 46f))); touch(xc, Offset(42.8f, 46f), isNow(S.X_WALL))
-                    path(yc, listOf(p, Offset(54f, 57.2f))); touch(yc, Offset(54f, 57.2f), isNow(S.Y_WALL))
+                    path(xc, listOf(p, Offset(42.8f, 46f))); touch(xc, Offset(42.8f, 46f), isNow(S.X_WALL), Offset(40f, 46f))
+                    path(yc, listOf(p, Offset(54f, 57.2f))); touch(yc, Offset(54f, 57.2f), isNow(S.Y_WALL), Offset(54f, 60f))
                     topMark(s)
                     target(Offset(40f, 60f), S.CORNER)
                 }
@@ -383,11 +392,11 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
                     val xc = col(S.X_WALLS); val yc = col(S.Y_WALLS)
                     if (setup.doX) {
                         val a = Offset(32.8f, 47.5f); val b = Offset(87.2f, 47.5f)
-                        drawLine(xc, a, b, 0.9f); touch(xc, a, false); touch(xc, b, isNow(S.X_WALLS))
+                        drawLine(xc, a, b, 0.9f); twoSides(S.X_WALLS, first = a, second = b, firstEdge = Offset(30f, 47.5f), secondEdge = Offset(90f, 47.5f))       // left wall, then right
                     }
                     if (setup.doY) {
-                        val a = Offset(60f, 20.3f); val b = Offset(60f, 74.7f)
-                        drawLine(yc, a, b, 0.9f); touch(yc, a, false); touch(yc, b, isNow(S.Y_WALLS))
+                        val back = Offset(60f, 20.3f); val front = Offset(60f, 74.7f)
+                        drawLine(yc, back, front, 0.9f); twoSides(S.Y_WALLS, first = front, second = back, firstEdge = Offset(60f, 77.5f), secondEdge = Offset(60f, 17.5f))
                     }
                     target(cc, S.CENTER)
                 }
@@ -398,11 +407,11 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
                     val xc = col(S.X_SIDES); val yc = col(S.Y_SIDES)
                     if (setup.doX) {
                         drawLine(xc, Offset(10f, 47.5f), Offset(31.2f, 47.5f), 0.9f); drawLine(xc, Offset(110f, 47.5f), Offset(88.8f, 47.5f), 0.9f)
-                        touch(xc, Offset(31.2f, 47.5f), false); touch(xc, Offset(88.8f, 47.5f), isNow(S.X_SIDES))
+                        twoSides(S.X_SIDES, first = Offset(31.2f, 47.5f), second = Offset(88.8f, 47.5f), firstEdge = Offset(34f, 47.5f), secondEdge = Offset(86f, 47.5f))   // left side, then right
                     }
                     if (setup.doY) {
                         drawLine(yc, Offset(60f, 2f), Offset(60f, 18.7f), 0.9f); drawLine(yc, Offset(60f, 93f), Offset(60f, 76.3f), 0.9f)
-                        touch(yc, Offset(60f, 18.7f), false); touch(yc, Offset(60f, 76.3f), isNow(S.Y_SIDES))
+                        twoSides(S.Y_SIDES, first = Offset(60f, 76.3f), second = Offset(60f, 18.7f), firstEdge = Offset(60f, 73.5f), secondEdge = Offset(60f, 21.5f))      // front, then back
                     }
                     topMark(cc)
                     target(cc, S.CENTER)

@@ -9,6 +9,8 @@ import com.z1pendant.probe.ProbeSetup
 import com.z1pendant.probe.ProbeStop
 import com.z1pendant.probe.Touch
 import com.z1pendant.probe.parsePrb
+import com.z1pendant.probe.stepAfterTouches
+import com.z1pendant.probe.touchesInStep
 import com.z1pendant.probe.widthsFromTouches
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -182,5 +184,20 @@ class ProbeTest {
         // The laser probe forces Top only.
         val s = ProbeSetup(kind = ProbeKind.OUTSIDE).withTool(T.LASER)
         assertEquals(ProbeKind.TOP, s.kind)
+    }
+
+    @Test fun touchesWithinAStepPickTheSide() {
+        // Block center, X and Y: top (2 touches), X sides (4: left fast/slow, right fast/slow), Y sides (4), center.
+        val s = ProbeSetup(kind = ProbeKind.BLOCK, axes = CenterAxes.XY)
+        fun at(n: Int) = s.stepAfterTouches(n).let { it to s.touchesInStep(it, n) }
+        assertEquals(0 to 0, at(0))
+        assertEquals(1 to 0, at(2))      // X sides started: the left side
+        assertEquals(1 to 1, at(3))
+        assertEquals(1 to 2, at(4))      // left done, now the right side
+        assertEquals(1 to 3, at(5))
+        assertEquals(2 to 0, at(6))      // Y sides: the front
+        assertEquals(2 to 2, at(8))      // then the back
+        // An echo can move the run on before its touches: never negative.
+        assertEquals(0, s.touchesInStep(2, 3))
     }
 }

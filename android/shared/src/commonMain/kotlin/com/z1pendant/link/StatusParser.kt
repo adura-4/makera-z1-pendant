@@ -11,6 +11,7 @@ object StatusParser {
         var sTarget: Double? = null; var sOverride: Double? = null
         var job: JobProgress? = null; var toolTarget: Int? = null; var tlo: Double? = null
         var feedActual: Double? = null; var feedSet: Double? = null
+        var sFields: List<String>? = null; var mesh: Double? = null; var halt: Int? = null
         for (p in parts.drop(1)) {
             val c = p.indexOf(':'); if (c < 0) continue
             val k = p.substring(0, c); val v = p.substring(c + 1).split(',').map { it.trim() }
@@ -24,7 +25,9 @@ object StatusParser {
                 "S" -> {                                                // current, target, override %, …
                     rpm = v.getOrNull(0)?.toDoubleOrNull()
                     sTarget = v.getOrNull(1)?.toDoubleOrNull(); sOverride = v.getOrNull(2)?.toDoubleOrNull()
+                    sFields = v
                 }
+                "O" -> mesh = v.getOrNull(0)?.toDoubleOrNull()
                 "T" -> {                                                // active tool, tool offset, target tool, …
                     tool = v.getOrNull(0)?.toIntOrNull(); tlo = v.getOrNull(1)?.toDoubleOrNull()
                     toolTarget = v.getOrNull(2)?.toIntOrNull()
@@ -37,9 +40,10 @@ object StatusParser {
                 }
                 // "H" is the halt reason (only present while halted), NOT a homed flag. The stock
                 // firmware has no homed field, so homed stays null (= unknown).
+                "H" -> halt = v.getOrNull(0)?.toIntOrNull()
             }
         }
         if (wpos.isEmpty()) wpos = mpos
-        return MachineStatus(parts[0], mpos, wpos, fro, rpm, homed, text, atMs, tool, sTarget, sOverride, job, toolTarget, tlo, feedActual, feedSet)
+        return MachineStatus(parts[0], mpos, wpos, fro, rpm, homed, text, atMs, tool, sTarget, sOverride, job, toolTarget, tlo, feedActual, feedSet, sFields, mesh, halt)
     }
 }

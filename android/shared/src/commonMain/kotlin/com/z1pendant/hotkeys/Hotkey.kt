@@ -34,6 +34,8 @@ enum class BuiltIn(val label: String) {
     LIGHT_TOGGLE("Light on/off"), VACUUM_TOGGLE("Vacuum on/off"),
     /** Off: opens the spindle start box (always asks). Running: M5 at once. */
     SPINDLE_TOGGLE("Spindle on/off"),
+    /** Opens Files to pick a job to run (the Run flow). */
+    RUN_JOB("Run a job"),
 }
 
 sealed class Step {
@@ -128,6 +130,7 @@ data class Hotkey(
         }
 
         fun defaults(): List<Hotkey> = listOf(
+            Hotkey(label = "Run", icon = "mi:PlayArrow", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.RUN_JOB)), onlyIdle = false),
             Hotkey(label = "Home", icon = "mi:Home", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.HOME)), confirm = true),
             Hotkey(label = "Unlock", icon = "mi:LockOpen", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.UNLOCK)), onlyIdle = false),
             Hotkey(label = "Zero XY", icon = "mi:GpsFixed", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.ZERO_XY))),

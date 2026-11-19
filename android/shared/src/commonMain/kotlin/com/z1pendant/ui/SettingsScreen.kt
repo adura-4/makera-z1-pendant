@@ -1,5 +1,6 @@
 package com.z1pendant.ui
 
+import com.z1pendant.util.Serial
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -43,6 +44,8 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
     val tick by vm.tickMs.collectAsState()
     val deg by vm.degPerClick.collectAsState()
     val clamp by vm.softClamp.collectAsState()
+    val hideSerial by vm.hideSerial.collectAsState()
+    val levelBelow by vm.run.levelBelow.collectAsState()
     var host by remember { mutableStateOf(target?.host ?: "") }
     var port by remember { mutableStateOf((target?.port ?: 2222).toString()) }
 
@@ -63,7 +66,7 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                 }
 
                 Section("Machine")
-                Text("Status: $conn" + (target?.let { " · ${it.name} ${it.host}:${it.port}" } ?: "") + (fw?.let { " · fw $it" } ?: ""), fontSize = 13.sp)
+                Text("Status: $conn" + (target?.let { " · ${Serial.shown(it.name, hideSerial)} ${it.host}:${it.port}" } ?: "") + (fw?.let { " · fw $it" } ?: ""), fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PendantOutlinedButton(onClick = vm::scan, enabled = !scanning) { Text(if (scanning) "Scanning…" else "Scan network") }
                     if (conn != ConnState.Disconnected) PendantOutlinedButton(onClick = vm::disconnect) { Text("Disconnect") }
@@ -72,7 +75,7 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { vm.connect(t); onClose() }.padding(10.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Text(t.name, fontWeight = FontWeight.SemiBold)
+                            Text(Serial.shown(t.name, hideSerial), fontWeight = FontWeight.SemiBold)
                             Text("${t.host}:${t.port}" + if (busy) " · busy (another app connected?)" else "", fontSize = 12.sp)
                         }
                         Text("Connect", color = MaterialTheme.colorScheme.primary)
@@ -87,6 +90,8 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                 }
                 Button(onClick = { if (host.isNotBlank()) { vm.connect(MachineTarget(target?.takeIf { it.host == host }?.name ?: host, host, port.toIntOrNull() ?: 2222)); onClose() } }) { Text("Connect") }
 
+                SwitchRow("Hide the serial number (for recordings)", hideSerial) { vm.setHideSerial(it) }
+
                 Section("Handwheel & jog")
                 LabeledSlider("Vibration strength", haptic, 0f..1f, "${(haptic * 100).toInt()}%") { vm.setHaptic(it) }
                 LabeledSlider("Degrees per click", deg, 6f..30f, "${deg.toInt()}°", steps = 23) { vm.setDegPerClick(it.toInt().toFloat()) }
@@ -95,6 +100,13 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                 SwitchRow("Clamp jogs to soft limits", clamp) { vm.setSoftClamp(it) }
                 SwitchRow("Keep screen on", keepOn) { vm.setKeepScreenOn(it) }
                 Text(vm.haptics.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Section("Run")
+                // 0.5 to 10 mm in 0.5 mm steps.
+                LabeledSlider("Leveling: deepest touch below the stock top", levelBelow.toFloat(), 0.5f..10f,
+                    "${com.z1pendant.util.Fmt.trimmed4(levelBelow)} mm", steps = 18) { vm.run.setLevelBelow(kotlin.math.round(it * 2) / 2.0) }
+                Text("A leveling touch that finds nothing this far below the stock top stops the job, instead of carrying on down " +
+                    "(past the stock's edge it would reach the vise or the bed).", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                 Section("Hotkeys")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -126,6 +138,7 @@ fun LabeledSlider(label: String, value: Float, range: ClosedFloatingPointRange<F
 @Composable
 fun ConsoleScreen(vm: AppViewModel, onClose: () -> Unit) {
     val lines by vm.console.collectAsState()
+    val hideSerial by vm.hideSerial.collectAsState()
     val st by vm.link.status.collectAsState()
     var input by remember { mutableStateOf("") }
     val list = rememberLazyListState()
@@ -138,9 +151,9 @@ fun ConsoleScreen(vm: AppViewModel, onClose: () -> Unit) {
                     IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close") }
                     Text("Console", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
                 }
-                Text(st?.raw ?: "(no status)", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(st?.raw?.let { Serial.shown(it, hideSerial) } ?: "(no status)", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = list) {
-                    items(lines) { Text(it, fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
+                    items(lines) { Text(Serial.shown(it, hideSerial), fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(input, { input = it }, singleLine = true, modifier = Modifier.weight(1f), label = { Text("Command") },

@@ -68,22 +68,45 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
     private val dlLock = kotlinx.coroutines.sync.Mutex()
     @kotlin.concurrent.Volatile private var dlReply: kotlinx.coroutines.CompletableDeferred<Pair<Int, ByteArray>>? = null
 
+    /** While an upload runs, the board's requests go here (the board drives an upload; see uploadFile). */
+    @kotlin.concurrent.Volatile private var xferFrames: kotlinx.coroutines.channels.Channel<Pair<Int, ByteArray>>? = null
+
     private fun onDownloadPacket(type: Int, payload: ByteArray): Boolean {
-        val d = dlReply ?: return false
         if (type !in MakeraFrame.DL_START..0xB6 && type != MakeraFrame.REFUSED) return false
+        xferFrames?.let { it.trySend(type to payload); return true }
+        val d = dlReply ?: return false
         d.complete(type to payload)
         return true
     }
 
-    private suspend fun dlRequest(type: Int, payload: ByteArray = ByteArray(0)): Pair<Int, ByteArray>? {
-        repeat(5) {
+    /** Send one request and wait for its reply; on silence or a 0xB6 ("resend") send it again. */
+    private suspend fun dlRequest(type: Int, payload: ByteArray = ByteArray(0), tries: Int = 5,
+                                  timeoutMs: Long = 1500): Pair<Int, ByteArray>? {
+        repeat(tries) {
             val d = kotlinx.coroutines.CompletableDeferred<Pair<Int, ByteArray>>()
             dlReply = d
             sendRaw(MakeraFrame.build(type, payload))
-            val r = kotlinx.coroutines.withTimeoutOrNull(1500) { d.await() }
-            if (r != null) return r
+            val r = kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { d.await() }
+            if (r != null && r.first != MakeraFrame.DL_RETRY) return r
         }
         return null
+    }
+
+    /**
+     * End any transfer still running for our connection slot before starting one, and never resend a
+     * start (reference/upload_protocol_notes.md §5a, seen on the Z1 2026-11-16). The board's owner is a
+     * connection slot: a transfer whose client dropped keeps running, and the next connection given that
+     * slot inherits it. Every 0xB0 from the owner queues another handler, and each handler clears the
+     * owner when it ends, so a queued one runs ownerless, can't hear us and blocks transfers until its
+     * 9 s timeout. One 0xB5 first ends a leftover; with nothing running, or Studio owning the slot,
+     * the board drops it.
+     */
+    private suspend fun dlFlush() {
+        val swallow = kotlinx.coroutines.CompletableDeferred<Pair<Int, ByteArray>>()
+        dlReply = swallow                                   // a leftover download answers the cancel
+        sendRaw(MakeraFrame.build(MakeraFrame.DL_CANCEL, ByteArray(0)))
+        kotlinx.coroutines.delay(300)
+        dlReply = null
     }
 
     private fun u32(v: Long) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
@@ -91,11 +114,22 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
         ((b[at].toLong() and 0xFF) shl 24) or ((b[at + 1].toLong() and 0xFF) shl 16) or
             ((b[at + 2].toLong() and 0xFF) shl 8) or (b[at + 3].toLong() and 0xFF)
 
-    override suspend fun downloadFile(path: String): String? = dlLock.withLock {
+    override suspend fun downloadFile(path: String): String? = download(path, Int.MAX_VALUE, null)
+    override suspend fun downloadFile(path: String, onProgress: (Int, Int) -> Unit): String? =
+        download(path, Int.MAX_VALUE, null, onProgress)
+
+    override suspend fun readFileHead(path: String, maxBytes: Int, enough: (String) -> Boolean): String? =
+        download(path, maxBytes, enough)
+
+    /** Read [path]; stop early (and end the transfer) once [maxBytes] are in or [enough] says so. */
+    private suspend fun download(path: String, maxBytes: Int, enough: ((String) -> Boolean)?,
+                                 onProgress: ((Int, Int) -> Unit)? = null): String? = dlLock.withLock {
         if (conn.value != ConnState.Connected) return null
         var owner = false
         try {
-            val start = dlRequest(MakeraFrame.DL_START, "download ${path.replace(' ', '\u0001')}\n".encodeToByteArray())
+            dlFlush()
+            val start = dlRequest(MakeraFrame.DL_START, "download ${path.replace(' ', '\u0001')}\n".encodeToByteArray(),
+                                  tries = 1, timeoutMs = 8000)
             if (start?.first != MakeraFrame.DL_MD5) {
                 com.z1pendant.platform.PLog.w("MakeraLink", "download $path refused: ${start?.second?.decodeToString()}"); return null
             }
@@ -105,15 +139,19 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             val count = u32(size.second)
             if (count > 1024) { com.z1pendant.platform.PLog.w("MakeraLink", "download $path: $count packets, too big"); return null }   // > 8 MB
             val parts = ArrayList<ByteArray>()
+            var got = 0
+            var stoppedEarly = false
             for (seq in 1..count) {
                 val r = dlRequest(MakeraFrame.DL_DATA, u32(seq)) ?: return null
                 if (r.first != MakeraFrame.DL_DATA || r.second.size < 4 || u32(r.second) != seq) return null
                 parts += r.second.copyOfRange(4, r.second.size)
+                got += r.second.size - 4
+                onProgress?.invoke(seq.toInt(), count.toInt())
+                if (seq < count && (got >= maxBytes || enough?.invoke(joined(parts).decodeToString()) == true)) { stoppedEarly = true; break }
                 kotlinx.coroutines.delay(25)              // paced: the board is also streaming the job
             }
-            dlRequest(MakeraFrame.DL_END)
-            owner = false
-            val bytes = ByteArray(parts.sumOf { it.size }).also { b -> var o = 0; for (x in parts) { x.copyInto(b, o); o += x.size } }
+            if (!stoppedEarly) { dlRequest(MakeraFrame.DL_END); owner = false }   // else: the finally cancels it
+            val bytes = joined(parts)
             // A QuickLZ copy (from /sd/gcodes/.lz) starts with 00 00: not handled yet.
             if (bytes.size >= 2 && bytes[0] == 0.toByte() && bytes[1] == 0.toByte()) {
                 com.z1pendant.platform.PLog.w("MakeraLink", "download $path came compressed; skipped"); return null
@@ -124,6 +162,132 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             dlReply = null
         }
     }
+    private fun joined(parts: List<ByteArray>): ByteArray =
+        ByteArray(parts.sumOf { it.size }).also { b -> var o = 0; for (x in parts) { x.copyInto(b, o); o += x.size } }
+
+    // ---- the Wi-Fi board's file commands: ls -s, mkdir, mv, rm (reference/file_commands_notes.md) ----
+    // Their replies (0x83 listing, 0x84 done, 0x85 failed) are taken here while a command waits, so the
+    // 0x84 "ok" is never mistaken for a G-code line's ack. One command at a time.
+    private val fsLock = Mutex()
+    @Volatile private var fsSink: ((Int, ByteArray) -> Boolean)? = null
+
+    private fun wirePath(path: String) = path.replace(' ', '\u0001')
+
+    /** Send [line]; returns (ok, final text) or null on no answer. Listing chunks go to [listing]. */
+    private suspend fun fsCommand(line: String, timeoutMs: Long = 8000, listing: StringBuilder? = null): Pair<Boolean, String>? =
+        fsLock.withLock {
+            if (conn.value != ConnState.Connected) return null
+            val done = kotlinx.coroutines.CompletableDeferred<Pair<Boolean, String>>()
+            fsSink = { type, payload ->
+                when (type) {
+                    MakeraFrame.FS_LIST -> { if (listing != null) { listing.append(payload.decodeToString()); true } else false }
+                    MakeraFrame.FS_DONE -> { done.complete(true to payload.decodeToString().trim()); true }
+                    MakeraFrame.FS_ERROR -> { done.complete(false to payload.decodeToString().trim().replace('\u0001', ' ')); true }
+                    else -> false
+                }
+            }
+            try {
+                sendRaw(MakeraFrame.line(line))
+                kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { done.await() }
+            } finally { fsSink = null }
+        }
+
+    override suspend fun listDir(path: String): List<com.z1pendant.link.RemoteEntry>? {
+        val text = StringBuilder()
+        val r = fsCommand("ls -s ${wirePath(path)}", listing = text) ?: return null
+        if (!r.first) return null
+        return com.z1pendant.files.RemoteFiles.parseListing(text.toString())
+    }
+
+    private suspend fun simple(line: String, timeoutMs: Long = 8000): String? {
+        val r = fsCommand(line, timeoutMs) ?: return "the machine didn't answer"
+        return if (r.first) null else r.second.ifEmpty { "the machine said no" }
+    }
+
+    override suspend fun makeDir(path: String) = simple("mkdir ${wirePath(path)}")
+    override suspend fun rename(from: String, to: String) = simple("mv ${wirePath(from)} ${wirePath(to)}")
+    override suspend fun delete(path: String) = simple("rm ${wirePath(path)}", timeoutMs = 30_000)   // a folder takes longer
+
+    // ---- upload (reference/upload_protocol_notes.md; the board drives it, we answer) ----
+    private class Busy(msg: String) : Exception(msg)
+
+    override suspend fun uploadFile(path: String, data: ByteArray, onProgress: (Long, Long) -> Boolean): String? {
+        if (conn.value != ConnState.Connected) return "not connected"
+        if (!path.startsWith("/sd/")) return "the path must start with /sd/"
+        val md5 = com.z1pendant.util.Md5.hex(data).encodeToByteArray()
+        // Set the board's clock first, as Makera's app does, so the file gets today's date (not 1980).
+        sendRaw(MakeraFrame.line("time ${com.z1pendant.platform.epochSeconds()}"))
+        val giveUpAt = nowMs() + 15_000
+        while (true) {
+            try {
+                return dlLock.withLock { uploadOnce(wirePath(path), data, md5, onProgress) }
+            } catch (b: Busy) {
+                if (nowMs() >= giveUpAt) return b.message
+                delay(1000)
+            }
+        }
+    }
+
+    private suspend fun uploadOnce(wire: String, data: ByteArray, md5: ByteArray, onProgress: (Long, Long) -> Boolean): String? {
+        val packet = 4096
+        val count = maxOf(1, (data.size + packet - 1) / packet)
+        dlFlush()                                           // end any leftover transfer in our slot first
+        val frames = kotlinx.coroutines.channels.Channel<Pair<Int, ByteArray>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+        xferFrames = frames
+        var finished = false
+        try {
+            sendRaw(MakeraFrame.build(MakeraFrame.UL_START, "upload $wire\n".encodeToByteArray()))
+            var last = MakeraFrame.build(MakeraFrame.DL_MD5, md5)
+            sendRaw(last)
+            var viewSent = false
+            var tries = 0
+            while (true) {
+                val r = kotlinx.coroutines.withTimeoutOrNull(3000) { frames.receive() }
+                if (r == null) {
+                    if (++tries >= 5) return "the machine stopped answering"
+                    sendRaw(last); continue                 // stop-and-wait: resend our last frame (never the start)
+                }
+                val (t, p) = r
+                when (t) {
+                    MakeraFrame.REFUSED -> throw Busy("another app is sending or fetching a file: ${p.decodeToString().trim()}")
+                    MakeraFrame.DL_CANCEL -> {
+                        finished = true
+                        val msg = p.decodeToString().trim()
+                        if (!viewSent && listOf("time out", "canceled", "too many").any { it in msg.lowercase() })
+                            throw Busy("a leftover transfer ended in the way: $msg")
+                        return msg.ifEmpty { "the machine cancelled the upload" }
+                    }
+                    MakeraFrame.DL_RETRY -> { if (++tries >= 5) return p.decodeToString().trim().ifEmpty { "too many retries" }; sendRaw(last) }
+                    MakeraFrame.DL_MD5 -> { tries = 0; last = MakeraFrame.build(MakeraFrame.DL_MD5, md5); sendRaw(last) }
+                    MakeraFrame.DL_SIZE -> {                // "send the file view": u32 count + u16 packet size
+                        tries = 0
+                        last = MakeraFrame.build(MakeraFrame.DL_SIZE, u32(count.toLong()) + byteArrayOf((packet ushr 8).toByte(), packet.toByte()))
+                        sendRaw(last); viewSent = true
+                    }
+                    MakeraFrame.DL_DATA -> {
+                        tries = 0
+                        if (p.size < 4) continue
+                        val seq = u32(p)
+                        if (!viewSent) { sendRaw(MakeraFrame.build(MakeraFrame.DL_CANCEL)); finished = true; throw Busy("a leftover upload asked for packet $seq") }
+                        if (seq < 1 || seq > count) return "the machine asked for packet $seq of $count"
+                        val from = ((seq - 1) * packet).toInt(); val to = minOf(data.size, from + packet)
+                        if (!onProgress(to.toLong(), data.size.toLong())) {
+                            sendRaw(MakeraFrame.build(MakeraFrame.DL_CANCEL)); finished = true
+                            return "cancelled"
+                        }
+                        last = MakeraFrame.build(MakeraFrame.DL_DATA, p.copyOfRange(0, 4) + data.copyOfRange(from, to))
+                        sendRaw(last)
+                    }
+                    MakeraFrame.DL_END -> { finished = true; onProgress(data.size.toLong(), data.size.toLong()); return null }
+                    else -> {}
+                }
+            }
+        } finally {
+            xferFrames = null
+            if (!finished) sendRaw(MakeraFrame.build(MakeraFrame.DL_CANCEL))   // free the board's transfer slot
+        }
+    }
+
     override fun queryJobFile() {
         if (conn.value != ConnState.Connected) return
         scope.launch { sendRaw(MakeraFrame.build(MakeraFrame.JOB_FILE, ByteArray(0))) }
@@ -279,7 +443,9 @@ class MakeraLink(private val scope: CoroutineScope = CoroutineScope(SupervisorJo
             while (true) {
                 val n = ins.readAvailable(buf, 0, buf.size)
                 if (n < 0) break
-                dec.feed(buf, n) { type, payload -> if (!onDownloadPacket(type, payload)) onPacket(type, payload.decodeToString()) }
+                dec.feed(buf, n) { type, payload ->
+                    if (!onDownloadPacket(type, payload) && fsSink?.invoke(type, payload) != true) onPacket(type, payload.decodeToString())
+                }
             }
         } catch (_: Exception) {
         }

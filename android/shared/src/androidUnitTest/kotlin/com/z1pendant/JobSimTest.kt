@@ -129,6 +129,32 @@ class JobSimTest {
         withTimeout(10_000) { while (spy.status.value?.spindleOverride != 100.0) delay(50) }
         spy.disconnect(); link.disconnect()
     }
+
+    /**
+     * A download left running by a connection that dropped (the board keeps it, and the next connection
+     * in that slot inherits it, seen on the Z1 2026-11-16): the link cancels it first and its own download
+     * works at once, twice in a row. Before the fix it resent its start and the queued one blocked 9 s.
+     */
+    @Test fun downloadAfterLeftoverTransfer() = runBlocking {
+        Socket("127.0.0.1", port).use { s ->
+            s.getOutputStream().write(com.z1pendant.link.makera.MakeraFrame.build(0xB0, "download /sd/gcodes/t.cnc\n".encodeToByteArray()))
+            s.getOutputStream().flush()
+            Thread.sleep(300)                                     // started; then the connection drops
+        }
+        Thread.sleep(300)
+        val link = com.z1pendant.link.makera.MakeraLink()
+        link.connect(MachineTarget("sim", "127.0.0.1", port))
+        withTimeout(5000) { while (link.conn.value != ConnState.Connected) delay(20) }
+        for (i in 1..2) {
+            val t0 = System.nanoTime()
+            val text = link.downloadFile("/sd/gcodes/t.cnc")
+            val secs = (System.nanoTime() - t0) / 1e9
+            assertNotNull("download $i", text)
+            assertEquals(true, text!!.contains("T2M6"))
+            assertEquals("download $i took $secs s", true, secs < 3.0)
+        }
+        link.disconnect()
+    }
 }
 
 private class FakePlatform : Platform {

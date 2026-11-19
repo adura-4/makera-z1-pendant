@@ -35,11 +35,16 @@ import com.z1pendant.util.Fmt
 
 private val TrackColor = Color(0xFF0F1A2E)
 
-/** 754 → "12:34"; 3_725 → "1:02:05". */
+/** 754 → "12m 34s"; 3_725 → "1h 02m"; 42 → "0m 42s". */
 fun fmtDuration(s: Long): String {
+    // An hour or more: hours and minutes ("1h 05m"); under an hour: minutes and seconds ("13m 22s",
+    // "0m 42s"). Reads as a length of time, not a clock time (Jimmy, 2026-11-18).
     val h = s / 3600; val m = (s % 3600) / 60; val sec = s % 60
     fun two(v: Long) = v.toString().padStart(2, '0')
-    return if (h > 0) "$h:${two(m)}:${two(sec)}" else "$m:${two(sec)}"
+    return when {
+        h > 0 -> "${h}h ${two(m)}m"
+        else -> "${m}m ${two(sec)}s"
+    }
 }
 
 /** The clock time [inS] seconds from now, "1:47 am" style, from the device's wall clock. */
@@ -92,7 +97,7 @@ private fun Cell(title: String, value: String, small: String? = null, valueColor
  * and the tool list (from the job file's header, when the file could be read).
  */
 @Composable
-fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onClose: () -> Unit) {
+fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onMesh: () -> Unit = {}, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val p = job.progress
     val toolChange = st?.state.equals("Tool", true)
@@ -109,12 +114,18 @@ fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onClose: () -
                 fontSize = 13.sp, color = cs.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
         }
         ProgressBar(job.percent, 12.dp, Modifier.fillMaxWidth())
+        // A leveling grid is active (|O:): this job's mesh, tap to see it.
+        st?.mesh?.let { m ->
+            Text("▦ Mesh ${Fmt.fixed(m, 2)} mm", fontSize = 13.sp, color = Color(0xFFFACC15), fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF3A2F0B)).clickable(onClick = onMesh)
+                    .padding(horizontal = 10.dp, vertical = 4.dp))
+        }
         if (toolChange) {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(cs.secondaryContainer)) {
                 Box(Modifier.width(4.dp).height(52.dp).background(cs.primary))
                 Column(Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
                     Text("Tool change: put in T${st?.toolTarget ?: "?"}", color = cs.primary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    Text("Confirm on the machine or in Makera Studio.", fontSize = 13.sp, color = cs.onSurfaceVariant)
+                    Text("Confirm on the machine, in Studio, or in the popup here.", fontSize = 13.sp, color = cs.onSurfaceVariant)
                 }
             }
         }
@@ -133,7 +144,7 @@ fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onClose: () -
                 modifier = Modifier.weight(1f))
             Cell("State", st?.state ?: "—", valueColor = Color(0xFF60A5FA), modifier = Modifier.weight(1f))
         }
-        ToolList(tools, st, p.line, p.elapsedS, p.percent)
+        ToolList(tools, st, p.line, p.elapsedS, p.percent, job.pace)
     }
 }
 
@@ -143,7 +154,7 @@ fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onClose: () -
  * the tool in the collet.
  */
 @Composable
-private fun ToolList(tools: JobTools?, st: MachineStatus?, line: Long, elapsedS: Long, percent: Int) {
+private fun ToolList(tools: JobTools?, st: MachineStatus?, line: Long, elapsedS: Long, percent: Int, pace: Double = 1.0) {
     val cs = MaterialTheme.colorScheme
     var all by remember { mutableStateOf(false) }
     val box = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(cs.secondaryContainer)
@@ -159,10 +170,15 @@ private fun ToolList(tools: JobTools?, st: MachineStatus?, line: Long, elapsedS:
     val waiting = st?.state.equals("Tool", true)
     var cur = tools.changes.indexOfLast { it.line <= line }
     if (waiting) cur = tools.changes.indexOfFirst { it.line >= line }.let { if (it < 0) tools.changes.lastIndex else it }
-    // Seconds per file line so far, for "in ~N min".
+    // "in ~N min": the estimated time from here to that change (JobTime) × the pace so far; without
+    // the time table, seconds per file line so far.
     fun whenText(i: Int): String = when {
         i < cur -> "done"
         i == cur -> "now"
+        tools.time != null -> {
+            val s = (tools.time.between(line.coerceAtLeast(0), tools.changes[i].line, st?.feedOverride) * pace).toLong()
+            if (s < 60) "~1 min" else "~${s / 60} min"
+        }
         line <= 0 || elapsedS <= 0 -> ""
         else -> {
             val s = (tools.changes[i].line - line) * elapsedS / line

@@ -26,8 +26,9 @@ data class ToolAction(val load: Boolean, val stage: Stage, val error: String? = 
 
 sealed class RunState {
     data object Idle : RunState()
-    /** On step [index] of [labels] (see stepLabels); [step] is the label. */
-    data class Running(val step: String, val index: Int = 0, val labels: List<String> = emptyList(), val setMode: Boolean = true) : RunState()
+    /** On step [index] of [labels] (see stepLabels); [step] is the label; [touch] = touches made in this step so far. */
+    data class Running(val step: String, val index: Int = 0, val labels: List<String> = emptyList(), val setMode: Boolean = true,
+                       val touch: Int = 0) : RunState()
     data class Done(val result: ProbeResult) : RunState()
     data class Failed(val reason: String, val hint: String?, val changed: String) : RunState()
 }
@@ -72,6 +73,11 @@ class ProbeController(
     val run = MutableStateFlow<RunState>(RunState.Idle)
     /** Which probe the last calibration's setter touch says is in, against the one picked (null = no calibration seen). */
     val lengthCheck = MutableStateFlow<ProbeLength.Check?>(null)
+    /**
+     * Check calibrations against this probe instead of the wizard's pick. The Run flow sets it to
+     * the laser probe (the margin scan, Z probe and leveling need it in, as tool 0).
+     */
+    @kotlin.concurrent.Volatile var checkAs: ProbeTool? = null
 
     private var runJob: Job? = null
     private val runLines = Channel<String>(Channel.UNLIMITED)
@@ -81,6 +87,13 @@ class ProbeController(
     private var slowTouchNext = false
     private var setterZ: Double? = null
     private var lastSetterZ: Double? = null
+    /**
+     * When the last calibration finished, and whether a status has said a probe is in since. The
+     * status that crosses "Done ATC" can still carry the old tool number (−1 mid-change, or the
+     * cutter); taken as "the probe came out" it wiped the calibration (2026-11-19 on the Z1).
+     */
+    private var calDoneAt: kotlin.time.TimeSource.Monotonic.ValueTimeMark? = null
+    private var probeSeenSinceCal = false
 
     init {
         scope.launch { link.messages.collect { onMessage(it) } }
@@ -90,7 +103,14 @@ class ProbeController(
                 val busy = toolAction.value?.let { it.stage != ToolAction.Stage.DONE && it.error == null } == true
                 // The probe came out: a tool change or Set tool to anything else. (During a tool
                 // change the number reads −1 for a moment; that's the change we're watching.)
-                if (tool != null && tool != PROBE_TOOL && !busy) probeOut()
+                if (tool != null && com.z1pendant.isProbeTool(tool)) probeSeenSinceCal = true
+                // A stale number just after the calibration isn't the probe coming out: give the
+                // machine 5 s to report the probe before believing it.
+                val settling = !probeSeenSinceCal && calDoneAt?.let { it.elapsedNow().inWholeMilliseconds < 5_000 } == true
+                if (tool != null && !com.z1pendant.isProbeTool(tool) && !busy && !settling) {
+                    if (calibrated.value) PLog.i("probe", "probe out: the status says T$tool")
+                    probeOut()
+                }
                 if (st?.state.equals("Tool", true)) toolAction.value?.let { a ->
                     if (a.error == null && a.stage == ToolAction.Stage.MOVING) toolAction.value = a.copy(stage = ToolAction.Stage.WAITING)
                 }
@@ -110,7 +130,7 @@ class ProbeController(
     fun update(s: ProbeSetup) {
         val toolChanged = s.tool != setup.value.tool
         setup.value = s
-        if (toolChanged) lastSetterZ?.let { lengthCheck.value = ProbeLength.check(s.tool, it, learned()) }
+        if (toolChanged && checkAs == null) lastSetterZ?.let { lengthCheck.value = ProbeLength.check(s.tool, it, learned()) }
         prefs.edit {
             putString("probe.kind", s.kind.name); putString("probe.corner", s.corner.name)
             putString("probe.axes", s.axes.name); putString("probe.tool", s.tool.name)
@@ -159,6 +179,24 @@ class ProbeController(
 
     fun dismissToolError() { toolAction.value = null }
 
+    /**
+     * The laser probe as tool 0, which the firmware's margin scan insists on. [alreadyIn] false:
+     * tool change (`M6 T0`: swap, then the setter calibration). true: it's in, the number may be
+     * wrong: set T0 without motion, then calibrate (`M493.2 T0` marks the length unmeasured, so the
+     * order matters). Either way the setter touch says which probe it really is.
+     */
+    fun loadLaser(alreadyIn: Boolean, currentTool: Int?) {
+        checkAs = ProbeTool.LASER
+        toolAction.value = ToolAction(load = !alreadyIn, stage = ToolAction.Stage.MOVING); sawSetter = false
+        recalibrating()
+        onSend()
+        if (alreadyIn) { link.sendLine("M493.2 T0"); link.sendLine("M491") }
+        else {
+            if (currentTool == 0) link.sendLine("M493.2 T-1")     // M6 T0 does nothing while it already says T0
+            link.sendLine("M6 T0")
+        }
+    }
+
     private fun probeOut() {
         confirmed.value = false; calibrated.value = false
         lastSetterZ = null; lengthCheck.value = null
@@ -176,6 +214,7 @@ class ProbeController(
      * knowing (it still says T9999), so an earlier calibration doesn't count.
      */
     fun openWizard() {
+        checkAs = null
         if (toolAction.value?.let { it.stage != ToolAction.Stage.DONE && it.error == null } != true) recalibrating()
     }
 
@@ -192,7 +231,7 @@ class ProbeController(
     /** A calibration just finished at setter Z [z]: check it's the probe you picked; a probe's first one is learned. */
     private fun checkLength(z: Double) {
         lastSetterZ = z
-        val tool = setup.value.tool
+        val tool = checkAs ?: setup.value.tool
         var c = ProbeLength.check(tool, z, learned())
         if (c.result == ProbeLength.Result.NEW) { saveLength(tool, z); c = c.copy(result = ProbeLength.Result.LEARNED) }
         lengthCheck.value = c
@@ -229,6 +268,8 @@ class ProbeController(
             line.startsWith("Done ATC") && sawSetter && a != null && a.error == null -> {
                 sawSetter = false
                 calibrated.value = true; confirmed.value = true
+                calDoneAt = kotlin.time.TimeSource.Monotonic.markNow()
+                probeSeenSinceCal = link.status.value?.tool?.let { com.z1pendant.isProbeTool(it) } == true
                 setterZ?.let(::checkLength); setterZ = null
                 toolAction.value = a.copy(stage = ToolAction.Stage.DONE)
             }
@@ -280,10 +321,13 @@ class ProbeController(
         val cmd = s.makeraCommand()!!
         val labels = s.stepLabels()
         var idx = 0
-        fun show(i: Int) { idx = maxOf(idx, i); run.value = RunState.Running(labels[idx], idx, labels, true) }
+        val touches = mutableListOf<Touch>()
+        fun show(i: Int) {
+            idx = maxOf(idx, i)
+            run.value = RunState.Running(labels[idx], idx, labels, true, s.touchesInStep(idx, touches.size))
+        }
         show(0)
         onSend(); link.sendLine(cmd)
-        val touches = mutableListOf<Touch>()
         val t0 = nowMs()
         var moved = false
         while (true) {
@@ -335,7 +379,10 @@ class ProbeController(
 
     /** The link as the sequences need it: one line at a time, each waiting for its answer. */
     private inner class LinkIo(val labels: List<String>, val setMode: Boolean) : ProbeIo {
-        override fun step(text: String) { run.value = RunState.Running(text, labels.indexOf(text).coerceAtLeast(0), labels, setMode) }
+        private var step = labels.firstOrNull() ?: ""
+        private var touched = 0
+        private fun publish() { run.value = RunState.Running(step, labels.indexOf(step).coerceAtLeast(0), labels, setMode, touched) }
+        override fun step(text: String) { step = text; touched = 0; publish() }
 
         override suspend fun send(line: String) {
             checkMachine()
@@ -357,6 +404,7 @@ class ProbeController(
                     parsePrb(l)?.let { (t, ok) ->
                         if (!ok) throw ProbeStop("The probe didn't touch anything.")
                         withTimeoutOrNull(5_000) { ack.await() }
+                        touched++; publish()
                         return t
                     }
                     if (isStop(l)) throw ProbeStop(friendly(l))

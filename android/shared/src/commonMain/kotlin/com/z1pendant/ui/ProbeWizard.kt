@@ -98,13 +98,19 @@ private val Green = Color(0xFF22C55E)
 private val Amber = Color(0xFFF59E0B)
 private val ErrBg = Color(0xFF3B1D22)
 private val ErrFg = Color(0xFFF87171)
+private val WarnBg = Color(0xFF3A2A0B)
+private val WarnFg = Color(0xFFFDE68A)
 
 /**
  * Full-screen 3D probe wizard (mockups/probe_mock.html): 1 what, 2 settings, 3 probe in and
  * calibrated, 4 position + mode + Run, 5 result.
  */
 @Composable
-fun ProbeWizard(vm: AppViewModel, onClose: () -> Unit) {
+/**
+ * [requireZero]: opened from Run's 3D probe origin. The finish button ([doneLabel], "Next") only
+ * goes on once an X or Y work zero has been set. [onClose] gets whether one was.
+ */
+fun ProbeWizard(vm: AppViewModel, doneLabel: String = "Done", requireZero: Boolean = false, onClose: (zeroSet: Boolean) -> Unit) {
     val p = vm.probe
     var step by remember { mutableStateOf(1) }
     val setup by p.setup.collectAsState()
@@ -112,7 +118,8 @@ fun ProbeWizard(vm: AppViewModel, onClose: () -> Unit) {
     var info by remember { mutableStateOf(false) }
     var askRun by remember { mutableStateOf(false) }
     val running = run is RunState.Running
-    fun close() { if (!running) { p.closeWizard(); onClose() } }
+    fun finish(zeroSet: Boolean) { if (!running) { p.closeWizard(); onClose(zeroSet) } }
+    fun close() = finish(false)
     // Each step's Next only once that step is satisfied; nothing moves on while the probe is being loaded or calibrated.
     val action by p.toolAction.collectAsState()
     val acting = action?.let { it.stage != ToolAction.Stage.DONE && it.error == null } == true
@@ -152,7 +159,7 @@ fun ProbeWizard(vm: AppViewModel, onClose: () -> Unit) {
                 3 -> StepPosition(vm, setup, probeReady, onEdit = { step = 1 })
                 4 -> { StepSettings(setup) { p.update(it) }; ModeAndStatus(vm) }
                 // Probe again keeps the calibration (the probe stayed in), unless the run lost it (no touch).
-                else -> StepResult(vm, run, onAgain = { p.reset(); step = if (p.calibrated.value) 3 else 2 }, onDone = ::close)
+                else -> StepResult(vm, run, doneLabel, requireZero, onAgain = { p.reset(); step = if (p.calibrated.value) 3 else 2 }, onDone = ::finish)
             }
         }
         // While probing: Stop, pinned at the bottom where your thumb is.
@@ -388,6 +395,18 @@ private fun StepCheck(vm: AppViewModel) {
         if (st?.isAlarm == true) SmallButton("Unlock", { Icon(Icons.Filled.LockOpen, null) }) { vm.link.dialect.unlock().forEach { vm.link.sendLine(it) } }
     }
 
+    // Why the buttons below are off (2026-11-18: the Pixel had left the machine's Wi-Fi, and the panel
+    // only said "The spindle is empty" next to a greyed Load button).
+    if (!acting && action?.error == null && (!connected || !idle)) {
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(WarnBg).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Error, null, tint = WarnFg); Spacer(Modifier.width(8.dp))
+            Text(when {
+                !connected -> "Not connected to the machine (${conn.name.lowercase()}). Loading and calibrating need the link; check the phone is on the machine's Wi-Fi."
+                else -> "The machine is ${st?.state ?: "busy"}, not Idle. Loading and calibrating wait until it's Idle."
+            }, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        }
+    }
+
     // Row 1: the probe is in the spindle.
     when {
         action?.load == true && acting -> CheckRow(1, "$name in the spindle", "Loading…") {
@@ -429,6 +448,8 @@ private fun StepCheck(vm: AppViewModel) {
 }
 
 private fun lenName(t: ProbeTool) = t.noun
+/** "3D Probe", "Probe Rod", "Laser Probe": for status lines like "3D Probe Confirmed". */
+private fun titleName(t: ProbeTool) = t.label.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
 
 /** Which probe the setter says is in: each probe trips it at its own Z (learned on its first calibration). */
 @Composable
@@ -439,12 +460,12 @@ private fun LengthRow(c: ProbeLength.Check, p: com.z1pendant.probe.ProbeControll
         SmallButton("Load the ${lenName(c.tool)}", { Icon(Icons.Filled.SwapHoriz, null) }, enabled = canMove) { p.reloadProbe() }
     }
     when (c.result) {
-        ProbeLength.Result.MATCH -> CheckRow(2, "It's the ${lenName(c.tool)}", "Setter Z $z, learned $exp")
+        ProbeLength.Result.MATCH -> CheckRow(2, "${titleName(c.tool)} Confirmed", "Setter Z $z, learned $exp")
         ProbeLength.Result.LEARNED -> CheckRow(2, "${c.tool.label} length learned",
             "It tripped the setter at Z $z. From now on the app checks the ${lenName(c.tool)} reads the same, so a wrong probe gets caught.")
         // The reading is another probe's: swap in the one you picked, or use the one that's in if it
         // can do this operation (all three can do Top only; the laser probe nothing else).
-        ProbeLength.Result.LOOKS_LIKE -> CheckRow(3, "This is the ${lenName(c.other!!)}",
+        ProbeLength.Result.LOOKS_LIKE -> CheckRow(3, "${titleName(c.other!!)} Detected",
             "It tripped the setter at Z $z, like the ${lenName(c.other)} (${Fmt.fixed(p.learned()[c.other] ?: c.z, 3)}). " +
                 "You picked the ${lenName(c.tool)}.") {
             load()
@@ -455,7 +476,7 @@ private fun LengthRow(c: ProbeLength.Check, p: com.z1pendant.probe.ProbeControll
             "Setter Z $z, learned $exp (${Fmt.fixed(kotlin.math.abs(c.z - (c.expected ?: c.z)), 2)} mm off). " +
                 "A different probe, or it's not seated the same way in the collet.") {
             load()
-            SmallButton("It's the ${lenName(c.tool)}: remember this length", null, outlined = true) { p.rememberLength() }
+            SmallButton("Confirm ${titleName(c.tool)}", null, outlined = true) { p.rememberLength() }
         }
         ProbeLength.Result.NEW -> CheckRow(3, "${c.tool.label} not learned yet", "It tripped the setter at Z $z.") {
             load()
@@ -598,7 +619,7 @@ private fun summary(s: ProbeSetup): String = when (s.kind) {
 
 // ---- step 5: result --------------------------------------------------------------------------
 @Composable
-private fun StepResult(vm: AppViewModel, run: RunState, onAgain: () -> Unit, onDone: () -> Unit) {
+private fun StepResult(vm: AppViewModel, run: RunState, doneLabel: String, requireZero: Boolean, onAgain: () -> Unit, onDone: (zeroSet: Boolean) -> Unit) {
     val st by vm.link.status.collectAsState()
     val conn by vm.link.conn.collectAsState()
     val connected = conn == ConnState.Connected
@@ -611,7 +632,7 @@ private fun StepResult(vm: AppViewModel, run: RunState, onAgain: () -> Unit, onD
                 Text(setup.title(), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Text(if (run.setMode) "Set work zero" else "Measure only", fontSize = 13.sp, color = Muted)
             }
-            ProbeRunArt(setup, run.labels, run.index, Modifier.fillMaxWidth().height(240.dp))
+            ProbeRunArt(setup, run.labels, run.index, Modifier.fillMaxWidth().height(240.dp), stepTouch = run.touch)
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(TileBg).padding(horizontal = 12.dp, vertical = 6.dp)) {
                 run.labels.forEachIndexed { i, label ->
                     val done = i < run.index; val now = i == run.index
@@ -639,7 +660,7 @@ private fun StepResult(vm: AppViewModel, run: RunState, onAgain: () -> Unit, onD
                 }
             }
         }
-        is RunState.Done -> ResultView(vm, run.result, st, connected, onAgain, onDone)
+        is RunState.Done -> ResultView(vm, run.result, st, connected, doneLabel, requireZero, onAgain, onDone)
         is RunState.Failed -> {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(ErrBg).padding(12.dp), verticalAlignment = Alignment.Top) {
                 Icon(Icons.Filled.Error, null, tint = ErrFg, modifier = Modifier.size(26.dp)); Spacer(Modifier.width(8.dp))
@@ -649,7 +670,7 @@ private fun StepResult(vm: AppViewModel, run: RunState, onAgain: () -> Unit, onD
             run.hint?.let { CheckRowIcon(Icons.Filled.Help, "Likely cause", it) }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PendantOutlinedButton(onClick = onDone, modifier = Modifier.weight(1f).height(48.dp)) { Text("Done", fontSize = 16.sp) }
+                PendantOutlinedButton(onClick = { onDone(false) }, modifier = Modifier.weight(1f).height(48.dp)) { Text(if (requireZero) "Back" else doneLabel, fontSize = 16.sp) }
                 if (st?.isAlarm == true) Button(onClick = { vm.link.dialect.unlock().forEach { vm.link.sendLine(it) }; onAgain() }, modifier = Modifier.weight(1f).height(48.dp)) {
                     Icon(Icons.Filled.LockOpen, null); Spacer(Modifier.width(4.dp)); Text("Unlock, retry", fontSize = 16.sp)
                 } else Button(onClick = onAgain, modifier = Modifier.weight(1f).height(48.dp)) { Text("Try again", fontSize = 16.sp) }
@@ -680,11 +701,15 @@ private fun Cells(cells: List<Pair<String, Double?>>) {
 }
 
 @Composable
-private fun ResultView(vm: AppViewModel, r: ProbeResult, st: MachineStatus?, connected: Boolean, onAgain: () -> Unit, onDone: () -> Unit) {
+private fun ResultView(vm: AppViewModel, r: ProbeResult, st: MachineStatus?, connected: Boolean, doneLabel: String, requireZero: Boolean,
+                       onAgain: () -> Unit, onDone: (zeroSet: Boolean) -> Unit) {
     val s = r.setup
     var undone by remember { mutableStateOf(false) }
-    // Picked to start with: X and Y where measured (Z only for Top only, where it's all there is).
-    var setAxes by remember { mutableStateOf(if (s.kind == ProbeKind.TOP) setOf('Z') else setOf('X', 'Y').filter { (it == 'X' && r.zeroX != null) || (it == 'Y' && r.zeroY != null) }.toSet()) }
+    // Picked to start with: every axis the run measured, the same set Makera's own routine writes in
+    // Set work zero (corners and block center set X, Y and Z; a hole has no top, so X and Y). Untick
+    // Z when Z0 belongs on another surface (Jimmy, 2026-11-18).
+    var setAxes by remember { mutableStateOf(listOfNotNull('X'.takeIf { r.zeroX != null }, 'Y'.takeIf { r.zeroY != null },
+        'Z'.takeIf { r.top != null }).toSet()) }
     var didSet by remember { mutableStateOf(false) }
     val center = s.kind == ProbeKind.HOLE || s.kind == ProbeKind.BLOCK
     Row(verticalAlignment = Alignment.Top) {
@@ -740,11 +765,15 @@ private fun ResultView(vm: AppViewModel, r: ProbeResult, st: MachineStatus?, con
         }
     }
     if (didSet) Text("Work zero set on ${listOf('X', 'Y', 'Z').filter { it in setAxes }.joinToString(" ")}.", fontSize = 13.sp, color = Green)
+    // An X or Y work zero came out of this run (and wasn't put back).
+    val xySet = (r.mode == ProbeMode.SET_ZERO && ('X' in r.zeroSet || 'Y' in r.zeroSet) && !undone) ||
+        (didSet && ('X' in setAxes || 'Y' in setAxes))
+    if (requireZero && !xySet) Text("Set the X/Y work zero to go on.", fontSize = 13.sp, color = Muted)
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         PendantOutlinedButton(onClick = onAgain, modifier = Modifier.weight(1f).height(48.dp)) { Text("Probe again", fontSize = 16.sp) }
-        Button(onClick = onDone, modifier = Modifier.weight(1f).height(48.dp)) {
-            Text(if (r.mode == ProbeMode.MEASURE && !didSet) "Done, don't set" else "Done", fontSize = 16.sp)
+        Button(onClick = { onDone(xySet) }, enabled = !requireZero || xySet, modifier = Modifier.weight(1f).height(48.dp)) {
+            Text(if (!requireZero && r.mode == ProbeMode.MEASURE && !didSet) "$doneLabel, don't set" else doneLabel, fontSize = 16.sp)
         }
     }
 }
