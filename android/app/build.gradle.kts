@@ -13,8 +13,8 @@ android {
         applicationId = "com.z1pendant"
         minSdk = 31            // VibrationEffect composition primitives (TICK / CLICK / THUD)
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.1.7"
+        versionCode = 9
+        versionName = "0.1.8"
     }
 
     buildTypes {

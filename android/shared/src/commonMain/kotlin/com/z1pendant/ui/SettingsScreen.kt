@@ -44,6 +44,7 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
     val tick by vm.tickMs.collectAsState()
     val deg by vm.degPerClick.collectAsState()
     val clamp by vm.softClamp.collectAsState()
+    val zeroHold by vm.zeroHold.collectAsState()
     val hideSerial by vm.hideSerial.collectAsState()
     val levelBelow by vm.run.levelBelow.collectAsState()
     var host by remember { mutableStateOf(target?.host ?: "") }
@@ -67,18 +68,31 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
 
                 Section("Machine")
                 Text("Status: $conn" + (target?.let { " · ${Serial.shown(it.name, hideSerial)} ${it.host}:${it.port}" } ?: "") + (fw?.let { " · fw $it" } ?: ""), fontSize = 13.sp)
+                // The machine we're on (or trying to reach), matched by address: the name differs when
+                // you connected by IP.
+                fun isCurrent(t: MachineTarget) = conn != ConnState.Disconnected && target?.let { it.host == t.host && it.port == t.port } == true
+                val currentListed = found.any { (t, _) -> isCurrent(t) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PendantOutlinedButton(onClick = vm::scan, enabled = !scanning) { Text(if (scanning) "Scanning…" else "Scan network") }
-                    if (conn != ConnState.Disconnected) PendantOutlinedButton(onClick = vm::disconnect) { Text("Disconnect") }
+                    // Its row has Disconnect; this one is for a machine the scan didn't find.
+                    if (conn != ConnState.Disconnected && !currentListed) PendantOutlinedButton(onClick = vm::disconnect) { Text("Disconnect") }
                 }
                 found.forEach { (t, busy) ->
+                    val current = isCurrent(t)
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { vm.connect(t); onClose() }.padding(10.dp)) {
+                        .clickable { if (current) vm.disconnect() else { vm.connect(t); onClose() } }.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(Serial.shown(t.name, hideSerial), fontWeight = FontWeight.SemiBold)
-                            Text("${t.host}:${t.port}" + if (busy) " · busy (another app connected?)" else "", fontSize = 12.sp)
+                            Text("${t.host}:${t.port}" + when {
+                                current && conn == ConnState.Connected -> " · connected"
+                                current -> " · connecting…"
+                                busy -> " · busy (another app connected?)"
+                                else -> ""
+                            }, fontSize = 12.sp)
                         }
-                        Text("Connect", color = MaterialTheme.colorScheme.primary)
+                        Text(if (current) "Disconnect" else "Connect",
+                            color = if (current) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                     }
                 }
                 if (!scanning && found.isEmpty()) Text("Nothing found by broadcast. Enter the IP:", fontSize = 13.sp)
@@ -93,7 +107,21 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                 SwitchRow("Hide the serial number (for recordings)", hideSerial) { vm.setHideSerial(it) }
 
                 Section("Handwheel & jog")
-                LabeledSlider("Vibration strength", haptic, 0f..1f, "${(haptic * 100).toInt()}%") { vm.setHaptic(it) }
+                // Feel it while you slide: one dial click at the new strength on every 5 % step (no
+                // closer than 40 ms apart), and one more at the value you let go on. A phone with one
+                // strength only buzzes when the slider turns vibration on.
+                var lastStep by remember { mutableStateOf(-1) }
+                var lastBuzz by remember { mutableStateOf(0L) }
+                LabeledSlider("Vibration strength", haptic, 0f..1f, "${(haptic * 100).toInt()}%",
+                    onChangeFinished = { if (vm.haptics.strengthAdjustable) vm.haptics.tick(); lastStep = -1 }) { v ->
+                    val wasOn = vm.hapticStrength.value > 0f
+                    vm.setHaptic(v)
+                    val step = kotlin.math.round(v * 20).toInt()
+                    if (lastStep == -1) lastStep = step
+                    val now = com.z1pendant.platform.nowMs()
+                    val buzz = if (vm.haptics.strengthAdjustable) step != lastStep && now - lastBuzz >= 40 else !wasOn && v > 0f
+                    if (buzz) { vm.haptics.tick(); lastStep = step; lastBuzz = now }
+                }
                 if (!vm.haptics.strengthAdjustable)
                     Text("This phone vibrates at one strength only: the slider switches vibration on or off.",
                         fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -101,6 +129,7 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                 LabeledSlider("Jog batch interval", tick.toFloat(), 20f..120f, "$tick ms", steps = 9) { vm.setTickMs(it.toLong()) }
                 SwitchRow("Volume keys jog ±1 click", volumeJog) { vm.setVolumeJog(it) }
                 SwitchRow("Clamp jogs to soft limits", clamp) { vm.setSoftClamp(it) }
+                SwitchRow("Hold the readout's zero buttons 1.5 s (instead of a tap)", zeroHold) { vm.setZeroHold(it) }
                 SwitchRow("Keep screen on", keepOn) { vm.setKeepScreenOn(it) }
                 Text(vm.haptics.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
@@ -131,10 +160,11 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
 private fun Section(t: String) = Text(t, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
 
 @Composable
-fun LabeledSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, valueText: String, steps: Int = 0, onChange: (Float) -> Unit) {
+fun LabeledSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, valueText: String, steps: Int = 0,
+                  onChangeFinished: (() -> Unit)? = null, onChange: (Float) -> Unit) {
     Column {
         Row { Text(label, modifier = Modifier.weight(1f)); Text(valueText, fontFamily = FontFamily.Monospace) }
-        Slider(value, onChange, valueRange = range, steps = steps)
+        Slider(value, onChange, valueRange = range, steps = steps, onValueChangeFinished = onChangeFinished)
     }
 }
 

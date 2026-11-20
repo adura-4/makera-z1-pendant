@@ -24,7 +24,7 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 - **Live readout**: work position (large) and machine position (small) for X, Y, Z and A.
   - **move**: type a position (*Go to*) or a distance (*Move by*) and send it, with the exact G-code shown first.
   - **zero**: set the axis to 0. Press again before moving (it reads **undo**) to get the old value back,
-    like a DRO's zero/recall.
+    like a DRO's zero/recall. Settings can make it a 1.5 s hold instead of a tap.
 - **Hotkeys**: your own buttons for built-in actions (home, unlock, zero, light, vacuum, feed…),
   G-code, or multi-step sequences. Optional "ask before running" and "only when Idle" guards.
   Bind any hotkey to a physical button: volume keys, Bluetooth remotes and gamepads, USB keyboards.
@@ -74,6 +74,9 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 - **Cancel job**: during a job the red button reads **Cancel job**. It sends the same halt as Makera
   Studio's Stop (it doesn't reset the machine), clears the alarm that follows, and takes you back to the
   main screen.
+- **Leveling mesh**: a job's leveling mesh is cleared when the job ends or is cancelled (the Z1 otherwise
+  keeps applying it to every move, jogs included). If the pendant connects and finds a mesh still loaded
+  with no job running, it asks whether to **Clear** or **Keep** it.
 - **Alarms**: if the machine goes into Alarm (e-stop, probe fail, soft limit…), a sheet says why and has
   **Clear alarm**. Tap the red Alarm status to open it again; the drawer shows the same strip. If a job
   was left open (after an e-stop), clearing the alarm ends it.
@@ -212,8 +215,10 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 
 ## Using it
 **Readout**
-- Tap an axis row to pick it for the dial (it highlights). Hold a row for 1.5 s, or tap **move**, to type a move.
+- Tap an axis row to pick it for the dial (it highlights). Tap **move** to type a move.
 - **zero** sets that axis's work position to 0; **undo** puts it back if nothing has moved since.
+  With **Hold the readout's zero buttons** on (Settings), hold it 1.5 s (the row fills as you hold); a tap
+  only says "hold".
 
 **Dial**
 - Drag your finger around the ring. Clockwise is +, counter-clockwise is −. Speed follows your hand.
@@ -274,7 +279,7 @@ top; the pill shows the machine state (Idle, Run, Hold, Alarm…).
 
 **Settings**
 - Machine connection, hide the serial number, vibration strength, degrees per click, volume-key
-  jogging, soft-limit clamping, keep screen on, the leveling depth limit (how far below the stock top a
+  jogging, soft-limit clamping, hold-to-zero, keep screen on, the leveling depth limit (how far below the stock top a
   leveling touch may go, 2 mm by default), and hotkey export/import/reset.
 - No vibration from the dial? The phone's **Use vibration & haptics** must be on (Settings → Sound &
   vibration → Vibration & haptics). **Touch feedback** can stay off on Android 13 and newer.

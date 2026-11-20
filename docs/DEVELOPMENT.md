@@ -98,7 +98,10 @@ added once to existing hotkey sets) or a file's sheet.
 - Assist switches: `M331[.n]` on / `M332[.n]` off, state from `|S:` fields 4, 7, 8, 10 (n = 0, 1, 2, 4).
   Plain M331 answers "extend out mode" on this firmware.
 - Mesh: `|O:` in the status while a grid is active (the chip); `M375.1` prints it (`Mesh.parse` takes the plain
-  rows and the human-readable table).
+  rows and the human-readable table). The firmware applies an active grid to every move (jogs too) until
+  `M370`, and outside the probed area the stock build uses the nearest grid edge's value, so the pendant
+  clears it when a job ends or is cancelled. On connect, a grid with the machine Idle and no job (three
+  statuses without `|P:`) opens a Clear / Keep popup (`AppViewModel.meshPrompt`).
 - Tool change popup (`ToolChangePopup`): state `Tool`, the wanted tool from `|T:` field 3, Continue = `M490.2`.
 - Tests: `RunModelTest` (extents, the M495 line against Studio's, origin lines, CAM offset, M6 guard, mesh,
   assist/mesh status fields). The simulator (`python/z1sim.py`) answers config-get, buffer, M495 (scan, Z probe,
@@ -134,11 +137,26 @@ that are dropped (one thud vibration per 150 ms at most), so when input stops or
 axis stops within that distance. Moves are clamped to the soft limits while the machine is homed.
 
 A **jog session** starts from the machine position in a status that arrived *after* the first click
-(never an older reading, which could be stale after a Wi-Fi gap), and ends once the machine is Idle and
-quiet for 0.3 s. During a session the reported position must stay on the commanded path (between the
-start and the targets sent, ±0.02 for status rounding) and the other axes must stay put. If not,
-something else moved the machine: the session ends (thud, clicks dropped) and the next click starts
-over from a fresh reading.
+(never an older reading, which could be stale after a Wi-Fi gap), taken while the machine is
+**settled**: Idle, or "Run, no job, feed 0" (spindle on, axes still) that has lasted 0.6 s. Every move
+starts with ~0.1 s of exactly "Run, feed 0" (the queue delay) while the status still shows the old
+position, so a session started there would aim from a stale spot. The session ends once the machine is
+settled **at its target** (or, if it stopped elsewhere, after 2 s still). During a session the reported
+position must stay on the commanded path (between the start and the targets sent, ±0.02 for status
+rounding) and X, Y and A must stay put. If not, something else moved the machine: the session ends
+(thud, clicks dropped) and the next click starts over from a fresh reading.
+
+**Z while moving reads differently.** Idle, the Z1 reports the planned position; moving, the motors'
+position. On 2026-11-20 Z read +0.3492 mm higher while moving, at every X/Y, with no leveling grid loaded
+(no `|O:`), cause unknown. A leveling grid adds its correction the same way. So Z is never an "other
+axis" in the path check, and the engine learns the offset during X/Y/A jogs (still Z, moving vs Idle)
+and takes it off moving Z readings (`JogEngine.planned`), so a Z jog's lead and path use planned Z. Before
+it has been learned, a moving Z gets 1 mm of slack. Before this, the 0.35 mm "jump" ended every jog the
+moment the machine moved, and the next click restarted from a stale position: once it sent the machine
+back 4 mm.
+
+**Trace:** while jogging, the engine logs every click, status, session start/end and move sent with its
+numbers under logcat tag `JogTrace` (`adb logcat -v epoch -s JogTrace:D JogEngine:I MakeraLink:*`).
 
 Jog pad: a tap is one click; a held button repeats after 0.4 s at `max(120 ms, step / axis max speed)`,
 and letting go drops any clicks not yet sent.

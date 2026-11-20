@@ -41,8 +41,8 @@ class JogEngineTest {
 
     @After fun tearDown() = unmockkStatic(SystemClock::class)
 
-    private fun status(state: String, x: Double, y: Double = -70.0, at: Long = clock): MachineStatus {
-        val pos = listOf(x, y, -1.0, 0.0, 0.0)
+    private fun status(state: String, x: Double, y: Double = -70.0, at: Long = clock, z: Double = -1.0): MachineStatus {
+        val pos = listOf(x, y, z, 0.0, 0.0)
         return MachineStatus(state, pos, pos, 100.0, 0.0, null, "<$state|MPos:$x,$y,-1>", at)
     }
 
@@ -121,12 +121,80 @@ class JogEngineTest {
         status("Run", x, at = at).copy(feedActual = feed, job = job)
 
     @Test fun jogsWhileOnlyTheSpindleRuns() {
-        at(1000); link.status.value = spindleOn(-112.5)
-        at(1100); jog.click(1)
-        at(1120); link.status.value = spindleOn(-112.5)
-        at(1140); jog.tick()
+        // "Run, feed 0" is how every move starts too, so it only counts as still once it has lasted.
+        for (t in 1000L..1700L step 40) { at(t); link.status.value = spindleOn(-112.5, at = t); jog.tick() }
+        at(1710); jog.click(1)
+        at(1720); link.status.value = spindleOn(-112.5)
+        at(1740); jog.tick()
         assertEquals(listOf("G53G1X-112.4"), link.lines.map { it.substringBefore('F') })
         assertEquals(0, drops)
+    }
+
+    @Test fun briefRunFeedZeroIsNotStill() {
+        at(1000); link.status.value = spindleOn(-112.5)
+        at(1100); jog.click(1)
+        for (t in 1120L..1400L step 40) { at(t); link.status.value = spindleOn(-112.5, at = t); jog.tick() }
+        assertEquals("no start from the first moments of someone's move", 0, link.lines.size)
+    }
+
+    // ---- field log 2026-11-20: Z reads +0.349 while moving, and a jog that restarted from a stale position ----
+
+    @Test fun zReportedHigherWhileMovingDoesNotEndAnXJog() {
+        at(1000); link.status.value = status("Idle", -112.5, z = -3.0)
+        at(1100); jog.click(1)
+        at(1120); link.status.value = status("Idle", -112.5, z = -3.0)
+        at(1140); jog.tick()
+        at(1200); link.status.value = status("Run", -112.45, z = -2.6508)
+        jog.click(1); jog.tick()
+        at(1300); link.status.value = status("Run", -112.38, z = -2.6508)
+        jog.click(1); jog.tick()
+        assertEquals(listOf("G53G1X-112.4", "G53G1X-112.3", "G53G1X-112.2"), link.lines.map { it.substringBefore('F') })
+        assertEquals(0, drops)
+    }
+
+    @Test fun aZJogUsesThePlannedZOnceTheOffsetIsKnown() {
+        zReportedHigherWhileMovingDoesNotEndAnXJog()            // learns +0.3492
+        for (t in 1400L..2400L step 40) { at(t); link.status.value = status("Idle", -112.2, z = -3.0, at = t); jog.tick() }
+        link.lines.clear()
+        jog.axis = 'Z'; jog.step = 0.01
+        at(2500); jog.click(-1)
+        at(2520); link.status.value = status("Idle", -112.2, z = -3.0)
+        at(2540); jog.tick()
+        at(2600); link.status.value = status("Run", -112.2, z = -3.0 + 0.3492 - 0.005)    // moving, reported high
+        jog.click(-1); jog.tick()
+        assertEquals(listOf("G53G1Z-3.01", "G53G1Z-3.02"), link.lines.map { it.substringBefore('F') })
+        assertEquals(0, drops)
+    }
+
+    @Test fun aStaleStillReadingAtTheStartOfAMoveNeitherEndsNorRestartsTheJog() {
+        jog.step = 1.0
+        at(1000); link.status.value = status("Idle", -28.0)
+        at(1100); jog.click(5)
+        at(1120); link.status.value = status("Idle", -28.0)
+        at(1140); jog.tick()
+        assertEquals(listOf("G53G1X-23.0"), link.lines.map { it.substringBefore('F') })
+        // The move hasn't begun yet: Idle, then "Run, feed 0", both still at the old position.
+        at(1480); link.status.value = status("Idle", -28.0); jog.tick()
+        at(1560); link.status.value = spindleOn(-28.0); jog.tick()
+        // Moving now; a click continues from -23, never from the stale -28 (that sent the machine back to -27).
+        at(1700); link.status.value = spindleOn(-26.0, feed = 360.0)
+        jog.click(1); jog.tick()
+        assertEquals(listOf("G53G1X-23.0", "G53G1X-22.0"), link.lines.map { it.substringBefore('F') })
+        assertEquals(0, drops)
+    }
+
+    @Test fun aJogThatStopsShortEndsAfterAWhile() {
+        jog.step = 1.0
+        at(1000); link.status.value = status("Idle", -28.0)
+        at(1100); jog.click(5)
+        at(1120); link.status.value = status("Idle", -28.0)
+        at(1140); jog.tick()
+        // Stopped at -25 (halted, say) and stays there.
+        for (t in 1200L..3400L step 40) { at(t); link.status.value = status("Idle", -25.0, at = t); jog.tick() }
+        at(3500); jog.click(1)
+        at(3520); link.status.value = status("Idle", -25.0)
+        at(3540); jog.tick()
+        assertEquals(listOf("G53G1X-23.0", "G53G1X-24.0"), link.lines.map { it.substringBefore('F') })
     }
 
     @Test fun lockedWhileAJobPlaysAndClicksAreDroppedNotSaved() {

@@ -229,6 +229,28 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         val fro = st.feedOverride; val sro = st.spindleOverride
         if (fro != null && kotlin.math.abs(fro - 100) > 0.05) { log("▶ job ended: feed override back to 100 %"); d.feedOverride(100).forEach { link.sendLine(it) } }
         if (sro != null && kotlin.math.abs(sro - 100) > 0.05) { log("▶ job ended: spindle override back to 100 %"); d.spindleOverride(100.0).forEach { link.sendLine(it) } }
+        // The job's leveling grid must not outlive it: the firmware applies a grid to every move
+        // (jogs too) until it's cleared. Cancel job clears it itself (after the alarm is cleared).
+        if (st.mesh != null && !stopping && !st.isAlarm) { log("▶ job ended: leveling grid cleared (M370)"); link.sendLine("M370") }
+    }
+
+    /**
+     * A leveling grid was found active on connect, with no job running: its largest correction (mm).
+     * The popup asks whether to clear it. Kept → not asked again until the next connect.
+     */
+    val meshPrompt = MutableStateFlow<Double?>(null)
+    fun keepMesh() { meshPrompt.value = null; log("· leveling grid kept") }
+    fun clearMesh() { meshPrompt.value = null; log("▶ leveling grid cleared (M370)"); link.sendLine("M370") }
+
+    /** After connecting: three statuses in (so a job's |P: is reliably seen), Idle, no job, a grid → ask. */
+    private suspend fun checkMeshOnConnect() {
+        val seen = mutableListOf<MachineStatus>()
+        kotlinx.coroutines.withTimeoutOrNull(5_000) {
+            link.status.first { st -> if (st != null && seen.lastOrNull()?.atMs != st.atMs) seen += st; seen.size >= 3 }
+        }
+        val st = seen.lastOrNull() ?: return
+        if (seen.any { it.job != null } || !st.isIdle) return
+        st.mesh?.let { meshPrompt.value = it; log("· leveling grid active on connect (largest correction ${com.z1pendant.util.Fmt.fixed(it, 3)} mm)") }
     }
 
     /** Stop box → M5. */
@@ -266,6 +288,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     val tickMs = MutableStateFlow(prefs.getLong("tickMs", 40))
     val degPerClick = MutableStateFlow(prefs.getFloat("degPerClick", 12f))
     val softClamp = MutableStateFlow(prefs.getBoolean("softClamp", true))
+    /** The readout's zero buttons need a 1.5 s hold instead of a tap (off by default). */
+    val zeroHold = MutableStateFlow(prefs.getBoolean("zeroHold", false))
     /** Hide the machine's serial number wherever its name is shown (screen recordings). */
     val hideSerial = MutableStateFlow(prefs.getBoolean("hideSerial", false))
 
@@ -336,8 +360,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         viewModelScope.launch {
             link.conn.collectLatest { c ->
                 log("· link $c")
-                if (c != ConnState.Connected) { jog.cancelPending(); forgetJob() }
-                else lookUpName()
+                if (c != ConnState.Connected) { jog.cancelPending(); forgetJob(); meshPrompt.value = null }
+                else { launch { checkMeshOnConnect() }; lookUpName() }
             }
         }
         target.value?.let { if (prefs.getBoolean("autoConnect", true)) link.connect(it) }
@@ -596,14 +620,18 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
      * Stop, as Makera Studio's Stop does it (captured 2026-11-17): the halt byte, which ends a job
      * ("Aborted by halt" → Alarm), then `$X` once the Z1 is in Alarm, so it's ready to move again
      * and the job is gone. The drawer then closes back to the main screen.
+     * Cancelling a job also clears the leveling grid (`M370`): the firmware applies a grid to every
+     * move until it's cleared, jogs included, so the job's mesh must not outlive the job.
      */
     fun stopAndClear() {
         stopping = true
+        val hadJob = link.status.value?.job != null
         reset()
         viewModelScope.launch {
             kotlinx.coroutines.withTimeoutOrNull(2_000) { link.status.first { it?.isAlarm == true } }
             kotlinx.coroutines.delay(300)
             unlockNow()
+            if (hadJob) { log("▶ job cancelled: leveling grid cleared (M370)"); link.sendLine("M370") }
             kotlinx.coroutines.delay(1_500)
             stopping = false
             controlsOpen.value = false
@@ -791,6 +819,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     fun setTickMs(v: Long) { tickMs.value = v; prefs.edit { putLong("tickMs", v) }; applyJogConfig() }
     fun setDegPerClick(v: Float) { degPerClick.value = v; prefs.edit { putFloat("degPerClick", v) } }
     fun setHideSerial(v: Boolean) { hideSerial.value = v; prefs.edit { putBoolean("hideSerial", v) } }
+    fun setZeroHold(v: Boolean) { zeroHold.value = v; prefs.edit { putBoolean("zeroHold", v) } }
     fun setSoftClamp(v: Boolean) { softClamp.value = v; prefs.edit { putBoolean("softClamp", v) }; applyJogConfig() }
 
     // ---- physical buttons -------------------------------------------------------------------------

@@ -98,6 +98,18 @@ fun App(vm: AppViewModel) {
         jobActive = vm.link.status.collectAsState().value?.job != null)
     val alarmSheet by vm.alarmSheet.collectAsState()
     if (alarmSheet) AlarmSheet(vm)
+    // A leveling grid found on connect (Idle, no job): it shifts Z everywhere until cleared.
+    vm.meshPrompt.collectAsState().value?.let { max ->
+        AlertDialog(onDismissRequest = {},
+            title = { Text("Leveling mesh still active") },
+            text = {
+                Text("The Z1 still has a leveling mesh loaded (largest correction ${com.z1pendant.util.Fmt.fixed(max, 3)} mm), " +
+                    "usually left over from an earlier job. Until it's cleared, the machine adds it to Z on every move, " +
+                    "jogging and setting zero included, so Z positions can be off by that much.")
+            },
+            confirmButton = { TextButton(onClick = vm::clearMesh) { Text("Clear mesh") } },
+            dismissButton = { TextButton(onClick = vm::keepMesh) { Text("Keep") } })
+    }
     confirm?.let { h ->
         AlertDialog(onDismissRequest = { vm.confirmFor.value = null },
             title = { Text("Run “${h.label}”?") },

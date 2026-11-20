@@ -11,6 +11,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.drawBehind
 import kotlinx.coroutines.launch
 import androidx.compose.ui.input.pointer.pointerInput
@@ -90,8 +91,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     var moveFor by remember { mutableStateOf<Char?>(null) }
     val wide = LocalWide.current
     val padMode by vm.jogPad.collectAsState()
-    val rowScope = rememberCoroutineScope()
     val zeroUndo by vm.zeroUndo.collectAsState()
+    val zeroHold by vm.zeroHold.collectAsState()
     moveFor?.let { a -> MoveDialog(vm, a) { moveFor = null } }
 
     Column(
@@ -163,23 +164,22 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         val stepList = vm.steps
         val si = stepIdx.coerceIn(0, stepList.lastIndex)
 
-        // Readout: tap a row = select the axis; hold 1.5 s or "move" = Move box; zero / undo.
+        // Readout: tap a row = select the axis; "move" = Move box; zero / undo.
         val dro: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(vertical = 4.dp)) {
             vm.axes.forEachIndexed { i, a ->
                 val sel = a == axis && !padMode           // the pad's buttons name their own axis
-                val hold = remember { androidx.compose.animation.core.Animatable(0f) }
+                val zeroProgress = remember { androidx.compose.animation.core.Animatable(0f) }
                 val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
                 Row(
-                    // Tap = select the axis. Hold 1.5 s (the row fills while you hold) = Move box.
+                    // Tap = select the axis (the move / zero buttons keep their own taps).
                     Modifier.fillMaxWidth()
-                        .tapOrHold(a, HOLD_MS, hold, rowScope,
-                            onTap = { vm.selectAxis(a); vm.haptics.press() },
-                            onHold = { vm.selectAxis(a); vm.haptics.majorTick(); moveFor = a })
+                        .pointerInput(a) { detectTapGestures { vm.selectAxis(a); vm.haptics.press() } }
                         .background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                         .drawBehind {
-                            // shown after a short delay so ordinary taps don't flash it
-                            val p = ((hold.value - 0.1f) / 0.9f).coerceIn(0f, 1f)
+                            // Hold-to-zero: the row fills while the zero button is held, shown after a
+                            // short delay so ordinary taps don't flash it.
+                            val p = ((zeroProgress.value - 0.1f) / 0.9f).coerceIn(0f, 1f)
                             if (p > 0f) drawRect(fill, size = androidx.compose.ui.geometry.Size(size.width * p, size.height))
                         }
                         .padding(horizontal = 10.dp, vertical = 1.dp),
@@ -199,8 +199,14 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                     // "zero" sets this axis to 0; pressed again while it still reads 0 (nothing moved)
                     // it puts the previous value back, like a DRO's zero/recall. Label shows which.
                     val undo = zeroUndo.containsKey(a) && vm.canRestoreZero(a, st)
-                    PendantOutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = connected && st?.isIdle == true,
-                        contentPadding = PaddingValues(horizontal = if (wide) 16.dp else 10.dp, vertical = 0.dp), modifier = Modifier.height(if (wide) 46.dp else 34.dp).widthIn(min = if (wide) 88.dp else 64.dp)) {
+                    val zeroOk = connected && st?.isIdle == true
+                    val zeroSize = Modifier.height(if (wide) 46.dp else 34.dp).widthIn(min = if (wide) 88.dp else 64.dp)
+                    if (zeroHold) {
+                        // Settings → "Hold zero buttons 1.5 s": a tap can't zero by accident.
+                        HoldZeroButton(if (undo) "undo" else "zero", zeroOk, wide, zeroProgress,
+                            onHold = { vm.haptics.majorTick(); vm.zero(a.toString()) }, onShort = { vm.haptics.press() }, modifier = zeroSize)
+                    } else PendantOutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = zeroOk,
+                        contentPadding = PaddingValues(horizontal = if (wide) 16.dp else 10.dp, vertical = 0.dp), modifier = zeroSize) {
                         Text(if (undo) "undo" else "zero", fontSize = if (wide) 17.sp else 13.sp)
                     }
                 }
@@ -441,55 +447,73 @@ private fun ControlsDrawer(
     }
 }
 
-/** How long to hold a readout row to open its Move box. */
+/** How long to hold a readout zero button (Settings → hold to zero). */
 private const val HOLD_MS = 1500L
 
 /**
- * Tap (released within 500 ms) = [onTap]; held still for [ms] = [onHold]. [progress] runs 0→1
- * while holding (for a fill / ring). A hold let go early, or a finger that slides off (a scroll),
- * does nothing. Child buttons keep their own taps (they consume them first).
+ * The readout's zero button with "hold to zero" on: shaped like the outlined buttons, it fires
+ * after [HOLD_MS] held; [progress] runs 0→1 meanwhile (its readout row draws the fill). A shorter
+ * press does nothing but say "hold" for a moment. It takes the whole touch, so the row under it
+ * doesn't also see a tap.
  */
-private fun Modifier.tapOrHold(
-    key: Any, ms: Long, progress: androidx.compose.animation.core.Animatable<Float, *>,
-    scope: kotlinx.coroutines.CoroutineScope, onTap: () -> Unit, onHold: () -> Unit,
-): Modifier = pointerInput(key) {
-    val slop = viewConfiguration.touchSlop
-    awaitEachGesture {
-        val down = awaitFirstDown()
-        val ring = scope.launch {
-            progress.snapTo(0f)
-            progress.animateTo(1f, androidx.compose.animation.core.tween(ms.toInt(), easing = androidx.compose.animation.core.LinearEasing))
-        }
-        // "up" = released, "moved" = slid off / scrolling, null = held the full time
-        var upAt = 0L
-        val outcome: String? = withTimeoutOrNull(ms) {
-            var r = ""
-            while (r.isEmpty()) {
-                val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
-                r = when {
-                    c == null -> "moved"
-                    !c.pressed -> { upAt = c.uptimeMillis; "up" }
-                    (c.position - down.position).getDistance() > slop -> "moved"
-                    else -> ""
+@Composable
+private fun HoldZeroButton(label: String, enabled: Boolean, wide: Boolean,
+                           progress: androidx.compose.animation.core.Animatable<Float, *>,
+                           onHold: () -> Unit, onShort: () -> Unit, modifier: Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    var hint by remember { mutableStateOf(false) }
+    val en by rememberUpdatedState(enabled)
+    val hold by rememberUpdatedState(onHold)
+    val short by rememberUpdatedState(onShort)
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier.clip(shape)
+            .border(1.dp, if (enabled) cs.outline else cs.onSurface.copy(alpha = 0.12f), shape)
+            .pointerInput(Unit) {
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    if (!en) {
+                        while (true) { val ev = awaitPointerEvent(); ev.changes.forEach { it.consume() }; if (ev.changes.none { it.pressed }) break }
+                        return@awaitEachGesture
+                    }
+                    val ring = scope.launch {
+                        progress.snapTo(0f)
+                        progress.animateTo(1f, androidx.compose.animation.core.tween(HOLD_MS.toInt(), easing = androidx.compose.animation.core.LinearEasing))
+                    }
+                    // "up" = let go early, "moved" = slid off, null = held the full time
+                    val outcome: String? = withTimeoutOrNull(HOLD_MS) {
+                        var r = ""
+                        while (r.isEmpty()) {
+                            val ev = awaitPointerEvent()
+                            ev.changes.forEach { it.consume() }
+                            val c = ev.changes.firstOrNull { it.id == down.id }
+                            r = when {
+                                c == null || !c.pressed -> "up"
+                                (c.position - down.position).getDistance() > slop * 3 -> "moved"
+                                else -> ""
+                            }
+                        }
+                        r
+                    }
+                    ring.cancel()
+                    scope.launch { progress.snapTo(0f) }
+                    when (outcome) {
+                        null -> {
+                            hold()
+                            while (true) { val ev = awaitPointerEvent(); ev.changes.forEach { it.consume() }; if (ev.changes.none { it.pressed }) break }
+                        }
+                        "up" -> { short(); scope.launch { hint = true; kotlinx.coroutines.delay(1200); hint = false } }
+                    }
                 }
-            }
-            r
-        }
-        ring.cancel()
-        scope.launch { progress.snapTo(0f) }
-        when (outcome) {
-            // Event times (same clock as down.uptimeMillis on every platform).
-            "up" -> if (upAt - down.uptimeMillis < 500) onTap()
-            null -> {
-                onHold()
-                // swallow the rest of this touch so lifting the finger isn't also a tap
-                while (true) {
-                    val ev = awaitPointerEvent()
-                    ev.changes.forEach { it.consume() }
-                    if (ev.changes.none { it.pressed }) break
-                }
-            }
-        }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(if (hint) "hold" else label, fontSize = if (wide) 17.sp else 13.sp,
+            color = if (enabled) cs.primary else cs.onSurface.copy(alpha = 0.38f),
+            modifier = Modifier.padding(horizontal = if (wide) 16.dp else 10.dp))
     }
 }
 
