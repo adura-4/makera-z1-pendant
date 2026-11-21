@@ -358,10 +358,16 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         }
         viewModelScope.launch { runner.lastError.collect { it?.let { e -> snack.tryEmit(e); runner.lastError.value = null } } }
         viewModelScope.launch {
+            var prev: ConnState? = null
             link.conn.collectLatest { c ->
                 log("· link $c")
-                if (c != ConnState.Connected) { jog.cancelPending(); forgetJob(); meshPrompt.value = null }
-                else { launch { checkMeshOnConnect() }; lookUpName() }
+                // A stall that clears is still the same connection: keep the job, and don't ask about
+                // the mesh again (that's for a fresh connection).
+                val resumed = c == ConnState.Connected && prev == ConnState.Stalled
+                prev = c
+                if (c != ConnState.Connected) jog.cancelPending()
+                if (c != ConnState.Connected && c != ConnState.Stalled) { forgetJob(); meshPrompt.value = null }
+                if (c == ConnState.Connected) { if (!resumed) launch { checkMeshOnConnect() }; lookUpName() }
             }
         }
         target.value?.let { if (prefs.getBoolean("autoConnect", true)) link.connect(it) }

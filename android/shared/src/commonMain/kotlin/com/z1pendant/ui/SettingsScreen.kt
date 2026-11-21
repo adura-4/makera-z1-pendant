@@ -86,6 +86,7 @@ fun SettingsScreen(vm: AppViewModel, onClose: () -> Unit) {
                             Text(Serial.shown(t.name, hideSerial), fontWeight = FontWeight.SemiBold)
                             Text("${t.host}:${t.port}" + when {
                                 current && conn == ConnState.Connected -> " · connected"
+                                current && conn == ConnState.Stalled -> " · no reply"
                                 current -> " · connecting…"
                                 busy -> " · busy (another app connected?)"
                                 else -> ""

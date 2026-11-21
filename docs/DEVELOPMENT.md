@@ -123,6 +123,23 @@ CRC-16/XMODEM (poly 0x1021, **init 0**) over len + type + payload. Test vector: 
   no `ok`, which the line flow control relies on, and it tops out near 1200 mm/min, so the app doesn't
   use it. See the measurements below.
 
+## Connection
+A status query (`?`) goes out every 200 ms (50 ms while jogging). After 1.5 s without a status reply:
+- **A line may not have reached the machine** (no `ok` yet, and no status query sent after it was
+  answered): the socket is closed at once and the link reconnects.
+- **Everything sent reached the machine**: the link is **Stalled**. Lines not yet sent fail ("machine not
+  answering"), new ones are refused, the jog engine drops its clicks, and the socket stays open. When
+  statuses come back it is Connected again on the same socket, and the job being watched is kept.
+  After 25 s it gives up and reconnects.
+
+Sockets are closed with `SO_LINGER 0`: a reset, which throws away bytes the phone hasn't delivered yet.
+A normal close keeps delivering them. On 2026-11-14 a Z1 went silent for 15–17 s about every minute
+(ping, broadcasts and TCP; it went away by itself the next day). A jog line sent just before such a gap
+sat in the phone's socket, and with a normal close it could have run when the Z1 woke, long after the
+user had stopped. A line the machine already has runs either way, so only a line that may not have
+arrived forces the reset. TCP keeps order: once a status query sent after a line is answered, that
+line has arrived (a `$H` that is still homing, say). `z1sim.py`'s `simfreeze <s>` line fakes such a gap.
+
 ## Jog engine
 Every 40 ms the clicks collected become one `G53 G1` move to the next machine position. Feed = hand speed (clicks in the last
 200 ms × step) plus a correction that keeps about 120 ms of motion queued:

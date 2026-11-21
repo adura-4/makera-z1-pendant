@@ -10,6 +10,8 @@ machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroin
     state Tool for each M6, and frame 0xB7 answering "path|md5" of the playing file.
   * 3D probing (z1sim_probe.py): a part to probe, G38.2/G38.6 with [PRB:], M480.1-.10, M491, M6 T with
     the tool-change wait (M490.2 continues) and the probe calibrated on the setter; `simprobe dead`.
+  * `simfreeze <s>` (test hook, no reply): this client's connection goes silent for s seconds, like
+    the Z1's network stalling: nothing is read or answered, then the backlog is handled as usual.
   * Lines: G0/G1 (G90/G91, F), G4, G10 L20 P0, G92, G53, $H, $X, M220 S, M3/M5 S, M6 T, M999, anything
     else just gets "ok". Replies are 0x90 "ok\\r\\n".
   * Motion runs in real time at the commanded feed (G0 = axis max rate) x feed override, with a
@@ -758,6 +760,11 @@ class Client(threading.Thread):
                     # which file is playing: "path|md5", or "|" (answered by the Wi-Fi board)
                     j = self.m.job
                     self.tx(0xB7, f"{j['path']}|{j['md5']}" if j else "|")
+                elif ptype == P.CTRL_MULTI and payload.startswith(b"simfreeze"):
+                    secs = float(payload.split()[1])
+                    log(f"{self.addr} frozen for {secs} s")
+                    time.sleep(secs)
+                    log(f"{self.addr} awake")
                 elif ptype == P.CTRL_MULTI and payload.startswith(b"time "):
                     # the Wi-Fi board sets its clock (Makera's app sends this on connect)
                     self.tx(P.NORMAL_INFO, f"time = {payload[5:].decode().strip()}\r\n")
