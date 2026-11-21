@@ -1,0 +1,519 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Probe mock</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,1,0&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;600&display=block">
+<style>
+  :root{--bg:#0B1120;--sv:#172033;--sc:#1E293B;--onsc:#E2E8F0;--primary:#38BDF8;--deep:#0369A1;--onprimary:#00222F;--muted:#94A3B8;--outline:#5b6474;--text:#E6E9EF;--track:#0F1A2E;--green:#22C55E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9edf2;font-family:Roboto,Arial,sans-serif;padding:22px;display:flex;flex-direction:column;gap:12px;width:max-content}
+  .cap{font:600 16px "Segoe UI",Arial;color:#1f2937}
+  .sub{font:400 12.5px "Segoe UI",Arial;color:#4b5563;margin-top:2px;max-width:2100px}
+  .row{display:flex;gap:22px;align-items:flex-start}
+  .k{font:600 12.5px "Segoe UI",Arial;color:#374151;margin-bottom:6px;width:390px}
+  .note{font:400 11.5px "Segoe UI";color:#4b5563;width:390px;margin-top:6px;line-height:1.4}
+  .ms{font-family:'Material Symbols Rounded';font-size:24px;line-height:1;font-weight:500}
+  .mono{font-family:"Roboto Mono",monospace}
+  .phone{width:390px;height:844px;background:var(--bg);border-radius:34px;overflow:hidden;color:var(--text);position:relative;padding:44px 14px 0;display:flex;flex-direction:column;gap:8px}
+  .hdr{display:flex;align-items:center;gap:8px}
+  .hdr .n{flex:1}.hdr b{font-size:17px;font-weight:500;display:block}.hdr span{font-size:12px;color:var(--muted)}
+  .pill{color:#fff;font-weight:700;font-size:14px;border-radius:99px;padding:6px 14px;background:#16A34A}
+  .ico{width:30px;height:34px;display:flex;align-items:center;justify-content:center;color:#cbd5e1}
+  .dro{background:var(--sv);border-radius:14px;padding:3px 0}
+  .dr{display:flex;align-items:center;padding:0 10px;height:40px}
+  .dr.sel{background:rgba(56,189,248,.15)}
+  .dr .ax{width:26px;font-size:20px;font-weight:700;color:var(--muted)}
+  .dr.sel .ax{color:var(--primary)}
+  .dr .v{flex:1;text-align:right;font-family:"Roboto Mono",monospace;font-size:24px;font-weight:600}
+  .dr .z{margin-left:8px;border:1px solid var(--outline);border-radius:99px;font-size:12px;color:var(--primary);padding:4px 10px}
+  .seg{display:flex;height:34px;border:1px solid var(--outline);border-radius:10px;overflow:hidden}
+  .seg div{flex:1;display:flex;align-items:center;justify-content:center;font-size:14px;font-family:"Roboto Mono",monospace}
+  .seg .on{background:var(--primary);color:var(--onprimary);font-weight:700}
+  .stage{position:relative;display:flex;justify-content:center;align-items:center}
+  .dial{border-radius:50%;border:3px solid #2b3648;background:#111a2b;display:flex;align-items:center;justify-content:center;flex-direction:column;position:relative}
+  .dial b{font-size:30px;color:var(--primary)}.dial span{font-size:11px;color:var(--muted);font-family:"Roboto Mono",monospace}
+  .dial i{position:absolute;top:6px;left:50%;width:3px;height:16px;background:var(--primary);transform:translateX(-50%)}
+  .mbtn{position:absolute;top:0;width:42px;height:42px;border-radius:12px;background:var(--sc);display:flex;align-items:center;justify-content:center;color:var(--primary)}
+  .mbtn.l{left:0}.mbtn.r{right:0}
+  .mbtn.r.on{background:var(--primary);color:var(--onprimary)}
+  .panel{background:var(--sv);border-radius:16px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;flex:1;margin-bottom:12px}
+  .ptitle{display:flex;align-items:center;gap:8px;font-size:15px}
+  .ptitle .st{font-size:11.5px;color:var(--muted);margin-left:auto}
+  .steps{display:flex;gap:4px}.steps i{flex:1;height:4px;border-radius:2px;background:#2b3648}.steps i.on{background:var(--primary)}
+  .types{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .types.big{grid-template-columns:repeat(2,1fr);gap:10px}
+  .tt{background:var(--sc);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;font-size:10.5px;color:var(--onsc);border:1px solid transparent}
+  .tt.on{border-color:var(--primary);background:#132a3e;color:var(--primary)}
+  .types.big .tt{padding:12px 6px;font-size:13px;gap:6px}
+  .sub2{font-size:11.5px;color:var(--muted)}
+  .fld{display:flex;align-items:center;gap:8px;height:40px}
+  .fld .l{flex:1;font-size:13.5px}.fld .l small{display:block;font-size:11px;color:var(--muted)}
+  .fld .in{width:92px;height:36px;border:1px solid var(--outline);border-radius:9px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font-family:"Roboto Mono",monospace;font-size:15px;gap:4px}
+  .fld .in u{text-decoration:none;color:var(--muted);font-size:12px;font-family:Roboto}
+  .fld .in .vu{display:flex;align-items:baseline;gap:4px}
+  .fld .in.focus{border:2px solid var(--primary)}
+  .fld.dg{height:auto;min-height:56px;padding:3px 0}
+  .fld .dgw{width:92px;flex:none;display:flex;justify-content:center;align-items:center}
+  .btn{height:46px;border-radius:99px;background:var(--primary);color:var(--onprimary);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;gap:6px}
+  .btn.ghost{background:transparent;border:1px solid var(--outline);color:var(--primary)}
+  .btnrow{display:flex;gap:8px}.btnrow .btn{flex:1}
+  .hint{background:var(--sc);border-left:4px solid var(--primary);border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.4}
+  .hint b{color:var(--primary)}
+  .check{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:6px 0}
+  .check .ms{font-size:20px}
+  .ok{color:var(--green)}
+  .res{background:var(--sc);border-radius:10px;padding:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
+  .res div small{display:block;font-size:11px;color:var(--muted)}.res div b{font-family:"Roboto Mono",monospace;font-size:17px}
+  .wizhdr{display:flex;align-items:center;gap:8px;font-size:18px;margin-top:2px}
+  .wizhdr .ms{color:var(--primary)}
+  .wizhdr .x{margin-left:auto;color:#cbd5e1}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+  .tile{background:var(--sc);border-radius:11px;height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10.5px;color:var(--onsc)}
+  .grow{flex:1}
+  .ck{background:var(--sc);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  .ck.dim{opacity:.45}
+  .ckh{display:flex;gap:10px;align-items:flex-start}
+  .ckh .ms{font-size:22px}
+  .ckh b{display:block;font-size:14.5px;font-weight:500}
+  .ckh small{display:block;font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}
+  .btn.sm{height:40px;font-size:14.5px}
+  .btn.off{background:#1e293b;color:#475569}
+  .cknote{font-size:11.5px;color:var(--muted);line-height:1.35}
+  .live{display:flex;align-items:center;gap:14px;padding:2px 2px 4px 30px}
+  .lring{width:76px;height:76px;border-radius:50%;border:3px solid #334155;display:flex;align-items:center;justify-content:center;background:#111a2b;box-sizing:border-box}
+  .lring.lit{border-color:var(--primary);box-shadow:0 0 18px rgba(56,189,248,.55)}
+  .ltxt{font-size:18px;font-weight:600;color:var(--muted)}
+  .ltxt.on{color:var(--primary)}
+  .live small{font-size:12.5px;color:var(--muted)}
+  .prog{display:flex;flex-direction:column;gap:7px;padding:2px 0 2px 32px}
+  .pi{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.35;color:#64748b}
+  .pi .ms{font-size:17px;width:17px;flex:none}
+  .pi.done{color:var(--muted)}.pi.done .ms{color:var(--green)}
+  .pi.now{color:var(--text)}.pi.now b{font-weight:500}
+  .pi .dot{width:9px;height:9px;border-radius:50%;background:var(--primary);box-shadow:0 0 8px var(--primary);margin:4px 4px 0 4px;flex:none}
+  .btn svg{flex:none}
+  .okl{display:flex;gap:8px;align-items:flex-start;font-size:15px;line-height:1.35;margin:4px 0}
+  .okl .ms{font-size:28px}.okl b{font-weight:500}
+  .errl{display:flex;gap:8px;align-items:flex-start;font-size:14.5px;line-height:1.38;margin:4px 0;background:#3b1d22;border-radius:12px;padding:10px 12px}
+  .errl .ms{font-size:26px;color:#f87171}.errl b{font-weight:500}
+  .wp small{display:block;font-size:11.5px;color:var(--muted);margin:0 0 4px 2px}
+  .undo{display:flex;align-items:center;gap:6px;color:var(--primary);font-size:13.5px;padding:2px 2px}
+  .undo .ms{font-size:19px}
+  .stp{display:flex;align-items:center;border:1px solid var(--outline);border-radius:12px;height:40px}
+  .stp span{width:34px;text-align:center;color:var(--primary);font-size:20px}
+  .stp b{font-family:"Roboto Mono",monospace;font-size:16px;width:34px;text-align:center}
+  .mode{display:flex;border:1px solid var(--outline);border-radius:12px;height:42px;flex:none;padding:3px;gap:3px;box-sizing:border-box}
+  .mode div{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;color:var(--muted);border-radius:9px}
+  .mode .ms{font-size:18px}
+  .mode .on{background:#173a55;color:var(--primary);font-weight:500}
+  .mode .soon{opacity:.55}
+  .mode i{font-style:normal;font-size:10px;border:1px solid #475569;border-radius:99px;padding:1px 6px;margin-left:2px}
+  .axs{display:flex;gap:8px;padding-left:32px}
+  .axs>span{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--outline);border-radius:99px;padding:4px 12px 4px 8px;font-size:14px;color:var(--muted)}
+  .axs>span.on{border-color:var(--primary);color:var(--primary);background:#132a3e}
+  .axs .ms{font-size:17px}
+  .relink{color:var(--primary);font-size:13px;padding-left:32px}
+
+  .tf{display:flex;align-items:center;gap:9px}
+  .tile2{width:98px;height:78px;border:1px solid #334155;border-radius:10px;background:var(--sc);padding:5px;flex:none;display:flex;box-sizing:border-box}
+  .tile2 svg{width:100%;height:100%}
+  .tile2.sm{width:66px;height:56px;padding:4px}
+  .tf .l{flex:1;font-size:14.5px}
+  .tf .in{width:92px;height:38px;border:1px solid var(--outline);border-radius:9px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font-family:"Roboto Mono",monospace;font-size:15px;flex:none;box-sizing:border-box}
+  .tf .in u{text-decoration:none;color:var(--muted);font-size:12px;font-family:Roboto}
+  .tf .in .vu{display:flex;align-items:baseline;gap:4px}
+  .tf .inf{color:var(--muted);font-size:22px;margin-left:-4px}
+  .infolink{display:flex;gap:6px;align-items:center;color:var(--primary);font-size:13.5px}
+  .infolink .ms{font-size:19px}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#172033;border-radius:22px 22px 0 0;padding:10px 16px 30px;display:flex;flex-direction:column;gap:14px;box-shadow:0 -6px 24px rgba(0,0,0,.5)}
+  .grab{width:36px;height:4px;border-radius:2px;background:#475569;align-self:center}
+  .sh{display:flex;align-items:center;font-size:17px;font-weight:500}
+  .si{display:flex;gap:12px;font-size:13px;line-height:1.42;color:#cbd5e1;align-items:flex-start}
+  .si b{display:block;color:var(--text);font-size:14px;font-weight:500;margin-bottom:2px}
+
+</style></head><body>
+
+<div><div class="cap">3D probe in the pendant: two layouts to compare</div>
+<div class="sub">A keeps you on the main screen: a probe icon (top-right of the dial, mirroring the dial/pad switch) turns the hotkey area into a probe panel and the dial shrinks to make room. B (your idea) is a full-screen wizard: choices first, then a dial/jog-pad screen with Next, then run. Both use the same firmware routines Studio uses (M480.x / M491); the probe touches also report back, so the result can show measured sizes.</div></div>
+
+
+<div class="row" id="rowA"></div>
+
+<div class="cap" style="margin-top:4px">B · Full-screen probe wizard (revised)</div>
+<div class="row" id="rowB"></div>
+
+<script>
+// ---- little SVG pictures for the probe types (stock = slate, probe = blue dot, arrows = touch directions) ----
+function pic(kind, sub, size){
+  const s=size||44, st='#94a3b8', bl='#38BDF8', fill='#334155';
+  const id='a'+Math.round(s*1000+Math.random()*1000);
+  const mk='<defs><marker id="'+id+'" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="'+bl+'"/></marker></defs>';
+  const arrow=(x1,y1,x2,y2)=>'<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+bl+'" stroke-width="2.4" marker-end="url(#'+id+')"/>';
+  let body='';
+  const C={tl:[14,14],tr:[46,14],bl:[14,46],br:[46,46]};
+  if(kind==='out'){
+    const [cx,cy]=C[sub]; const sx=cx<30?1:-1, sy=cy<30?1:-1;
+    body='<rect x="14" y="14" width="32" height="32" rx="1.5" fill="'+fill+'" stroke="'+st+'" stroke-width="1.5"/>'+
+      '<circle cx="'+(cx+sx*6)+'" cy="'+(cy+sy*6)+'" r="3.4" fill="'+bl+'"/>'+
+      arrow(cx-sx*11, cy+sy*9, cx-sx*2.5, cy+sy*9)+
+      arrow(cx+sx*9, cy-sy*11, cx+sx*9, cy-sy*2.5);
+  } else if(kind==='in'){
+    const [cx,cy]=C[sub]; const sx=cx<30?1:-1, sy=cy<30?1:-1;
+    body='<rect x="4" y="4" width="52" height="52" rx="3" fill="'+fill+'"/><rect x="14" y="14" width="32" height="32" fill="#0B1120" stroke="'+st+'" stroke-width="1.5"/>'+
+      '<circle cx="'+(cx+sx*9)+'" cy="'+(cy+sy*9)+'" r="3.4" fill="'+bl+'"/>'+
+      arrow(cx+sx*9, cy+sy*9, cx+sx*2.5, cy+sy*9)+arrow(cx+sx*9, cy+sy*9, cx+sx*9, cy+sy*2.5);
+  } else if(kind==='bore'){
+    body='<rect x="4" y="4" width="52" height="52" rx="3" fill="'+fill+'"/><circle cx="30" cy="30" r="17" fill="#0B1120" stroke="'+st+'" stroke-width="1.5"/>'+
+      '<circle cx="30" cy="30" r="3.4" fill="'+bl+'"/>'+arrow(30,30,15.5,30)+arrow(30,30,44.5,30)+arrow(30,30,30,15.5)+arrow(30,30,30,44.5);
+  } else if(kind==='boss'){
+    body='<circle cx="30" cy="30" r="14" fill="'+fill+'" stroke="'+st+'" stroke-width="1.5"/><circle cx="30" cy="30" r="3.4" fill="'+bl+'"/>'+
+      arrow(3,30,13.5,30)+arrow(57,30,46.5,30)+arrow(30,3,30,13.5)+arrow(30,57,30,46.5);
+  } else if(kind==='z'){
+    body='<rect x="10" y="34" width="40" height="16" rx="2" fill="'+fill+'" stroke="'+st+'" stroke-width="1.5"/><circle cx="30" cy="14" r="3.4" fill="'+bl+'"/>'+arrow(30,19,30,31.5);
+  } else if(kind==='rod'){
+    body='<rect x="26" y="4" width="8" height="40" rx="2" fill="#94a3b8"/><rect x="24" y="44" width="12" height="8" rx="2" fill="'+bl+'"/>';
+  } else if(kind==='p3d'){
+    body='<rect x="25" y="4" width="10" height="22" rx="2" fill="#94a3b8"/><rect x="21" y="24" width="18" height="12" rx="3" fill="#64748b"/><rect x="28.5" y="36" width="3" height="12" fill="#cbd5e1"/><circle cx="30" cy="50" r="4" fill="'+bl+'"/>';
+  }
+  return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 60 60">'+mk+body+'</svg>';
+}
+// ---- D2 icons (3D part, zero crosshair in the surface plane); from probe_b1_src.js ----
+
+const BL='#38BDF8', ST='#94a3b8', FILL='#334155', DARK='#0B1120', TOP='#475569', LFACE='#334155', RFACE='#253041', WALL1='#2b3648', WALL2='#222c3c';
+let uid=0;
+const svg=(s,body,id)=>'<svg width="'+s+'" height="'+s+'" viewBox="0 0 60 60"><defs><marker id="'+id+'" markerUnits="userSpaceOnUse" markerWidth="7" markerHeight="7" refX="6.5" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="'+BL+'"/></marker></defs>'+body+'</svg>';
+const ar=(id,x1,y1,x2,y2)=>'<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+BL+'" stroke-width="2" marker-end="url(#'+id+')"/>';
+const cross=(x,y,k=1)=>'<g stroke="'+BL+'" stroke-width="1.5" fill="none"><circle cx="'+x+'" cy="'+y+'" r="'+(3.4*k)+'"/><line x1="'+(x-6.5*k)+'" y1="'+y+'" x2="'+(x+6.5*k)+'" y2="'+y+'"/><line x1="'+x+'" y1="'+(y-6.5*k)+'" x2="'+x+'" y2="'+(y+6.5*k)+'"/></g><circle cx="'+x+'" cy="'+y+'" r="1.2" fill="'+BL+'"/>';
+const ball=(x,y)=>'<circle cx="'+x+'" cy="'+y+'" r="3.2" fill="rgba(56,189,248,.35)" stroke="'+BL+'" stroke-width="1.4"/>';
+const trail=(x1,y1,x2,y2)=>'<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+BL+'" stroke-width="1.3" stroke-dasharray="2 2" opacity=".75"/>';
+const MIR={bl:'',tl:'translate(0,60) scale(1,-1)',br:'translate(60,0) scale(-1,1)',tr:'translate(60,60) scale(-1,-1)'};
+const g=(c,b)=>'<g transform="'+MIR[c]+'">'+b+'</g>';
+
+// ---------- top-view styles (A arrows, B balls) ----------
+function topv(style, kind, sub, size){
+  const id='m'+(uid++); let b='';
+  const A=style==='A';
+  if(kind==='out'){            // front-left drawn, mirrored for the others
+    let t='<rect x="22" y="4" width="34" height="34" rx="1" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.4"/>';
+    t+= A ? ar(id,6,25,22,25)+ar(id,35,54,35,38)
+          : trail(6,25,14,25)+ball(18.8,25)+trail(35,54,35,46)+ball(35,41.2);
+    // crosshair drawn unmirrored so it stays symmetric
+    b=g(sub,t)+cross(...pt(sub,22,38));
+  } else if(kind==='in'){
+    let t='<rect x="4" y="4" width="52" height="52" rx="2" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.2"/><rect x="22" y="10" width="28" height="28" fill="'+DARK+'" stroke="'+ST+'" stroke-width="1.4"/>';
+    t+= A ? ar(id,35,27,22,27)+ar(id,40,23,40,38)
+          : trail(36,27,29,27)+ball(25.2,27)+trail(40,16,40,31)+ball(40,34.8);
+    b=g(sub,t)+cross(...pt(sub,22,38));
+  } else if(kind==='hole'){
+    b='<rect x="4" y="4" width="52" height="52" rx="2" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.2"/>'+
+      (sub==='sq' ? '<rect x="12" y="12" width="36" height="36" fill="'+DARK+'" stroke="'+ST+'" stroke-width="1.4"/>'
+                  : '<circle cx="30" cy="30" r="18" fill="'+DARK+'" stroke="'+ST+'" stroke-width="1.4"/>');
+    b+= A ? ar(id,37,30,48,30)+ar(id,23,30,12,30)+ar(id,30,23,30,12)+ar(id,30,37,30,48)
+          : ball(44.8,30)+ball(15.2,30)+ball(30,15.2)+ball(30,44.8);
+    b+=cross(30,30,.7);
+  } else if(kind==='block'){
+    b= sub==='sq' ? '<rect x="17" y="17" width="26" height="26" rx="1" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.4"/>'
+                  : '<circle cx="30" cy="30" r="13" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.4"/>';
+    b+= A ? ar(id,2,30,17,30)+ar(id,58,30,43,30)+ar(id,30,2,30,17)+ar(id,30,58,30,43)
+          : trail(2,30,9,30)+ball(13.8,30)+trail(58,30,51,30)+ball(46.2,30)+trail(30,2,30,9)+ball(30,13.8)+trail(30,58,30,51)+ball(30,46.2);
+    b+=cross(30,30,.7);
+  } else if(kind==='z'){       // side view
+    b='<rect x="8" y="34" width="44" height="20" rx="1.5" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.4"/>';
+    b+= A ? ar(id,30,6,30,34) : trail(30,6,30,26)+ball(30,30.8);
+    b+='<line x1="4" y1="34" x2="56" y2="34" stroke="'+BL+'" stroke-width="1.6" stroke-dasharray="3 2"/><text x="56" y="30" fill="'+BL+'" font-size="8" font-family="Roboto,Arial" text-anchor="end" font-weight="700">Z0</text>';
+  }
+  return svg(size,b,id);
+}
+function pt(c,x,y){ return c==='bl'?[x,y]:c==='tl'?[x,60-y]:c==='br'?[60-x,y]:[60-x,60-y]; }
+
+// ---------- isometric styles (C arrows, D zero only) ----------
+function iso(style, kind, sub, size){
+  const id='m'+(uid++), arrows=false;
+  let o=[30,52,1.25];
+  const P=(x,y,z)=>[o[0]+(x-y)*0.866*o[2], o[1]-(x+y)*0.5*o[2]-z*o[2]];
+  const poly=(pts,fill,extra)=>'<polygon points="'+pts.map(p=>P(...p).map(v=>v.toFixed(2)).join(',')).join(' ')+'" fill="'+fill+'" stroke="'+ST+'" stroke-width="0.8" stroke-linejoin="round" '+(extra||'')+'/>';
+  const path=(rings)=>rings.map(r=>'M'+r.map(p=>P(...p).map(v=>v.toFixed(2)).join(',')).join(' L')+' Z').join(' ');
+  const box=(x0,y0,z0,w,d,h,topExtra)=>
+    poly([[x0,y0,z0],[x0,y0+d,z0],[x0,y0+d,z0+h],[x0,y0,z0+h]],LFACE)+
+    poly([[x0,y0,z0],[x0+w,y0,z0],[x0+w,y0,z0+h],[x0,y0,z0+h]],RFACE)+
+    (topExtra===undefined ? poly([[x0,y0,z0+h],[x0+w,y0,z0+h],[x0+w,y0+d,z0+h],[x0,y0+d,z0+h]],TOP) : '');
+  const circ=(cx,cy,z,r,a0=0,a1=360,n=48)=>{const a=[];for(let i=0;i<=n;i++){const t=(a0+(a1-a0)*i/n)*Math.PI/180;a.push([cx+r*Math.cos(t),cy+r*Math.sin(t),z]);}return a;};
+  const sq=(cx,cy,z,h)=>[[cx-h,cy-h,z],[cx+h,cy-h,z],[cx+h,cy+h,z],[cx-h,cy+h,z]];
+  const ia=(a,b)=>{const p=P(...a),q=P(...b);return ar(id,p[0].toFixed(2),p[1].toFixed(2),q[0].toFixed(2),q[1].toFixed(2));};
+  const pts=a=>a.map(p=>P(...p).map(v=>v.toFixed(2)).join(',')).join(' ');
+  const seg=(a,b,w,extra)=>{const p=P(...a),q=P(...b);return '<line x1="'+p[0].toFixed(2)+'" y1="'+p[1].toFixed(2)+'" x2="'+q[0].toFixed(2)+'" y2="'+q[1].toFixed(2)+'" stroke="'+BL+'" stroke-width="'+w+'" stroke-linecap="round" '+(extra||'')+'/>';};
+  const zero=(x,y,z,ax='xyz')=>{
+    if(style==='D1'){          // flat target lying on the surface
+      return '<polygon points="'+pts(circ(x,y,z,3.3,0,360,40))+'" fill="rgba(11,17,32,.55)" stroke="'+BL+'" stroke-width="1.7"/>'+
+             '<polygon points="'+pts(circ(x,y,z,1.3,0,360,24))+'" fill="'+BL+'"/>';
+    }
+    if(style==='D2'){          // flat crosshair: ring + lines along the part's X and Y
+      return '<polygon points="'+pts(circ(x,y,z,2.6,0,360,40))+'" fill="none" stroke="'+BL+'" stroke-width="1.5"/>'+
+             seg([x-5.5,y,z],[x+5.5,y,z],1.4)+seg([x,y-5.5,z],[x,y+5.5,z],1.4)+
+             '<polygon points="'+pts(circ(x,y,z,0.9,0,360,16))+'" fill="'+BL+'"/>';
+    }
+    // D3: axis triad X / Y / Z from the zero point
+    const L=8, hd=(a,b)=>{const p=P(...a),q=P(...b);const dx=q[0]-p[0],dy=q[1]-p[1],n=Math.hypot(dx,dy),ux=dx/n,uy=dy/n;
+      const bx=q[0]-ux*3.6,by=q[1]-uy*3.6;
+      return '<line x1="'+p[0].toFixed(2)+'" y1="'+p[1].toFixed(2)+'" x2="'+bx.toFixed(2)+'" y2="'+by.toFixed(2)+'" stroke="'+BL+'" stroke-width="1.4"/>'+
+        '<polygon points="'+q[0].toFixed(2)+','+q[1].toFixed(2)+' '+(bx-uy*1.7).toFixed(2)+','+(by+ux*1.7).toFixed(2)+' '+(bx+uy*1.7).toFixed(2)+','+(by-ux*1.7).toFixed(2)+'" fill="'+BL+'"/>';};
+    const lab=(q,t)=>{const c=P(...q);return '<text x="'+c[0].toFixed(1)+'" y="'+(c[1]+2.4).toFixed(1)+'" fill="'+BL+'" font-size="6.5" font-weight="700" font-family="Roboto,Arial" text-anchor="middle">'+t+'</text>';};
+    return (ax.includes('x')?hd([x,y,z],[x+L,y,z])+lab([x+L+3.2,y,z],'X'):'')+(ax.includes('y')?hd([x,y,z],[x,y+L,z])+lab([x,y+L+3.2,z],'Y'):'')+
+           (ax.includes('z')?hd([x,y,z],[x,y,z+L])+lab([x,y,z+L+3.4],'Z'):'')+
+           '<circle cx="'+P(x,y,z)[0].toFixed(2)+'" cy="'+P(x,y,z)[1].toFixed(2)+'" r="1.5" fill="'+BL+'"/>';
+  };
+  let b='';
+  if(kind==='out'){
+    o=[30,47,1.55];
+    b=box(0,0,0,17,17,7);
+    if(arrows) b+=ia([-9,9,4.5],[0,9,4.5])+ia([9,-9,4.5],[9,0,4.5]);
+    b+=zero(0,0,7);
+  } else if(kind==='in'){
+    o=[30,51,1.42]; const H=7, x0=6,x1=18, d=5;
+    const op=[[x0,x0,H],[x1,x0,H],[x1,x1,H],[x0,x1,H]];
+    b=box(0,0,0,21,21,H,false)+'<clipPath id="c'+id+'"><path d="'+path([op])+'"/></clipPath><g clip-path="url(#c'+id+')">'+
+      poly([[x1,x0,H-d],[x1,x1,H-d],[x1,x1,H],[x1,x0,H]],WALL1)+poly([[x0,x1,H-d],[x1,x1,H-d],[x1,x1,H],[x0,x1,H]],WALL2)+
+      poly([[x0,x0,H-d],[x1,x0,H-d],[x1,x1,H-d],[x0,x1,H-d]],DARK)+'</g>'+
+      '<path d="'+path([[[0,0,H],[21,0,H],[21,21,H],[0,21,H]],op])+'" fill="'+TOP+'" fill-rule="evenodd" stroke="'+ST+'" stroke-width="0.8"/>';
+    if(arrows) b+=ia([11,9.5,H-2.5],[x1,9.5,H-2.5])+ia([9.5,11,H-2.5],[9.5,x1,H-2.5]);
+    b+=zero(x0,x0,H);
+  } else if(kind==='hole'){
+    o=[30,52,1.4]; const H=7, c=11, r=7, d=8;
+    const op= sub==='sq'? sq(c,c,H,r) : circ(c,c,H,r);
+    const fl= sub==='sq'? sq(c,c,H-d,r) : circ(c,c,H-d,r);
+    b=box(0,0,0,22,22,H,false)+'<clipPath id="c'+id+'"><path d="'+path([op])+'"/></clipPath><g clip-path="url(#c'+id+')"><path d="'+path([op])+'" fill="'+WALL1+'"/><path d="'+path([fl])+'" fill="'+DARK+'"/></g>'+
+      '<path d="'+path([[[0,0,H],[22,0,H],[22,22,H],[0,22,H]],op])+'" fill="'+TOP+'" fill-rule="evenodd" stroke="'+ST+'" stroke-width="0.8"/>';
+    const z=H-3;
+    if(arrows) b+=ia([c+2.5,c-1.5,z],[c+r,c-1.5,z])+ia([c-1.5,c+2.5,z],[c-1.5,c+r,z]);
+    b+=zero(c,c,H,'xy');
+  } else if(kind==='block'){
+    o=[30,53,1.2]; const c=13, r=6, z0=3, h=8;
+    b=box(0,0,0,26,26,z0);
+    if(sub==='sq') b+=box(c-r,c-r,z0,2*r,2*r,h);
+    else{
+      const side=circ(c,c,z0,r,135,315).concat(circ(c,c,z0+h,r,315,135));
+      b+=poly(side,LFACE)+poly(circ(c,c,z0+h,r),TOP);
+    }
+    const z=z0+h-2.5;
+    if(arrows) b+=ia([c-r-8,c,z],[c-r,c,z])+ia([c,c-r-8,z],[c,c-r,z]);
+    b+=zero(c,c,z0+h);
+  } else if(kind==='z'){
+    o=[30,52,1.45];
+    b=box(0,0,0,20,20,6);
+    if(arrows) b+=ia([10,10,22],[10,10,6]);
+    b+=zero(10,10,6,'z');
+  }
+  return svg(size,b,id);
+}
+
+
+const ico=(k,sub,size)=>iso('D2',k,sub,size);
+const pick=(c,size)=>topv('A','out',c,size).replace(/<line[^>]*marker-end[^>]*\/>/g,'');
+const H='<div class="hdr"><div class="n"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 18 ms</span></div><div class="pill">Idle</div><div class="ico"><span class="ms">terminal</span></div><div class="ico"><span class="ms">settings</span></div></div>';
+function dro(sel, vals){ vals=vals||['48.215','61.880','12.400','0.000'];
+  return '<div class="dro">'+['X','Y','Z','A'].map((a,i)=>'<div class="dr'+(a===sel?' sel':'')+'"><span class="ax">'+a+'</span><span class="v">'+vals[i]+'</span><span class="z">zero</span></div>').join('')+'</div>'; }
+const SEG='<div class="seg"><div>0.005</div><div>0.01</div><div class="on">0.1</div><div>1</div><div>5</div></div>';
+function stage(d, probeOn){ return '<div class="stage" style="height:'+(d+4)+'px"><div class="mbtn l"><span class="ms">joystick</span></div><div class="dial" style="width:'+d+'px;height:'+d+'px"><i></i><b>X</b><span>0.1mm/click</span></div><div class="mbtn r'+(probeOn?' on':'')+'"><span class="ms">my_location</span></div></div>'; }
+function steps(n,of){ let s='<div class="steps">'; for(let i=1;i<=of;i++) s+='<i'+(i<=n?' class="on"':'')+'></i>'; return s+'</div>'; }
+function fld(l,sm,v,u,o){ o=o||{}; return '<div class="fld'+(o.dg?' dg':'')+'">'+(o.dg||'')+'<div class="l">'+l+(sm?'<small>'+sm+'</small>':'')+'</div><div class="in'+(o.focus?' focus':'')+'"><span class="vu">'+v+'<u>'+u+'</u></span></div></div>'; }
+// ---- B2 field diagrams (outside corner, front-left; top view for X/Y, side view for depth/tip) ----
+const MUTE='#64748b';
+function ln(x1,y1,x2,y2,c,o){ o=o||{}; let out='';
+  const dx=x2-x1,dy=y2-y1,n=Math.hypot(dx,dy),ux=dx/n,uy=dy/n,h=o.h||4,w=o.w||2;
+  const head=(x,y,ux,uy)=>'<polygon points="'+x+','+y+' '+(x-ux*h-uy*w)+','+(y-uy*h+ux*w)+' '+(x-ux*h+uy*w)+','+(y-uy*h-ux*w)+'" fill="'+c+'"/>';
+  const sx=o.both?x1+ux*h:x1, sy=o.both?y1+uy*h:y1, ex=o.head===false?x2:x2-ux*h, ey=o.head===false?y2:y2-uy*h;
+  out+='<line x1="'+sx+'" y1="'+sy+'" x2="'+ex+'" y2="'+ey+'" stroke="'+c+'" stroke-width="'+(o.sw||1.5)+'"'+(o.dash?' stroke-dasharray="'+o.dash+'"':'')+'/>';
+  if(o.head!==false) out+=head(x2,y2,ux,uy);
+  if(o.both) out+=head(x1,y1,-ux,-uy);
+  return out; }
+const tx=(x,y,t,c,sz,anc)=>'<text x="'+x+'" y="'+y+'" fill="'+c+'" font-size="'+(sz||9)+'" font-weight="700" font-family="Roboto,Arial" text-anchor="'+(anc||'middle')+'">'+t+'</text>';
+const startRing=(x,y,c)=>'<circle cx="'+x+'" cy="'+y+'" r="3" fill="none" stroke="'+(c||'#E2E8F0')+'" stroke-width="1.4"/><circle cx="'+x+'" cy="'+y+'" r="1" fill="'+(c||'#E2E8F0')+'"/>';
+const dsv=(vb,w,h,body)=>'<svg width="'+w+'" height="'+h+'" viewBox="'+vb+'" style="flex:none">'+body+'</svg>';
+// probe drawn like the B1 "3D probe" picture: grey body, darker collar, thick stem, solid blue ball
+const probeSide=(cx,by,r,sc)=>{ // ball centre (cx,by), ball radius r, sc = size scale
+  const st=3*sc, cw=12*sc, ch=9*sc, bw=7*sc, bh=8*sc, stemTop=by-r-9*sc;
+  return '<rect x="'+(cx-bw/2)+'" y="'+(stemTop-ch-bh+1)+'" width="'+bw+'" height="'+bh+'" rx="'+(1.5*sc)+'" fill="#94a3b8"/>'+
+    '<rect x="'+(cx-cw/2)+'" y="'+(stemTop-ch)+'" width="'+cw+'" height="'+ch+'" rx="'+(2.5*sc)+'" fill="#64748b"/>'+
+    '<rect x="'+(cx-st/2)+'" y="'+stemTop+'" width="'+st+'" height="'+(9*sc+1)+'" fill="#cbd5e1"/>'+
+    '<circle cx="'+cx+'" cy="'+by+'" r="'+r+'" fill="'+BL+'"/>'; };
+const probeTop=(x,y)=>'<circle cx="'+x+'" cy="'+y+'" r="5.5" fill="#64748b"/><circle cx="'+x+'" cy="'+y+'" r="3.6" fill="'+BL+'"/>';
+const ghostTop=(x,y)=>'<circle cx="'+x+'" cy="'+y+'" r="3.6" fill="none" stroke="'+BL+'" stroke-width="1.2" stroke-dasharray="2 1.5"/>';
+const dotted=(x1,y1,x2,y2)=>'<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+BL+'" stroke-width="1" stroke-dasharray="2 1.5"/>';
+const dgw=(vb,k,body)=>'<svg viewBox="'+vb+'">'+body+'</svg>';
+const stockTop='<rect x="26" y="4" width="32" height="34" rx="1" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.2"/>';
+// X: from above; probe parked over the stock, dashed move out past the edge, ghost = where it goes down
+const dgX=s=>dgw('0 3 60 37',s,stockTop+ln(36,28,8,28,BL,{dash:'3 2',head:false})+ghostTop(6,28)+probeTop(36,28)+tx(17,23,'X',BL,9));
+const dgY=s=>dgw('22 3 36 56',s,stockTop+ln(36,28,36,52,BL,{dash:'3 2',head:false})+ghostTop(36,54)+probeTop(36,28)+tx(44,49,'Y',BL,9));
+// side depth: side view, ball touching the side, depth from the top surface to the bottom of the ball
+const dgD=s=>dgw('0 11 60 48',s,'<rect x="28" y="28" width="30" height="30" rx="1" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.2"/>'+
+  probeSide(23.5,37,4.5,0.8)+dotted(3,28,28,28)+dotted(3,41.5,18,41.5)+ln(7,28,7,41.5,BL,{both:true,h:3.2,w:1.7}));
+// tip diameter: big ball, dotted lines down from its sides, double arrow between them
+const dgT=s=>dgw('8 0 44 58',s,probeSide(30,34,10,1.1)+dotted(20,34,20,57)+dotted(40,34,40,57)+ln(20,52,40,52,BL,{both:true,h:3.5,w:1.8}));
+// one combined drawing; f = the field being edited ('x','y','d','t')
+function dgAll(f){
+  const c=k=>k===f?BL:MUTE;
+  let b='<text x="4" y="9" fill="'+MUTE+'" font-size="7.5" font-family="Roboto,Arial">from above</text><text x="146" y="9" fill="'+MUTE+'" font-size="7.5" font-family="Roboto,Arial">from the side</text>';
+  b+='<rect x="44" y="12" width="76" height="62" rx="1.5" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.2"/>';
+  b+=ln(62,58,10,58,c('x'),{dash:'4 2.5',sw:f==='x'?2:1.5})+tx(26,53,'X 20',c('x'),9);
+  b+=ln(62,58,62,110,c('y'),{dash:'4 2.5',sw:f==='y'?2:1.5})+tx(67,101,'Y 30',c('y'),9,'start');
+  b+=startRing(62,58);
+  b+='<rect x="174" y="40" width="62" height="58" rx="1.5" fill="'+FILL+'" stroke="'+ST+'" stroke-width="1.2"/>';
+  b+='<line x1="167" y1="12" x2="167" y2="46" stroke="#cbd5e1" stroke-width="2.4"/><circle cx="167" cy="52" r="6.5" fill="'+DARK+'" stroke="'+(f==='t'?BL:'#cbd5e1')+'" stroke-width="'+(f==='t'?2:1.4)+'"/>';
+  b+='<line x1="146" y1="40" x2="174" y2="40" stroke="'+c('d')+'" stroke-width="1" stroke-dasharray="2 1.5"/><line x1="146" y1="58.5" x2="160" y2="58.5" stroke="'+c('d')+'" stroke-width="1" stroke-dasharray="2 1.5"/>';
+  b+=ln(150,40,150,58.5,c('d'),{both:true,h:3.5,w:1.8})+tx(146,53,'2',c('d'),9,'end');
+  b+=tx(167,75,'Ø2',c('t'),9);
+  return dsv('0 0 240 112',360,168,b);
+}
+
+function phone(k, inner, note){ return '<div><div class="k">'+k+'</div><div class="phone">'+H+inner+'</div>'+(note?'<div class="note">'+note+'</div>':'')+'</div>'; }
+
+// ---------------- A ----------------
+const typesSmall = [['out','bl','Out<br>corner'],['in','bl','In<br>corner'],['bore','','Bore'],['boss','','Boss'],['z','','Z only']];
+const A0 = phone('A0 · Normal screen: the new probe icon (top-right of the dial)',
+  dro('X')+SEG+stage(250,false)+
+  '<div class="tiles">'+['cyclone|Spindle','vertical_align_bottom|Zero Z','vertical_align_top|Z up','filter_center_focus|Go to XY0','lightbulb|Light','gps_fixed|Zero XY','lock_open|Unlock','home|Home'].map(t=>{const [i,l]=t.split('|');return '<div class="tile"><span class="ms">'+i+'</span>'+l+'</div>'}).join('')+'</div>',
+  'Same as today, plus the probe icon top-right. Tap it (or a "3D probe" hotkey tile) to start.');
+const A1 = phone('A1 · Probe panel replaces the hotkeys; dial shrinks',
+  dro('X')+SEG+stage(170,true)+
+  '<div class="panel"><div class="ptitle"><span class="ms" style="color:var(--primary)">my_location</span>3D probe<span class="st">1 of 3 · what</span></div>'+steps(1,3)+
+  '<div class="types">'+typesSmall.map((t,i)=>'<div class="tt'+(i===0?' on':'')+'">'+pic(t[0],t[1],40)+'<span style="text-align:center">'+t[2]+'</span></div>').join('')+'</div>'+
+  '<div class="sub2">Which corner?</div><div class="types" style="grid-template-columns:repeat(4,1fr)">'+['tl','tr','bl','br'].map(c=>'<div class="tt'+(c==='bl'?' on':'')+'">'+pic('out',c,36)+'</div>').join('')+'</div>'+
+  '<div class="grow"></div><div class="btnrow"><div class="btn ghost">✕ Close</div><div class="btn">Next</div></div></div>',
+  'The dial drops to ~170 px so the panel fits. The DRO and steps stay on screen the whole time.');
+const A2 = phone('A2 · Settings + calibrate, still above the dial',
+  dro('X')+SEG+stage(170,true)+
+  '<div class="panel"><div class="ptitle"><span class="ms" style="color:var(--primary)">my_location</span>Outside corner · front-left<span class="st">2 of 3 · settings</span></div>'+steps(2,3)+
+  fld('X / Y clearance','how far out it steps to clear the edges','10','mm')+fld('Side depth','how far below the top it touches the sides','2','mm')+fld('Tip diameter','','2.000','mm')+
+  '<div class="check"><span class="ms ok">check_circle</span>Probe calibrated this session (T9999)</div>'+
+  '<div class="grow"></div><div class="btnrow"><div class="btn ghost">Back</div><div class="btn">Next</div></div></div>',
+  'Values remembered from last time. Calibrate shows as a check, or a "Calibrate now" button if not done yet.');
+const A3 = phone('A3 · Position with the dial above, then Run',
+  dro('Z',['48.215','61.880','4.850','0.000'])+SEG+stage(170,true)+
+  '<div class="panel"><div class="ptitle"><span class="ms" style="color:var(--primary)">my_location</span>Outside corner · front-left<span class="st">3 of 3 · position</span></div>'+steps(3,3)+
+  '<div class="hint">Jog the tip <b>~3–5 mm above the stock</b>, just inside the <b>front-left corner</b>. The laser is on to help line up.</div>'+
+  '<div class="grow"></div><div class="btnrow"><div class="btn ghost">Back</div><div class="btn"><span class="ms">play_arrow</span>Run probe</div></div></div>',
+  'You jog with the shrunk dial (or the pad) right above. Run sends the routine; the result replaces this panel.');
+
+// ---------------- B ----------------
+const SUM = '<div style="display:flex;align-items:center;gap:10px;background:var(--sc);border-radius:10px;padding:6px 10px">'+ico('out','bl',44)+
+  '<div style="font-size:12.5px;line-height:1.45"><b style="font-weight:600">3D probe · Outside corner · front-left</b><br><span style="color:var(--muted)">X 20 · Y 30 · depth 2 · tip 2.000 mm</span></div><span class="ms" style="margin-left:auto;color:var(--primary);font-size:20px">edit</span></div>';
+const B1 = phone('B1 · What are you probing? (probe, then type)',
+  '<div class="wizhdr"><span class="ms">my_location</span>3D probe<span class="ms x">close</span></div>'+steps(1,5)+
+  '<div class="sub2">Probe</div><div class="types" style="grid-template-columns:1fr 1fr"><div class="tt on" style="flex-direction:row;gap:8px;padding:6px">'+pic('p3d','',40)+'3D probe</div><div class="tt" style="flex-direction:row;gap:8px;padding:6px">'+pic('rod','',40)+'Probe rod</div></div>'+
+  '<div class="sub2">What</div><div class="types big">'+[['out','Outside corner',''],['in','Inside corner',''],['hole','Hole center','round or square'],['block','Block center','round or square'],['z','Top only','']].map((t,i)=>'<div class="tt'+(i===0?' on':'')+'">'+((t[0]==='hole'||t[0]==='block')?'<div style="display:flex;gap:2px">'+ico(t[0],'rd',60)+ico(t[0],'sq',60)+'</div>':ico(t[0],'bl',64))+'<span>'+t[1]+'</span>'+(t[2]?'<small style="font-size:10.5px;color:var(--muted)">'+t[2]+'</small>':'')+'</div>').join('')+'</div>'+
+  '<div class="sub2">Which corner? (seen from above, front = toward you)</div><div class="types" style="grid-template-columns:repeat(4,1fr)">'+[['tl','back-left'],['tr','back-right'],['bl','front-left'],['br','front-right']].map(c=>'<div class="tt'+(c[0]==='bl'?' on':'')+'">'+pick(c[0],46)+'<span>'+c[1]+'</span></div>').join('')+'</div>'+
+  '<div class="grow"></div><div class="btn" style="margin-bottom:14px">Next</div>',
+  'Probe rod = Studio\'s "3D Probe Rod" (same routines, its own diameter; the part must be conductive). Icons: 3D part with the blue crosshair lying in the surface where zero lands (style D2). The corner picker stays a top view.');
+const B2HDR='<div class="wizhdr"><span class="ms">my_location</span>Outside corner · front-left<span class="ms x">close</span></div>'+steps(2,5);
+const B2END='<div class="grow"></div><div class="btnrow" style="margin-bottom:14px"><div class="btn ghost">Back</div><div class="btn">Next</div></div>';
+// a field with its drawing in a bordered tile; info: put an (i) after the box
+const tf=(dg,l,v,u,info)=>'<div class="tf"><div class="tile2">'+dg+'</div><div class="l">'+l+'</div><div class="in"><span class="vu">'+v+'<u>'+u+'</u></span></div>'+(info?'<span class="ms inf">info</span>':'')+'</div>';
+const FIELDS=info=>tf(dgX(),'X start offset','20','mm',info)+tf(dgY(),'Y start offset','30','mm',info)+tf(dgD(),'Side depth','1.500','mm',info)+tf(dgT(),'Tip diameter','2.000','mm',info);
+const B2 = phone('B2 · Settings (chosen: tiles + one info link)',
+  B2HDR+'<div class="infolink"><span class="ms">info</span>How these work</div>'+
+  '<div style="display:flex;justify-content:center;margin:-2px 0 2px">'+ico('out','bl',96)+'</div>'+FIELDS(false)+B2END,
+  'Drawings in tiles, no hint text; one "How these work" link opens the sheet. Side depth and tip diameter both show 3 decimals; X/Y take decimals too.');
+const B2b = phone('B2 · How these work (sheet)',
+  B2HDR+'<div style="display:flex;justify-content:center;margin:2px 0;opacity:.35">'+ico('out','bl',96)+'</div>'+
+  '<div class="scrim"></div><div class="sheet"><div class="grab"></div><div class="sh">How these work<span class="ms" style="margin-left:auto;color:#cbd5e1">close</span></div>'+
+  '<div class="si"><div class="tile2 sm">'+dgX()+'</div><div><b>X and Y start offset</b>You park the probe over the part. It moves out this far, goes down, then comes back in until it touches the edge. Make it more than the distance from where you parked to the edge, plus a few mm.</div></div>'+
+  '<div class="si"><div class="tile2 sm">'+dgD()+'</div><div><b>Side depth</b>How far below the top surface the ball goes before it touches the sides. Decimals are fine (1.5). Go deeper if the edge is rounded or chamfered.</div></div>'+
+  '<div class="si"><div class="tile2 sm">'+dgT()+'</div><div><b>Tip diameter</b>The ball\'s size. It touches with the side of the ball, so half of this is added to find the real edge. Measure it with calipers if you can.</div></div>'+
+  '</div>',
+  'A bottom sheet over the wizard; swipe down or ✕ to close.');
+// ---- B3: probe in the spindle → measured this session ----
+const B3HDR='<div class="wizhdr"><span class="ms">my_location</span>Check the probe<span class="ms x">close</span></div>'+steps(3,5)+
+  '<div class="infolink"><span class="ms">info</span>How these work</div>';
+const ST_OK='<span class="ms ok">check_circle</span>', ST_NOW='<span class="ms" style="color:var(--primary)">radio_button_checked</span>', ST_WAIT='<span class="ms" style="color:#475569">radio_button_unchecked</span>';
+const ck=(st,title,sub,body,dim)=>'<div class="ck'+(dim?' dim':'')+'"><div class="ckh">'+st+'<div><b>'+title+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div></div>'+(body||'')+'</div>';
+const B3END=(next)=>'<div class="grow"></div><div class="btnrow" style="margin-bottom:14px"><div class="btn ghost">Back</div><div class="btn'+(next?'':' off')+'">Next</div></div>';
+// measure icons (drawn in the button's text colour)
+const icMeasure=(s)=>'<svg width="'+(s||22)+'" height="'+(s||22)+'" viewBox="0 0 24 24" fill="currentColor"><rect x="10.3" y="1.5" width="3.4" height="5" rx="1"/><rect x="8.3" y="6" width="7.4" height="4" rx="1.2"/><rect x="11.2" y="10" width="1.6" height="3.4"/><circle cx="12" cy="14.6" r="2.2"/><rect x="5" y="17.6" width="14" height="2.4" rx="1"/><rect x="3" y="20.2" width="18" height="2.3" rx="1"/></svg>';
+const icMeasure2=(s)=>'<svg width="'+(s||22)+'" height="'+(s||22)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M8 8.5l4 4 4-4"/><path d="M4 16.5h16"/><path d="M6 20.5h12"/></svg>';
+const icLoad='<span class="ms">swap_horiz</span>';
+const prog=(items)=>'<div class="prog">'+items.map(([st,t])=>'<div class="pi '+st+'">'+(st==='done'?'<span class="ms">check</span>':st==='now'?'<span class="dot"></span>':'<span class="ms">more_horiz</span>')+t+'</div>').join('')+'</div>';
+
+const B3 = phone('B3 · another tool is in the spindle',
+  B3HDR+
+  ck('<span class="ms" style="color:#f59e0b">error</span>','3D probe in the spindle','The machine has T3 in.',
+     '<div class="btn sm">'+icLoad+'Load the 3D probe</div><div class="cknote">Moves to the tool change spot and waits while you swap. Then it calibrates the probe on the tool setter and checks it triggers.</div>')+
+  ck(ST_WAIT,'Calibrated on the tool setter','',null,true)+B3END(false),
+  'Load = M6 T9999: swap, measure and probe check in one (confirmed on the machine 2026-11-15). Both rows tick when it reports Done.');
+
+const B3b = phone('B3 · loading the probe (live)',
+  B3HDR+
+  ck(ST_NOW,'3D probe in the spindle','Loading…',
+     prog([['done','Moved to the tool change spot'],['now','<b>Swap in the 3D probe and plug in its cable, then press the button on the machine</b>'],['wait','Calibrate on the tool setter'],['wait','Check the probe triggers']])+
+     '<div class="btn sm ghost" style="margin-top:2px">I\'ve swapped it · continue</div>')+
+  ck(ST_WAIT,'Calibrated on the tool setter','',null,true)+B3END(false),
+  'Each step lights up from the lines the machine reports while it runs, even if Studio started it. "Continue" = the machine\'s button (M490.2). A "Probe dead" stop shows here by name.');
+
+const B3c = phone('B3 · machine already says T9999',
+  B3HDR+
+  ck(ST_OK,'3D probe in the spindle','You confirmed it\'s in (machine says T9999).')+
+  ck(ST_NOW,'Calibrated on the tool setter','Not since this probe went in. Calibrating also checks the probe triggers.',
+     '<div class="btn sm">'+icMeasure(22)+'Calibrate now</div><div class="cknote">The machine moves over the tool setter and lowers the probe onto it.</div>')+B3END(false),
+  'Before this, row 1 asked: "The machine says the 3D probe (T9999) is in. Is it?" [Yes, it\'s in] [No, load it]. The number can be left over from last time.');
+
+const B3d = phone('B3 · all done',
+  B3HDR+
+  ck(ST_OK,'3D probe in the spindle','T9999')+
+  ck(ST_OK,'Calibrated on the tool setter','Just now · probe triggered on the setter',
+     '<div class="btn sm ghost">'+icMeasure(22)+'Calibrate again</div>')+B3END(true),
+  'Next unlocks when both are ticked. Probing again with the probe still in: both stay ticked. Any tool change, or the app reconnecting, clears row 2.');
+// ---- B5: result ----
+const B5HDR=(t)=>'<div class="wizhdr"><span class="ms">my_location</span>'+t+'<span class="ms x">close</span></div>'+steps(5,5);
+const B5END='<div class="grow"></div><div class="btnrow" style="margin-bottom:14px"><div class="btn ghost">Probe again</div><div class="btn">Done</div></div>';
+const okLine=(t)=>'<div class="okl"><span class="ms ok">check_circle</span><div>'+t+'</div></div>';
+const wpos=(v,lbl)=>'<div class="wp"><small>'+lbl+'</small>'+dro(null,v)+'</div>';
+const nextTool='<div class="ck"><div class="ckh"><span class="ms" style="color:var(--primary)">arrow_forward</span><div><b>Next: load your cutter</b><small>A tool change calibrates it on the setter, so this Z0 carries over to it.</small></div></div>'+
+  '<div style="display:flex;gap:10px;align-items:center;padding-left:32px"><div class="stp"><span>−</span><b>T1</b><span>+</span></div><div class="btn sm" style="flex:1">'+icLoad+'Load T1</div></div></div>';
+const undoRow=(t)=>'<div class="undo"><span class="ms">undo</span>'+t+'</div>';
+
+const B5 = phone('B5 · result: corner',
+  B5HDR('Probe finished')+
+  okLine('<b>Work zero is set.</b> X0 Y0 at the front-left corner, Z0 on the top.')+
+  wpos(['0.000','0.000','5.000','0.000'],'Where the probe is now (work position)')+
+  undoRow('Put the old X Y zero back')+B5END,
+  'Read from the machine, not assumed: the probe parks over X0 Y0 at the height it started from. The old zero is saved before Run (status MPos − WPos). Undo puts X and Y back; Z can\'t be put back exactly, because the machine ties Z0 to the tool that\'s in when it\'s set.');
+
+const B5b = phone('B5 · result: hole center, X only (today\'s real run)',
+  B5HDR('Probe finished')+
+  okLine('<b>Work zero is set.</b> X0 at the center of the hole. Y and Z unchanged.')+
+  wpos(['0.000','-5.927','-0.145','0.000'],'Where the probe is now (work position)')+
+  '<div class="sub2" style="margin-top:2px">Measured from the touches</div>'+
+  '<div class="res"><div><small>Width in X</small><b>34.775</b></div><div><small>Width in Y</small><b style="color:#475569">—</b></div><div><small>Out of round</small><b style="color:#475569">—</b></div></div>'+
+  undoRow('Put the old X zero back')+B5END,
+  'Your 13:04 run: X− touch at −177.683, X+ at −144.908 (machine position). Gap 32.775 + tip 2.000 = 34.775 wide. Both axes give out-of-round too. The touches come from the [PRB:] lines the machine sends every client.');
+
+const B5c = phone('B5 · result: probe didn\'t touch',
+  B5HDR('Probing stopped')+
+  '<div class="errl"><span class="ms">error</span><div><b>The probe didn\'t touch the X− side.</b> It came back the full 20 mm without touching, so the machine stopped (Alarm).</div></div>'+
+  '<div class="ck"><div class="ckh"><span class="ms" style="color:var(--muted)">info</span><div><b>What changed</b><small>Z0 was set on the top. X and Y weren\'t changed.</small></div></div></div>'+
+  '<div class="ck"><div class="ckh"><span class="ms" style="color:var(--muted)">help</span><div><b>Likely causes</b><small>• The probe started off the part. Start over the top, near the corner.<br>• The probe isn\'t triggering: check its cable, then Calibrate again (it checks the probe).</small></div></div></div>'+
+  '<div class="grow"></div><div class="btnrow" style="margin-bottom:14px"><div class="btn ghost">Done</div><div class="btn"><span class="ms">lock_open</span>Unlock, then retry</div></div>',
+  'The other stop, shown the same way: "The probe touched the part on the way down" = X start offset didn\'t clear the edge, so raise it (the machine\'s own unexpected-trigger stop). "What changed" compares the work offsets before and after.');
+// ---- B4 with a mode choice; B5 for measure-only ----
+const MODE=(m,soon)=>'<div class="mode"><div class="'+(m==='set'?'on':'')+'"><span class="ms">my_location</span>Set work zero</div><div class="'+(m==='meas'?'on':'')+(soon?' soon':'')+'"><span class="ms">square_foot</span>Measure only'+(soon?'<i>soon</i>':'')+'</div></div>';
+const B4BODY=(mode,soon,run)=>'<div class="wizhdr" style="font-size:15px"><span class="ms">my_location</span>Move the probe into place<span class="ms x">close</span></div>'+steps(4,5)+
+  dro('Z',['48.215','61.880','4.850','0.000'])+SEG+stage(200,false).replace('mbtn r','mbtn r on')+
+  '<div class="hint">Jog the tip <b>~5 mm above the stock</b>, about <b>5 mm in from the front-left corner</b>.</div>'+SUM+MODE(mode,soon)+
+  '<div class="grow"></div><div class="btnrow" style="margin-bottom:14px"><div class="btn ghost">Back</div><div class="btn"><span class="ms">play_arrow</span>'+run+'</div></div>';
+const B4 = phone('B4 · position, mode: Set work zero',
+  B4BODY('set',true,'Run probe'),
+  'Set work zero = Makera\'s own routine (M480.x): it touches and writes the zero itself. Run asks "This sets the work origin" first. "Measure only" greyed with "soon" until it works.');
+const B4m = phone('B4 · position, mode: Measure only',
+  B4BODY('meas',false,'Measure'),
+  'Measure only = the app runs the same touches itself, without the lines that set the zero. Nothing changes until you choose on the next screen.');
+const B5m = phone('B5 · result: measure only (corner)',
+  B5HDR('Measured')+
+  okLine('<b>Measured. Your work zero hasn\'t changed.</b>')+
+  '<div class="sub2" style="margin-top:2px">From your current zero</div>'+
+  '<div class="res"><div><small>Corner X</small><b>12.346</b></div><div><small>Corner Y</small><b>−3.210</b></div><div><small>Top Z</small><b>−0.145</b></div></div>'+
+  '<div class="ck"><div class="ckh"><span class="ms" style="color:var(--primary)">my_location</span><div><b>Set as work zero?</b><small>Pick the axes, then Set. Leave it if you only wanted to measure.</small></div></div>'+
+  '<div class="axs"><span class="on"><span class="ms">check</span>X</span><span class="on"><span class="ms">check</span>Y</span><span><span class="ms">check_box_outline_blank</span>Z</span></div>'+
+  '<div class="btn sm"><span class="ms">my_location</span>Set X Y zero here</div></div>'+
+  '<div class="grow"></div><div class="btnrow" style="margin-bottom:14px"><div class="btn ghost">Probe again</div><div class="btn ghost">Done, don\'t set</div></div>',
+  'Values are the corner and top relative to your current zero (so 12.346 = the corner is 12.346 mm right of X0). Set = G10 L2 with the measured position, so Z can be left alone, e.g. keep Z0 on the spoilboard.');
+document.getElementById('rowB').innerHTML = B1+B2+B2b+B3+B3b+B3c+B3d+B4+B4m+B5+B5b+B5c+B5m;
+</script>
+</body></html>

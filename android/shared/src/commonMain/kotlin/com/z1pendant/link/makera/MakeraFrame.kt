@@ -14,13 +14,20 @@ object MakeraFrame {
     const val NORMAL_INFO = 0x90
     /** File download (Wi-Fi board): 0xB0 start "download <path>\n", 0xB1 md5, 0xB2 size, 0xB3 data, 0xB4 end, 0xB5 cancel/error. */
     const val DL_START = 0xB0; const val DL_MD5 = 0xB1; const val DL_SIZE = 0xB2
-    const val DL_DATA = 0xB3; const val DL_END = 0xB4; const val DL_CANCEL = 0xB5
+    const val DL_DATA = 0xB3; const val DL_END = 0xB4; const val DL_CANCEL = 0xB5; const val DL_RETRY = 0xB6
     /** "Other client is currently uploading/downloading" and similar refusals. */
     const val REFUSED = 0x91
     /** Longest frame: a download packet is 8192 data bytes + seq + type + CRC. */
     const val MAX_LEN = 8199
     /** Empty request → "path|md5" of the playing job file (the Wi-Fi board answers it; confirmed 2026-11-15). */
     const val JOB_FILE = 0xB7
+    /**
+     * The Wi-Fi board's file commands (`ls -s`, `mkdir`, `mv`, `rm`; confirmed 2026-11-16): 0x83 = a chunk of
+     * the listing, 0x84 = done ("ok", or "Load directory finished." after ls), 0x85 = failed (text says why).
+     */
+    const val FS_LIST = 0x83; const val FS_DONE = 0x84; const val FS_ERROR = 0x85
+    /** Upload uses the same frame types as download, driven by the board: B0 "upload <path>\n", B1 md5, B2 view, B3 data, B4 done. */
+    const val UL_START = 0xB0
 
     private val TABLE = IntArray(256) { i ->
         var c = i shl 8

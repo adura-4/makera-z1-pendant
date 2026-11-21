@@ -49,6 +49,19 @@ expect fun nowMs(): Long
 /** Local wall-clock time as HH:mm:ss, for console time stamps. */
 expect fun wallClockHms(): String
 
+/** Unix time, seconds (UTC). Sent to the Z1 before an upload so files get the right date. */
+expect fun epochSeconds(): Long
+
+/** This phone's offset from UTC at [epochSec], seconds (daylight saving included). */
+expect fun utcOffsetSeconds(epochSec: Long): Int
+
+/**
+ * The phone's own "open a file" picker (Android: the system document picker; iOS: the Files app picker).
+ * Call the returned function to show it; [onPicked] gets the file's name and bytes.
+ */
+@Composable
+expect fun rememberFilePicker(onPicked: (name: String, bytes: ByteArray) -> Unit): () -> Unit
+
 /** Platform log (Android: logcat). [level] is 'D', 'I' or 'W'. */
 expect fun platformLog(level: Char, tag: String, msg: String)
 

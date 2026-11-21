@@ -10,6 +10,7 @@ import com.z1pendant.hotkeys.HotkeyRunner
 import com.z1pendant.hotkeys.Trigger
 import com.z1pendant.jog.JogEngine
 import com.z1pendant.link.ConnState
+import com.z1pendant.link.MachineName
 import com.z1pendant.link.MachineStatus
 import com.z1pendant.link.MachineTarget
 import com.z1pendant.link.makera.Discovery
@@ -25,7 +26,9 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -54,6 +57,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     val discovered = MutableStateFlow<List<Pair<MachineTarget, Boolean>>>(emptyList())
     val scanning = MutableStateFlow(false)
     val snack = MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /** Files on the Z1's SD card (the Files screen). */
+    val files = com.z1pendant.files.FilesController(link, viewModelScope, prefs) { snack.tryEmit(it) }
     val console = MutableStateFlow<List<String>>(emptyList())
     val confirmFor = MutableStateFlow<Hotkey?>(null)
 
@@ -70,6 +75,18 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     /** Running = the machine reports RPM, or we just started it and it's spinning up. */
     fun spindleRunning(st: MachineStatus?): Boolean =
         (st?.spindleRpm ?: 0.0) > 0.5 || (spindleStartAt > 0 && nowMs() - spindleStartAt < SPINDLE_PENDING_MS)
+
+    /** Why a job can't be set up now (the Run screen only opens on an Idle machine), or null. */
+    fun runBlock(): String? {
+        val st = link.status.value
+        return when {
+            link.conn.value != ConnState.Connected -> "Run needs the Z1 connected."
+            st == null -> "No status from the Z1 yet."
+            st.job != null -> "A job is running."
+            !st.isIdle -> "Run needs the Z1 Idle (it's ${st.state})."
+            else -> null
+        }
+    }
 
     /** Why the spindle can't start at [rpm] now, or null. Checked before anything is sent. */
     fun spindleBlock(rpm: Int?): String? {
@@ -153,6 +170,13 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     /** A job we were watching when the link dropped: if it's gone when we're back, it ended meanwhile. */
     private var watchedBeforeDrop = false
 
+    private val jobPace = JobPace()
+    /**
+     * A new job was seen (not a reconnect to one already watched): MainScreen opens the drawer fully
+     * expanded on the job, once, and clears this. The user can drag it down; it stays down.
+     */
+    val jobStarted = MutableStateFlow(false)
+
     /** Link lost: forget the job (it may end, or another may start, before we're back). */
     private fun forgetJob() {
         if (job.value != null) watchedBeforeDrop = true
@@ -167,15 +191,21 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             // Over only once |P: has been gone for 3 statuses in a row (not one dropped reply),
             // whether we saw it end or it ended while we were away.
             if ((job.value != null || watchedBeforeDrop) && st != null && ++noJobCount >= 3) {
-                job.value = null; watchedBeforeDrop = false; jobEnded(st)
+                job.value = null; watchedBeforeDrop = false; jobStarted.value = false; jobEnded(st)
             }
             return
         }
         noJobCount = 0
+        val rejoined = watchedBeforeDrop
         watchedBeforeDrop = false                                  // back into a running job: leave its overrides alone
-        if (job.value == null) link.queryJobFile()                 // a job started (or we joined one): which file?
+        if (job.value == null) {                                   // a job started (or we joined one): which file?
+            link.queryJobFile(); jobPace.reset()
+            if (!rejoined) jobStarted.value = true                 // the drawer opens expanded once (MainScreen)
+        }
         val f = link.jobFile.value
-        job.value = JobView(p, f, jobTools.value?.lines?.takeIf { f != null && f.md5 == toolsFor })
+        val tools = jobTools.value?.takeIf { f != null && f.md5 == toolsFor }
+        tools?.time?.let { jobPace.update(p.line, p.elapsedS, it, st?.feedOverride) }
+        job.value = JobView(p, f, tools?.lines, tools?.time, jobPace.value, st?.feedOverride)
         // Once per file (md5): read its tools.
         if (f != null && f.md5 != toolsFor) {
             toolsFor = f.md5
@@ -199,6 +229,28 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         val fro = st.feedOverride; val sro = st.spindleOverride
         if (fro != null && kotlin.math.abs(fro - 100) > 0.05) { log("▶ job ended: feed override back to 100 %"); d.feedOverride(100).forEach { link.sendLine(it) } }
         if (sro != null && kotlin.math.abs(sro - 100) > 0.05) { log("▶ job ended: spindle override back to 100 %"); d.spindleOverride(100.0).forEach { link.sendLine(it) } }
+        // The job's leveling grid must not outlive it: the firmware applies a grid to every move
+        // (jogs too) until it's cleared. Cancel job clears it itself (after the alarm is cleared).
+        if (st.mesh != null && !stopping && !st.isAlarm) { log("▶ job ended: leveling grid cleared (M370)"); link.sendLine("M370") }
+    }
+
+    /**
+     * A leveling grid was found active on connect, with no job running: its largest correction (mm).
+     * The popup asks whether to clear it. Kept → not asked again until the next connect.
+     */
+    val meshPrompt = MutableStateFlow<Double?>(null)
+    fun keepMesh() { meshPrompt.value = null; log("· leveling grid kept") }
+    fun clearMesh() { meshPrompt.value = null; log("▶ leveling grid cleared (M370)"); link.sendLine("M370") }
+
+    /** After connecting: three statuses in (so a job's |P: is reliably seen), Idle, no job, a grid → ask. */
+    private suspend fun checkMeshOnConnect() {
+        val seen = mutableListOf<MachineStatus>()
+        kotlinx.coroutines.withTimeoutOrNull(5_000) {
+            link.status.first { st -> if (st != null && seen.lastOrNull()?.atMs != st.atMs) seen += st; seen.size >= 3 }
+        }
+        val st = seen.lastOrNull() ?: return
+        if (seen.any { it.job != null } || !st.isIdle) return
+        st.mesh?.let { meshPrompt.value = it; log("· leveling grid active on connect (largest correction ${com.z1pendant.util.Fmt.fixed(it, 3)} mm)") }
     }
 
     /** Stop box → M5. */
@@ -236,6 +288,10 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     val tickMs = MutableStateFlow(prefs.getLong("tickMs", 40))
     val degPerClick = MutableStateFlow(prefs.getFloat("degPerClick", 12f))
     val softClamp = MutableStateFlow(prefs.getBoolean("softClamp", true))
+    /** The readout's zero buttons need a 1.5 s hold instead of a tap (off by default). */
+    val zeroHold = MutableStateFlow(prefs.getBoolean("zeroHold", false))
+    /** Hide the machine's serial number wherever its name is shown (screen recordings). */
+    val hideSerial = MutableStateFlow(prefs.getBoolean("hideSerial", false))
 
     // hotkeys
     private val hotkeyFile = platform.hotkeyFile
@@ -257,6 +313,17 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     }
     val runner = HotkeyRunner(link, viewModelScope, host) { id -> hotkeys.value.firstOrNull { it.id == id } }
 
+    /** 3D probing: setup, probe in / calibrated this session, and runs (Makera's routine or Measure only). */
+    val probe = com.z1pendant.probe.ProbeController(link, viewModelScope, prefs,
+        onSend = { ownMotion.sent(nowMs()) },
+        setJogEnabled = { on -> jog.enabled = on; if (!on) jog.cancelPending() })
+
+    /** Running a job: origin, laser probe checks, assist modes, start (the Run flow). */
+    val run = com.z1pendant.run.RunController(link, viewModelScope, prefs, probe,
+        onSend = { ownMotion.sent(nowMs()) }, log = { log(it) })
+    /** Files is open to pick a job to run (the Run tile). */
+    val runPick = MutableStateFlow(false)
+
     init {
         haptics.strength = hapticStrength.value
         jog.axis = axis.value
@@ -264,7 +331,21 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         applyJogConfig()
         jog.start()
         viewModelScope.launch {
-            link.messages.collect { m -> log("← $m") }
+            link.messages.collect { m ->
+                log("← $m")
+                if (m.trimStart().startsWith("ALARM", ignoreCase = true)) lastAlarm.value = m.trim().substringAfter(':').trim().ifEmpty { null }
+            }
+        }
+        // The alarm sheet opens by itself when the machine goes into Alarm (or is in it when the app
+        // connects) while the main screen is up, except after our own Stop, which clears it anyway.
+        viewModelScope.launch {
+            var was = false
+            link.status.collect { st ->
+                val alarm = st?.isAlarm == true
+                if (alarm && !was && !stopping && onMainScreen) alarmSheet.value = true
+                if (!alarm && was) { lastAlarm.value = null; alarmSheet.value = false }
+                was = alarm
+            }
         }
         viewModelScope.launch { link.sent.collect { m -> log("→ $m") } }
         // Own motion is tracked here, once per status, rather than while the screen redraws.
@@ -277,11 +358,16 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         }
         viewModelScope.launch { runner.lastError.collect { it?.let { e -> snack.tryEmit(e); runner.lastError.value = null } } }
         viewModelScope.launch {
+            var prev: ConnState? = null
             link.conn.collectLatest { c ->
                 log("· link $c")
+                // A stall that clears is still the same connection: keep the job, and don't ask about
+                // the mesh again (that's for a fresh connection).
+                val resumed = c == ConnState.Connected && prev == ConnState.Stalled
+                prev = c
                 if (c != ConnState.Connected) jog.cancelPending()
-                // A stall that clears is still the same connection: keep the job.
-                if (c != ConnState.Connected && c != ConnState.Stalled) forgetJob()
+                if (c != ConnState.Connected && c != ConnState.Stalled) { forgetJob(); meshPrompt.value = null }
+                if (c == ConnState.Connected) { if (!resumed) launch { checkMeshOnConnect() }; lookUpName() }
             }
         }
         target.value?.let { if (prefs.getBoolean("autoConnect", true)) link.connect(it) }
@@ -302,6 +388,29 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             putBoolean("autoConnect", true) }
         target.value = t
         link.connect(t)
+    }
+
+    /**
+     * Reached by address: ask the machine its name (see MachineName) so the header shows it, as after
+     * a scan. Kept with the target, so the next start shows it straight away. No answer: the address
+     * stays as the name.
+     */
+    private suspend fun lookUpName() {
+        val t = target.value ?: return
+        if (!MachineName.needsLookup(t)) return
+        val name = kotlinx.coroutines.withTimeoutOrNull(4000) {
+            kotlinx.coroutines.coroutineScope {
+                val answer = async(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    link.messages.first { MachineName.parse(it) != null }
+                }
+                link.sendLine(MachineName.COMMAND)
+                MachineName.parse(answer.await())
+            }
+        } ?: return
+        if (target.value?.host != t.host) return
+        log("· machine name $name")
+        prefs.edit { putString("name", name) }
+        target.value = t.copy(name = name)
     }
 
     fun disconnect() {
@@ -503,7 +612,46 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     fun reset() { haptics.press(); runner.cancel(); jog.cancelPending(); link.reset() }
     /** The drawer's Reset asks first (ResetDialog): it's an emergency stop, not a pause. */
     val resetAsk = MutableStateFlow(false)
-    fun confirmReset() { resetAsk.value = false; reset() }
+    fun confirmReset() { resetAsk.value = false; stopAndClear() }
+
+    /** The Z1's last "ALARM: …" line (kept until it leaves Alarm). */
+    val lastAlarm = MutableStateFlow<String?>(null)
+    /** The alarm sheet is up (tap the Alarm status, or an alarm on the main screen). */
+    val alarmSheet = MutableStateFlow(false)
+    @Volatile private var stopping = false
+
+    private fun unlockNow() = link.dialect.unlock().forEach { link.sendLine(it) }
+
+    /**
+     * Stop, as Makera Studio's Stop does it (captured 2026-11-17): the halt byte, which ends a job
+     * ("Aborted by halt" → Alarm), then `$X` once the Z1 is in Alarm, so it's ready to move again
+     * and the job is gone. The drawer then closes back to the main screen.
+     * Cancelling a job also clears the leveling grid (`M370`): the firmware applies a grid to every
+     * move until it's cleared, jogs included, so the job's mesh must not outlive the job.
+     */
+    fun stopAndClear() {
+        stopping = true
+        val hadJob = link.status.value?.job != null
+        reset()
+        viewModelScope.launch {
+            kotlinx.coroutines.withTimeoutOrNull(2_000) { link.status.first { it?.isAlarm == true } }
+            kotlinx.coroutines.delay(300)
+            unlockNow()
+            if (hadJob) { log("▶ job cancelled: leveling grid cleared (M370)"); link.sendLine("M370") }
+            kotlinx.coroutines.delay(1_500)
+            stopping = false
+            controlsOpen.value = false
+        }
+    }
+
+    /**
+     * Clear alarm. If the Z1 still has the job open (an e-stop halts it but the file stays open), end
+     * it the way Stop does; otherwise just `$X`.
+     */
+    fun clearAlarm() {
+        alarmSheet.value = false
+        if (link.status.value?.job != null) stopAndClear() else { haptics.press(); unlockNow() }
+    }
 
     private fun builtin(b: BuiltIn): List<String>? {
         val d = link.dialect
@@ -532,6 +680,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             BuiltIn.LIGHT_TOGGLE -> toggleOutput("light") { d.light(it) }
             BuiltIn.VACUUM_TOGGLE -> toggleOutput("vacuum") { d.vacuum(it) }
             BuiltIn.SPINDLE_TOGGLE -> spindleToggle()
+            BuiltIn.RUN_JOB -> { runPick.value = true; null }
         }
     }
 
@@ -544,9 +693,19 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     }
 
     // ---- hotkeys ------------------------------------------------------------------------------
-    private fun loadHotkeys(): List<Hotkey> = shownFirst(try {
+    private fun loadHotkeys(): List<Hotkey> = shownFirst(addRunTile(try {
         if (hotkeyFile.exists()) migrate(HotkeyJson.import(hotkeyFile.readText())) else Hotkey.defaults()
-    } catch (_: Exception) { Hotkey.defaults() })
+    } catch (_: Exception) { Hotkey.defaults() }))
+
+    /** The Run tile arrived after people had their own hotkeys: add it once, first in the grid. */
+    private fun addRunTile(l: List<Hotkey>): List<Hotkey> {
+        if (prefs.getBoolean("runTileAdded", false)) return l
+        prefs.edit { putBoolean("runTileAdded", true) }
+        if (l.any { h -> h.steps.any { (it as? com.z1pendant.hotkeys.Step.Builtin)?.action == BuiltIn.RUN_JOB } }) return l
+        val out = listOf(Hotkey.defaults().first()) + l
+        if (hotkeyFile.exists()) hotkeyFile.writeText(HotkeyJson.export(out))
+        return out
+    }
 
     /** Grid order rule: hotkeys shown in the grid always come first, hidden (button-only) ones after. */
     private fun shownFirst(l: List<Hotkey>) = l.filter { it.showOnMain } + l.filterNot { it.showOnMain }
@@ -665,6 +824,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     fun setKeepScreenOn(v: Boolean) { keepScreenOn.value = v; prefs.edit { putBoolean("keepScreenOn", v) } }
     fun setTickMs(v: Long) { tickMs.value = v; prefs.edit { putLong("tickMs", v) }; applyJogConfig() }
     fun setDegPerClick(v: Float) { degPerClick.value = v; prefs.edit { putFloat("degPerClick", v) } }
+    fun setHideSerial(v: Boolean) { hideSerial.value = v; prefs.edit { putBoolean("hideSerial", v) } }
+    fun setZeroHold(v: Boolean) { zeroHold.value = v; prefs.edit { putBoolean("zeroHold", v) } }
     fun setSoftClamp(v: Boolean) { softClamp.value = v; prefs.edit { putBoolean("softClamp", v) }; applyJogConfig() }
 
     // ---- physical buttons -------------------------------------------------------------------------
@@ -794,7 +955,12 @@ fun isProbeTool(t: Int) = t == 0 || t == 9999 || t >= 999_990
 
 /** What the drawer shows about a running job. */
 data class JobView(val progress: com.z1pendant.link.JobProgress, val file: com.z1pendant.link.JobFile?,
-                   val totalLines: Int? = null) {
+                   val totalLines: Int? = null,
+                   /** The file's estimated time per line, once it's read (JobTime.kt). */
+                   val time: JobTime? = null,
+                   /** Real ÷ estimated over the last few minutes (JobPace), 1 until there's enough. */
+                   val pace: Double = 1.0,
+                   val feedOverride: Double? = null) {
     /**
      * Percent done. With the file's line count: the line being cut ÷ total lines. The firmware's own
      * percent is of the file *read*, and it reads ahead (planner queue + the Wi-Fi board's buffer), so
@@ -803,8 +969,13 @@ data class JobView(val progress: com.z1pendant.link.JobProgress, val file: com.z
     val percent: Int get() = totalLines?.takeIf { it > 0 && progress.line > 0 }
         ?.let { (progress.line * 100 / it).toInt().coerceIn(0, 99) } ?: progress.percent
 
-    /** Time left from the pace so far: elapsed × (left ÷ done), by lines when known, else by the firmware's %. */
+    /**
+     * Time left. With the file read: the estimated time of the lines still to run (feed moves at the
+     * current feed override) × the pace measured so far. Before that, a rough guess from the pace:
+     * elapsed × (left ÷ done), by lines when known, else by the firmware's %.
+     */
     val leftS: Long? get() {
+        time?.let { jt -> return (jt.leftAfter(progress.line, feedOverride) * pace).toLong() }
         val t = totalLines
         if (t != null && t > 0 && progress.line > 0) return progress.elapsedS * (t - progress.line).coerceAtLeast(0) / progress.line
         return progress.percent.takeIf { it in 1..99 }?.let { progress.elapsedS * (100 - it) / it }

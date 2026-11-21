@@ -25,7 +25,7 @@ import com.z1pendant.AppViewModel
 import com.z1pendant.util.Fmt
 
 /**
- * Typed move for one axis, opened from its readout row (move button, or a 1.5 s hold).
+ * Typed move for one axis, opened from its readout row's move button.
  * "Go to" = work position, "Move by" = relative. Shows the exact line(s) it will send; Go sends
  * them (rapid, G0). ± flips the sign. A plain panel rather than AlertDialog, whose fixed title /
  * body / button spacing was too loose.

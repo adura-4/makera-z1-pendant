@@ -116,7 +116,7 @@ class HotkeyRunner(
         val instant = setOf(BuiltIn.HOLD, BuiltIn.RESUME, BuiltIn.RESET, BuiltIn.JOG_PLUS, BuiltIn.JOG_MINUS,
             BuiltIn.NEXT_AXIS, BuiltIn.AXIS_X, BuiltIn.AXIS_Y, BuiltIn.AXIS_Z, BuiltIn.AXIS_A,
             BuiltIn.STEP_UP, BuiltIn.STEP_DOWN, BuiltIn.FEED_UP, BuiltIn.FEED_DOWN, BuiltIn.FEED_100,
-            BuiltIn.LIGHT_TOGGLE, BuiltIn.VACUUM_TOGGLE, BuiltIn.SPINDLE_TOGGLE)
+            BuiltIn.LIGHT_TOGGLE, BuiltIn.VACUUM_TOGGLE, BuiltIn.SPINDLE_TOGGLE, BuiltIn.RUN_JOB)
         val localOnly = setOf(BuiltIn.NEXT_AXIS, BuiltIn.AXIS_X, BuiltIn.AXIS_Y, BuiltIn.AXIS_Z, BuiltIn.AXIS_A,
             BuiltIn.STEP_UP, BuiltIn.STEP_DOWN)
     }

@@ -1,5 +1,6 @@
 package com.z1pendant.ui
 
+import com.z1pendant.util.Serial
 import androidx.compose.ui.layout.onSizeChanged
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -10,6 +11,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.drawBehind
 import kotlinx.coroutines.launch
 import androidx.compose.ui.input.pointer.pointerInput
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -66,14 +69,15 @@ val LocalLandscape = androidx.compose.runtime.staticCompositionLocalOf { false }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, onEdit: (Hotkey?) -> Unit,
-               scroll: androidx.compose.foundation.ScrollState = rememberScrollState()) {
+fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, onFiles: () -> Unit = {}, onEdit: (Hotkey?) -> Unit,
+               scroll: androidx.compose.foundation.ScrollState = rememberScrollState(), onProbe: () -> Unit = {}) {
     val conn by vm.link.conn.collectAsState()
     val st by vm.link.status.collectAsState()
     val job by vm.job.collectAsState()
     val jobTools by vm.jobTools.collectAsState()
     val lat by vm.link.latencyMs.collectAsState()
     val target by vm.target.collectAsState()
+    val hideSerial by vm.hideSerial.collectAsState()
     val axis by vm.axis.collectAsState()
     val stepIdx by vm.stepIndex.collectAsState()
     val hotkeys by vm.hotkeys.collectAsState()
@@ -87,8 +91,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
     var moveFor by remember { mutableStateOf<Char?>(null) }
     val wide = LocalWide.current
     val padMode by vm.jogPad.collectAsState()
-    val rowScope = rememberCoroutineScope()
     val zeroUndo by vm.zeroUndo.collectAsState()
+    val zeroHold by vm.zeroHold.collectAsState()
     moveFor?.let { a -> MoveDialog(vm, a) { moveFor = null } }
 
     Column(
@@ -99,7 +103,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         // ---- header ----
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).clickable(onClick = onSettings)) {
-                Text(target?.name ?: "No machine", fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(target?.name?.let { Serial.shown(it, hideSerial) } ?: "No machine", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     when (conn) {
                         ConnState.Connected -> "${target?.host} · ${lat?.let { "$it ms" } ?: "—"}"
@@ -107,7 +111,7 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                         ConnState.Stalled -> "not answering · stop at the machine if needed"
                         ConnState.Lost -> "link lost · reconnecting…"
                         ConnState.Disconnected -> "tap to connect"
-                    }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    }, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
             // While a job plays: "Run 42%" (also in the job's Idle moments), "Hold 42%", "Tool change".
@@ -127,7 +131,11 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 else -> stateColor(s0, conn)
             }
             Text(pill, color = if (toolWait) MaterialTheme.colorScheme.onPrimary else Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                maxLines = 1, modifier = Modifier.clip(RoundedCornerShape(50)).background(pillColor).padding(horizontal = 14.dp, vertical = 6.dp))
+                maxLines = 1, modifier = Modifier.clip(RoundedCornerShape(50)).background(pillColor)
+                    // Alarm: tap for what happened and Clear alarm.
+                    .then(if (connected && s0.equals("Alarm", true)) Modifier.clickable { vm.alarmSheet.value = true } else Modifier)
+                    .padding(horizontal = 14.dp, vertical = 6.dp))
+            IconButton(onClick = onFiles) { Icon(Icons.Filled.Folder, "Files") }
             IconButton(onClick = onConsole) { Icon(Icons.Filled.Terminal, "Console") }
             IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Settings") }
         }
@@ -157,23 +165,22 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         val stepList = vm.steps
         val si = stepIdx.coerceIn(0, stepList.lastIndex)
 
-        // Readout: tap a row = select the axis; hold 1.5 s or "move" = Move box; zero / undo.
+        // Readout: tap a row = select the axis; "move" = Move box; zero / undo.
         val dro: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(vertical = 4.dp)) {
             vm.axes.forEachIndexed { i, a ->
                 val sel = a == axis && !padMode           // the pad's buttons name their own axis
-                val hold = remember { androidx.compose.animation.core.Animatable(0f) }
+                val zeroProgress = remember { androidx.compose.animation.core.Animatable(0f) }
                 val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
                 Row(
-                    // Tap = select the axis. Hold 1.5 s (the row fills while you hold) = Move box.
+                    // Tap = select the axis (the move / zero buttons keep their own taps).
                     Modifier.fillMaxWidth()
-                        .tapOrHold(a, HOLD_MS, hold, rowScope,
-                            onTap = { vm.selectAxis(a); vm.haptics.press() },
-                            onHold = { vm.selectAxis(a); vm.haptics.majorTick(); moveFor = a })
+                        .pointerInput(a) { detectTapGestures { vm.selectAxis(a); vm.haptics.press() } }
                         .background(if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
                         .drawBehind {
-                            // shown after a short delay so ordinary taps don't flash it
-                            val p = ((hold.value - 0.1f) / 0.9f).coerceIn(0f, 1f)
+                            // Hold-to-zero: the row fills while the zero button is held, shown after a
+                            // short delay so ordinary taps don't flash it.
+                            val p = ((zeroProgress.value - 0.1f) / 0.9f).coerceIn(0f, 1f)
                             if (p > 0f) drawRect(fill, size = androidx.compose.ui.geometry.Size(size.width * p, size.height))
                         }
                         .padding(horizontal = 10.dp, vertical = 1.dp),
@@ -193,8 +200,14 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                     // "zero" sets this axis to 0; pressed again while it still reads 0 (nothing moved)
                     // it puts the previous value back, like a DRO's zero/recall. Label shows which.
                     val undo = zeroUndo.containsKey(a) && vm.canRestoreZero(a, st)
-                    PendantOutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = connected && st?.isIdle == true,
-                        contentPadding = PaddingValues(horizontal = if (wide) 16.dp else 10.dp, vertical = 0.dp), modifier = Modifier.height(if (wide) 46.dp else 34.dp).widthIn(min = if (wide) 88.dp else 64.dp)) {
+                    val zeroOk = connected && st?.isIdle == true
+                    val zeroSize = Modifier.height(if (wide) 46.dp else 34.dp).widthIn(min = if (wide) 88.dp else 64.dp)
+                    if (zeroHold) {
+                        // Settings → "Hold zero buttons 1.5 s": a tap can't zero by accident.
+                        HoldZeroButton(if (undo) "undo" else "zero", zeroOk, wide, zeroProgress,
+                            onHold = { vm.haptics.majorTick(); vm.zero(a.toString()) }, onShort = { vm.haptics.press() }, modifier = zeroSize)
+                    } else PendantOutlinedButton(onClick = { vm.haptics.press(); vm.zero(a.toString()) }, enabled = zeroOk,
+                        contentPadding = PaddingValues(horizontal = if (wide) 16.dp else 10.dp, vertical = 0.dp), modifier = zeroSize) {
                         Text(if (undo) "undo" else "zero", fontSize = if (wide) 17.sp else 13.sp)
                     }
                 }
@@ -213,8 +226,11 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                 onClick = { vm.wheelClicks(it) },
                 modifier = Modifier.size(size).align(Alignment.Center),
             ) else JogPad(vm, step = stepList[si], enabled = connected && running == null,
-                modifier = Modifier.align(Alignment.Center))
+                // Below the mode and probe buttons in the top corners: the pad is as wide as the
+                // stage, so its +A tile ran under the probe button when the stage got short (2026-11-19).
+                modifier = Modifier.align(Alignment.Center).padding(top = 52.dp))
             ModeButton(padMode, Modifier.align(Alignment.TopStart)) { vm.setJogPad(!padMode) }
+            ProbeButton(Modifier.align(Alignment.TopEnd)) { vm.haptics.press(); onProbe() }
         }
         // Hotkeys: Edit (drag to rearrange) turns into Save; + adds one. Hold a tile 2 s to edit it.
         val hotkeyActions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
@@ -262,7 +278,9 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
                         .padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         FeedOverride(st?.feedOverride, connected) { vm.setFeedOverride(it) }
                         SpindleOverride(vm.spindleSlide(st), onSetPct = vm::setSpindlePercent, onReset = vm::resetSpindleOverride)
-                        StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, height = 56.dp)
+                        if (connected && st?.isAlarm == true) AlarmStrip(vm, st)
+                        StopButtons(st?.state, connected, onHold = vm::hold, onResume = vm::resume, onReset = { vm.resetAsk.value = true }, height = 56.dp,
+                            jobActive = job != null)
                     }
                 }
                 Column(Modifier.weight(0.52f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -281,6 +299,12 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         if (expanded) placedDial[0] = 0
         var jobDetails by remember { mutableStateOf(false) }
         if (job == null) jobDetails = false
+        // A job just started: the drawer opens fully expanded (the job is what matters now); the
+        // user can drag it down (Jimmy, 2026-11-18).
+        val jobStarted by vm.jobStarted.collectAsState()
+        LaunchedEffect(jobStarted, job != null) {
+            if (jobStarted && job != null) { jobDetails = true; vm.controlsOpen.value = true; vm.jobStarted.value = false }
+        }
         if (!jobDetails) Column(Modifier.weight(1f).onSizeChanged { viewH = it.height }.verticalScroll(scroll)) {
         Column(Modifier.onSizeChanged { otherH = it.height - placedDial[0] }, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         dro()
@@ -353,7 +377,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             jobActive = job != null, details = jobDetails,
             onDetails = { d -> if (d != jobDetails) { jobDetails = d; if (d) vm.controlsOpen.value = true; vm.haptics.press() } },
             jobLine = { job?.let { j -> JobLine(j) { jobDetails = true; vm.haptics.press() } } },
-            jobPanel = { job?.let { j -> JobDetails(j, st, jobTools) { jobDetails = false; vm.haptics.press() } } },
+            jobPanel = { job?.let { j -> JobDetails(j, st, jobTools, onMesh = { vm.run.meshShow.value = true }) { jobDetails = false; vm.haptics.press() } } },
+            alarm = { if (connected && st?.isAlarm == true) AlarmStrip(vm, st) },
             modifier = if (jobDetails) Modifier.weight(1f) else Modifier)
         }
     }
@@ -367,6 +392,8 @@ private fun ControlsDrawer(
     spindle: @Composable () -> Unit = {},
     jobActive: Boolean = false, details: Boolean = false, onDetails: (Boolean) -> Unit = {},
     jobLine: @Composable () -> Unit = {}, jobPanel: @Composable () -> Unit = {},
+    /** Above the stop buttons: the alarm strip while in Alarm. */
+    alarm: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val swipeDp = 24.dp
@@ -397,7 +424,7 @@ private fun ControlsDrawer(
             if (!open) {
                 Text("Feed ${feed?.toInt() ?: 100}%", fontSize = 12.sp, fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp))
-                Text("Hold · Resume · Reset", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Text(if (jobActive) "Hold · Resume · Cancel" else "Hold · Resume · Stop", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp))
             }
         }
@@ -413,62 +440,81 @@ private fun ControlsDrawer(
                 } else if (jobActive) jobLine()
                 FeedOverride(feed, connected, onFeed)
                 spindle()
+                alarm()
                 // Muted while idle; the relevant ones light up (see StopButtons).
-                StopButtons(state, connected, onHold, onResume, onReset)
+                StopButtons(state, connected, onHold, onResume, onReset, jobActive = jobActive)
             }
         }
     }
 }
 
-/** How long to hold a readout row to open its Move box. */
+/** How long to hold a readout zero button (Settings → hold to zero). */
 private const val HOLD_MS = 1500L
 
 /**
- * Tap (released within 500 ms) = [onTap]; held still for [ms] = [onHold]. [progress] runs 0→1
- * while holding (for a fill / ring). A hold let go early, or a finger that slides off (a scroll),
- * does nothing. Child buttons keep their own taps (they consume them first).
+ * The readout's zero button with "hold to zero" on: shaped like the outlined buttons, it fires
+ * after [HOLD_MS] held; [progress] runs 0→1 meanwhile (its readout row draws the fill). A shorter
+ * press does nothing but say "hold" for a moment. It takes the whole touch, so the row under it
+ * doesn't also see a tap.
  */
-private fun Modifier.tapOrHold(
-    key: Any, ms: Long, progress: androidx.compose.animation.core.Animatable<Float, *>,
-    scope: kotlinx.coroutines.CoroutineScope, onTap: () -> Unit, onHold: () -> Unit,
-): Modifier = pointerInput(key) {
-    val slop = viewConfiguration.touchSlop
-    awaitEachGesture {
-        val down = awaitFirstDown()
-        val ring = scope.launch {
-            progress.snapTo(0f)
-            progress.animateTo(1f, androidx.compose.animation.core.tween(ms.toInt(), easing = androidx.compose.animation.core.LinearEasing))
-        }
-        // "up" = released, "moved" = slid off / scrolling, null = held the full time
-        var upAt = 0L
-        val outcome: String? = withTimeoutOrNull(ms) {
-            var r = ""
-            while (r.isEmpty()) {
-                val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
-                r = when {
-                    c == null -> "moved"
-                    !c.pressed -> { upAt = c.uptimeMillis; "up" }
-                    (c.position - down.position).getDistance() > slop -> "moved"
-                    else -> ""
+@Composable
+private fun HoldZeroButton(label: String, enabled: Boolean, wide: Boolean,
+                           progress: androidx.compose.animation.core.Animatable<Float, *>,
+                           onHold: () -> Unit, onShort: () -> Unit, modifier: Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    var hint by remember { mutableStateOf(false) }
+    val en by rememberUpdatedState(enabled)
+    val hold by rememberUpdatedState(onHold)
+    val short by rememberUpdatedState(onShort)
+    val shape = RoundedCornerShape(50)
+    Box(
+        modifier.clip(shape)
+            .border(1.dp, if (enabled) cs.outline else cs.onSurface.copy(alpha = 0.12f), shape)
+            .pointerInput(Unit) {
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    if (!en) {
+                        while (true) { val ev = awaitPointerEvent(); ev.changes.forEach { it.consume() }; if (ev.changes.none { it.pressed }) break }
+                        return@awaitEachGesture
+                    }
+                    val ring = scope.launch {
+                        progress.snapTo(0f)
+                        progress.animateTo(1f, androidx.compose.animation.core.tween(HOLD_MS.toInt(), easing = androidx.compose.animation.core.LinearEasing))
+                    }
+                    // "up" = let go early, "moved" = slid off, null = held the full time
+                    val outcome: String? = withTimeoutOrNull(HOLD_MS) {
+                        var r = ""
+                        while (r.isEmpty()) {
+                            val ev = awaitPointerEvent()
+                            ev.changes.forEach { it.consume() }
+                            val c = ev.changes.firstOrNull { it.id == down.id }
+                            r = when {
+                                c == null || !c.pressed -> "up"
+                                (c.position - down.position).getDistance() > slop * 3 -> "moved"
+                                else -> ""
+                            }
+                        }
+                        r
+                    }
+                    ring.cancel()
+                    scope.launch { progress.snapTo(0f) }
+                    when (outcome) {
+                        null -> {
+                            hold()
+                            while (true) { val ev = awaitPointerEvent(); ev.changes.forEach { it.consume() }; if (ev.changes.none { it.pressed }) break }
+                        }
+                        "up" -> { short(); scope.launch { hint = true; kotlinx.coroutines.delay(1200); hint = false } }
+                    }
                 }
-            }
-            r
-        }
-        ring.cancel()
-        scope.launch { progress.snapTo(0f) }
-        when (outcome) {
-            // Event times (same clock as down.uptimeMillis on every platform).
-            "up" -> if (upAt - down.uptimeMillis < 500) onTap()
-            null -> {
-                onHold()
-                // swallow the rest of this touch so lifting the finger isn't also a tap
-                while (true) {
-                    val ev = awaitPointerEvent()
-                    ev.changes.forEach { it.consume() }
-                    if (ev.changes.none { it.pressed }) break
-                }
-            }
-        }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(if (hint) "hold" else label, fontSize = if (wide) 17.sp else 13.sp,
+            color = if (enabled) cs.primary else cs.onSurface.copy(alpha = 0.38f),
+            modifier = Modifier.padding(horizontal = if (wide) 16.dp else 10.dp))
     }
 }
 

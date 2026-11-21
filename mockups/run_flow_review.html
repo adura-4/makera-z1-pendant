@@ -1,0 +1,556 @@
+<title>Pendant Run Flow</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a review board. Page shell follows the viewer's theme; the phones are the app's own fixed dark palette. */
+:root {
+  --page: #EEF1F5; --ink: #18202B; --muted: #5A6675; --rule: #D3D9E1; --panel: #FFFFFF; --accent: #0A7FB5;
+  --st-z1: #157F3B; --st-z1-bg: #DDF3E4; --st-sim: #0A6FA0; --st-sim-bg: #DCEFF8; --st-no: #8A5A00; --st-no-bg: #FBEFD3;
+  --frame: #0E1420;
+  /* the app (App.kt darkColorScheme + RunScreen.kt) */
+  --a-bg: #0B1120; --a-card: #172033; --a-tile: #1E293B; --a-pri: #38BDF8; --a-onpri: #00222F; --a-txt: #E2E8F0; --a-mut: #94A3B8;
+  --a-ok: #86EFAC; --a-okbg: #0F2E1C; --a-warn: #FDE68A; --a-warnbg: #3A2A0B; --a-bad: #F87171; --a-badbg: #3B1212;
+  --a-sheet: #111A2B; --a-map: #202326; --a-outline: #64748B; --a-green: #22C55E; --a-green-ink: #052E16;
+  --f-head: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --f-app: Roboto, "Segoe UI", system-ui, sans-serif;
+  --f-appmono: "Roboto Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #0F141B; --ink: #E3E8EF; --muted: #9AA6B5; --rule: #273140; --panel: #161D27; --accent: #5CC3EE;
+  --st-z1: #7EE2A0; --st-z1-bg: #12301E; --st-sim: #7CCBF0; --st-sim-bg: #0F2A3A; --st-no: #F3CF7A; --st-no-bg: #33270C;
+  --frame: #000000; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --page: #0F141B; --ink: #E3E8EF; --muted: #9AA6B5; --rule: #273140; --panel: #161D27; --accent: #5CC3EE;
+  --st-z1: #7EE2A0; --st-z1-bg: #12301E; --st-sim: #7CCBF0; --st-sim-bg: #0F2A3A; --st-no: #F3CF7A; --st-no-bg: #33270C;
+  --frame: #000000; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font: 14px/1.5 var(--f-body); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; }
+h1, h2 { font-family: var(--f-head); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 600; letter-spacing: .2px; }
+.lede { color: var(--muted); max-width: 70ch; margin: 6px 0 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.st { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px/1 var(--f-body); letter-spacing: .3px; text-transform: uppercase; padding: 5px 8px; border-radius: 4px; white-space: nowrap; }
+.st::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.st.z1 { color: var(--st-z1); background: var(--st-z1-bg); }
+.st.sim { color: var(--st-sim); background: var(--st-sim-bg); }
+.st.no { color: var(--st-no); background: var(--st-no-bg); }
+nav.steps { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--page); border-bottom: 1px solid var(--rule); margin-top: 22px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--page); }
+nav.steps ol { list-style: none; display: flex; gap: 4px; margin: 0; padding: 10px 0; overflow-x: auto; }
+nav.steps a { display: block; padding: 6px 12px; border-radius: 4px; color: var(--ink); text-decoration: none; font: 500 13px var(--f-body); white-space: nowrap; }
+nav.steps a:hover, nav.steps a:focus-visible { background: var(--panel); outline: 2px solid transparent; box-shadow: 0 0 0 1px var(--rule); }
+nav.steps a span { font-family: var(--f-mono); color: var(--accent); margin-right: 6px; }
+section { padding-top: 34px; scroll-margin-top: 56px; }
+section > header { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--rule); padding-bottom: 8px; }
+section > header .n { font-family: var(--f-mono); color: var(--accent); font-size: 15px; }
+section > header h2 { font-size: 22px; font-weight: 600; }
+section > p { color: var(--muted); max-width: 72ch; margin: 8px 0 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 30px 26px; margin-top: 18px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+figcaption { display: flex; flex-direction: column; gap: 6px; max-width: 372px; }
+figcaption .top { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+figcaption h3 { margin: 0; font: 600 15px/1.3 var(--f-body); }
+figcaption p { margin: 0; color: var(--muted); font-size: 13px; }
+figcaption code { font-family: var(--f-mono); font-size: 12px; color: var(--ink); }
+.open { margin-top: 40px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
+.open h2 { font-size: 20px; }
+.open ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
+.foot { color: var(--muted); font-size: 12.5px; margin-top: 18px; max-width: 80ch; }
+
+/* ---------- phone ---------- */
+.phone { width: 372px; max-width: 100%; min-height: 740px; border: 6px solid var(--frame); border-radius: 30px; background: var(--a-bg); color: var(--a-txt);
+  font: 400 11.5px/1.35 var(--f-app); position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 28px rgba(10,20,40,.18); }
+.sbar { height: 22px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font-size: 10.5px; color: var(--a-mut); flex: none; }
+.scr { flex: 1; display: flex; flex-direction: column; gap: 7px; padding: 4px 10px 10px; min-height: 0; }
+.mut { color: var(--a-mut); } .okc { color: var(--a-ok); } .warnc { color: var(--a-warn); } .badc { color: var(--a-bad); } .pric { color: var(--a-pri); }
+.s12 { font-size: 10.5px; } .s13 { font-size: 11.4px; } .s14 { font-size: 12.2px; } .s15 { font-size: 13px; }
+.b { font-weight: 500; }
+.title { display: flex; align-items: center; gap: 6px; }
+.title .x { width: 34px; height: 34px; display: grid; place-items: center; font-size: 18px; color: var(--a-txt); }
+.title .t { font-size: 15.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.tabs { display: flex; gap: 2px; height: 26px; flex: none; }
+.tabs span { flex: 1; display: grid; place-items: center; font-size: 10.5px; white-space: nowrap; background: var(--a-card); color: var(--a-mut); padding: 0 8px;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%, 8px 50%); }
+.tabs span:first-child { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); padding-left: 0; border-radius: 8px 0 0 8px; }
+.tabs span:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 8px 50%); padding-right: 0; border-radius: 0 8px 8px 0; }
+.tabs span.done { color: var(--a-pri); background: rgba(56,189,248,.22); }
+.tabs span.on { background: var(--a-pri); color: var(--a-onpri); font-weight: 500; }
+.chg { display: inline-block; font: 600 10.5px var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
+.map { position: relative; height: 148px; border-radius: 9px; background: var(--a-map); flex: none; }
+.map > svg { position: absolute; inset: 7px; width: calc(100% - 14px); height: calc(100% - 14px); }
+.leg { position: absolute; left: 7px; top: 7px; background: rgba(60,64,70,.8); border-radius: 5px; padding: 3px 6px; font-size: 8.7px; line-height: 1.45; }
+.leg i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+.leg .bar { width: 96px; height: 3px; background: #3A3F47; margin-top: 2px; border-radius: 2px; overflow: hidden; }
+.leg .bar b { display: block; height: 100%; background: var(--a-pri); }
+.body { flex: 1; display: flex; flex-direction: column; gap: 7px; min-height: 0; }
+.card { background: var(--a-card); border-radius: 9px; padding: 9px; display: flex; flex-direction: column; gap: 4px; }
+.card.sel { box-shadow: inset 0 0 0 1.4px var(--a-pri); }
+.row { display: flex; align-items: center; gap: 8px; }
+.row > .grow { flex: 1; min-width: 0; }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--a-mut); flex: none; margin: 0 6px 0 2px; position: relative; }
+.radio.on { border-color: var(--a-pri); }
+.radio.on::after { content: ""; position: absolute; inset: 2px; border-radius: 50%; background: var(--a-pri); }
+.sw { width: 36px; height: 21px; border-radius: 11px; border: 2px solid var(--a-outline); background: var(--a-tile); position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: var(--a-outline); left: 3px; top: 3px; }
+.sw.on { background: var(--a-pri); border-color: var(--a-pri); }
+.sw.on::after { width: 15px; height: 15px; left: 17px; top: 1px; background: var(--a-onpri); }
+.sw.dis { opacity: .38; }
+.fields { display: flex; gap: 7px; }
+.fld { flex: 1; min-width: 0; border: 1px solid var(--a-outline); border-radius: 4px; padding: 9px 9px 7px; position: relative; font: 13px var(--f-appmono); }
+.fld label { position: absolute; top: -7px; left: 7px; padding: 0 3px; background: var(--a-card); font: 9.5px var(--f-app); color: var(--a-mut); }
+.btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 20px; padding: 8px 16px; font-weight: 500; font-size: 12px; background: var(--a-pri); color: var(--a-onpri); white-space: nowrap; }
+.btn.out { background: transparent; color: var(--a-pri); box-shadow: inset 0 0 0 1px var(--a-outline); }
+.btn.out.red { color: var(--a-bad); box-shadow: inset 0 0 0 1px var(--a-bad); }
+.btn.txt { background: transparent; color: var(--a-pri); padding: 6px 8px; }
+.btn.dis { opacity: .38; }
+.foot-btns { display: flex; gap: 9px; flex: none; }
+.foot-btns .btn { flex: 1; height: 42px; font-size: 13.8px; }
+.btn.go { background: var(--a-green); color: var(--a-green-ink); font-weight: 600; }
+.btn.go.dis { background: rgba(226,232,240,.12); color: rgba(226,232,240,.38); opacity: 1; }
+.banner { border-radius: 9px; padding: 9px; font-size: 11.4px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.banner.warn { background: var(--a-warnbg); color: var(--a-warn); }
+.banner.ok { background: var(--a-okbg); color: var(--a-ok); }
+.banner.bad { background: var(--a-badbg); color: var(--a-bad); }
+.banner.info { background: var(--a-card); color: var(--a-pri); }
+.r2 { display: flex; gap: 0; padding: 1.5px 0; font-size: 11.4px; }
+.r2 > span:first-child { width: 70px; flex: none; color: var(--a-mut); }
+.checks { display: flex; flex-direction: column; gap: 2px; font-size: 11.4px; }
+.err { color: var(--a-bad); font-size: 11.4px; flex: none; }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--a-sheet); border-radius: 22px 22px 0 0; padding: 10px 14px 20px; display: flex; flex-direction: column; gap: 9px; }
+.sheet .grab { width: 32px; height: 4px; border-radius: 2px; background: var(--a-mut); opacity: .5; align-self: center; margin-bottom: 6px; }
+.sheet h4 { margin: 0; font-size: 15.5px; font-weight: 500; color: #fff; }
+.choice { background: var(--a-card); border-radius: 9px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.choice b { font-weight: 500; font-size: 13px; } .choice span { font-size: 10.9px; color: var(--a-mut); }
+.choice.pri { box-shadow: inset 0 0 0 1.4px var(--a-pri); }
+.dialog { position: absolute; left: 22px; right: 22px; top: 50%; transform: translateY(-50%); background: var(--a-sheet); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 7px; }
+
+/* ---------- proposed Run page ---------- */
+.sum { background: var(--a-card); border-radius: 9px; padding: 10px 11px; display: flex; flex-direction: column; gap: 7px; }
+.sec-h { display: flex; align-items: center; justify-content: space-between; font-size: 9.8px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--a-mut); }
+.sec-h .ed { color: var(--a-pri); text-transform: none; letter-spacing: 0; font-size: 11.4px; }
+.hero { display: flex; align-items: baseline; gap: 8px; }
+.hero b { font: 600 30px/1 var(--f-appmono); letter-spacing: -.5px; }
+.hero span { font-size: 11.4px; color: var(--a-mut); } .hero b small { font-size: 16px; font-weight: 500; color: var(--a-mut); margin-left: 1px; }
+.rule { height: 1px; background: rgba(148,163,184,.14); }
+.tool { display: flex; gap: 8px; align-items: baseline; font-size: 11.4px; }
+.tool .t { color: var(--a-pri); font: 600 11.4px var(--f-appmono); width: 22px; flex: none; }
+.tool .d { min-width: 0; flex: 1; } .tool .tm { font: 500 11.4px var(--f-appmono); color: var(--a-txt); flex: none; } .tool .d small { display: block; font-size: 10.2px; color: var(--a-mut); }
+.seq { display: flex; gap: 9px; align-items: flex-start; }
+.seq .n { width: 19px; height: 19px; border-radius: 50%; background: var(--a-tile); color: var(--a-pri); display: grid; place-items: center; font: 600 10px var(--f-appmono); flex: none; margin-top: 1px; }
+.seq b { display: block; font-weight: 500; font-size: 12.2px; } .seq span { font-size: 10.5px; color: var(--a-mut); }
+.kv { display: flex; align-items: baseline; gap: 10px; font-size: 12.2px; }
+.kv > span:first-child { width: 52px; flex: none; color: var(--a-mut); font-size: 11.4px; }
+.kv .v { flex: 1; min-width: 0; } .kv .v small { display: block; font-size: 10.2px; color: var(--a-mut); }
+.achips { display: flex; flex-wrap: wrap; gap: 5px; }
+.achip { font-size: 10.9px; padding: 2px 9px; border-radius: 12px; background: rgba(56,189,248,.16); color: var(--a-pri); }
+.lstat { display: flex; align-items: center; gap: 6px; font-size: 10.9px; padding-top: 1px; }
+.lstat i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.side-unused { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 30px 26px; margin-top: 18px; }
+.qs { margin-top: 40px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
+.qs h2 { font-size: 20px; } .qs ol, .qs ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; max-width: 80ch; }
+.tagnew { color: var(--accent); font: 600 10.5px var(--f-mono); letter-spacing: .05em; text-transform: uppercase; }
+
+/* files */
+.flist { display: flex; flex-direction: column; }
+.fitem { display: flex; gap: 10px; padding: 9px 4px; align-items: center; border-bottom: 1px solid rgba(148,163,184,.08); }
+.fitem .ic { width: 18px; color: var(--a-mut); text-align: center; }
+.tag { font-size: 9.5px; border-radius: 7px; padding: 0 5px; margin-left: 5px; }
+.acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.acts div { background: var(--a-tile); border-radius: 9px; padding: 9px 0 7px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; }
+.acts div i { font-style: normal; font-size: 15px; color: var(--a-pri); }
+
+/* main screen + drawer */
+.mhead { display: flex; align-items: center; gap: 6px; padding-top: 3px; }
+.mhead .nm { flex: 1; min-width: 0; } .mhead .nm b { display: block; font-weight: 500; font-size: 12.2px; } .mhead .nm span { font-size: 9.6px; color: var(--a-mut); }
+.pill { border-radius: 20px; padding: 5px 12px; font-weight: 700; font-size: 12.2px; color: #fff; background: #16A34A; white-space: nowrap; }
+.pill.tool { background: var(--a-pri); color: var(--a-onpri); }
+.ico { width: 26px; text-align: center; color: var(--a-txt); font-size: 14px; }
+.readouts { display: flex; flex-direction: column; gap: 5px; }
+.ro { background: var(--a-tile); border-radius: 9px; padding: 8px 10px; display: flex; align-items: center; gap: 10px; font-family: var(--f-appmono); }
+.ro b { color: var(--a-pri); width: 14px; } .ro .w { font-size: 17px; font-weight: 600; flex: 1; } .ro .m { font-size: 10px; color: var(--a-mut); }
+.drawer { background: var(--a-card); border-radius: 14px 14px 9px 9px; display: flex; flex-direction: column; padding: 0 7px 7px; gap: 5px; }
+.drawer.full { flex: 1; }
+.handle { height: 26px; display: grid; place-items: center; position: relative; }
+.handle::before { content: ""; width: 35px; height: 4px; border-radius: 2px; background: var(--a-mut); opacity: .6; }
+.jd { display: flex; flex-direction: column; gap: 7px; flex: 1; }
+.jfile { display: flex; align-items: center; gap: 7px; padding: 3px; font-size: 12.2px; }
+.jfile .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pct { display: flex; align-items: flex-end; gap: 9px; }
+.pct b { font: 600 29px/1 var(--f-appmono); }
+.pbar { height: 10px; border-radius: 5px; background: #0F1A2E; overflow: hidden; } .pbar b { display: block; height: 100%; background: var(--a-pri); border-radius: 5px; }
+.cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.cell { background: var(--a-tile); border-radius: 9px; padding: 5px 8px; min-width: 0; }
+.cell span { display: block; font-size: 9.6px; color: var(--a-mut); }
+.cell b { font: 600 14px var(--f-appmono); white-space: nowrap; } .cell small { font-size: 9.6px; color: var(--a-mut); margin-left: 2px; }
+.tools { background: var(--a-tile); border-radius: 9px; padding: 7px 9px; display: flex; flex-direction: column; gap: 6px; }
+.chips { display: flex; align-items: center; gap: 4px; font: 11.4px var(--f-appmono); }
+.chips .now { color: var(--a-pri); font-weight: 600; box-shadow: inset 0 0 0 1px var(--a-pri); border-radius: 5px; padding: 0 5px; }
+.chips .done { color: var(--a-mut); opacity: .55; text-decoration: line-through; padding: 0 5px; }
+.chips .nx { padding: 0 5px; } .chips .sep { color: var(--a-mut); opacity: .6; }
+.tl { display: flex; gap: 7px; font-size: 10.9px; align-items: baseline; }
+.tl .k { width: 30px; flex: none; font-size: 9.6px; color: var(--a-mut); } .tl .t { width: 26px; flex: none; color: var(--a-pri); font: 600 11.4px var(--f-appmono); }
+.feed { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.feed .lbl { width: 54px; } .feed .step { width: 26px; text-align: center; color: var(--a-pri); font-size: 17px; }
+.feed .track { flex: 1; height: 26px; border-radius: 8px; background: var(--a-tile); position: relative; overflow: hidden; }
+.feed .track b { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: rgba(56,189,248,.22); }
+.feed .p { width: 46px; text-align: right; font: 13px var(--f-appmono); }
+.stops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.stops span { height: 44px; border-radius: 22px; display: grid; place-items: center; font-size: 13.8px; background: var(--a-tile); }
+.stops .hold { background: #D97706; color: #fff; } .stops .res { color: #22C55E; } .stops .rst { background: #DC2626; color: #fff; }
+.jline { display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 3px; font-size: 11.4px; }
+.jline .pbar { flex: 1; height: 5px; }
+.mesh { display: grid; gap: 3px; } .mesh span { text-align: center; border-radius: 4px; padding: 7px 0; font: 10.5px var(--f-appmono); color: #fff; }
+@media (prefers-reduced-motion: no-preference) { nav.steps a { transition: background .15s; } }
+</style>
+
+<div class="wrap">
+  <h1>Pendant Run flow</h1>
+  <p class="lede">Every page and state of Run, from picking the file to the job running. The screens are rebuilt from the current, uncommitted code: the text, colors and layout come from <code>RunScreen.kt</code>, <code>RunController.kt</code>, <code>JobPanel.kt</code> and <code>MainScreen.kt</code>. The example numbers are from the air-cut job on 2026-11-18. Round 2 (same night) applies Jimmy's review notes; frames marked <span class="chg">changed</span> show them.</p>
+  <div class="meta">
+    <span>Job <b>AIR_pendant_block_air_test_Setup1.cnc</b></span>
+    <span>Toolpath <b>27.7 × 45.4 mm</b>, 2,498 lines, T1 then T2</span>
+    <span>Work zero <b>block center</b>, machine X −171.357 Y −155.896</span>
+  </div>
+  <div class="legend" aria-label="Status key">
+    <span class="st z1">Seen on the Z1</span>
+    <span class="st sim">Pixel + simulator only</span>
+    <span class="st no">Not run yet</span>
+  </div>
+
+  <nav class="steps" aria-label="Sections"><ol>
+    <li><a href="#open"><span>0</span>Open</a></li>
+    <li><a href="#origin"><span>1</span>Origin</a></li>
+    <li><a href="#checks"><span>2</span>Checks</a></li>
+    <li><a href="#assist"><span>3</span>Assist</a></li>
+    <li><a href="#run"><span>4</span>Run</a></li>
+    <li><a href="#after"><span>5</span>After start</a></li>
+    <li><a href="#todo">Still to check</a></li>
+  </ol></nav>
+
+  <div id="board"></div>
+
+  <div class="open" id="todo">
+    <h2>Still to check on the real Z1</h2>
+    <ul>
+      <li>The laser swap's continue button on the Run page, and the probe length check that follows it. On 2026-11-18 Jimmy had to press the machine's button.</li>
+      <li>A wrong probe in the spindle at Start: the check should say which probe it is, and the job shouldn't start.</li>
+      <li>The time row on the Run page, and the drawer's Left and Done-at times, against a real job.</li>
+      <li>The drawer opening fully expanded when the job starts.</li>
+      <li>The machine name in the header when the pendant connects by IP.</li>
+      <li>Auto leveling and the mesh sheet. These need stock bigger than the 19 × 38 mm block.</li>
+      <li>Anchor 1 and "Where the spindle is" as the origin, and the off-bed warning.</li>
+    </ul>
+  </div>
+  <p class="foot">These screens are rebuilt from the code, not screenshots. Sizes are scaled to fit a 360 px frame, and the main screen's readouts and spindle row are simplified. Everything shown is uncommitted.</p>
+</div>
+
+<script>
+(() => {
+  // ---- tonight's numbers ----------------------------------------------------------------------
+  const BED = { x0: -207, x1: -1, y0: -206, y1: -1 };
+  const ORIGIN = [-171.357, -155.896], ANCHOR = [-190.69, -194.58];
+  const EXT = { minX: -13.747, minY: -23.434, maxX: 13.99, maxY: 22.002 };
+  const FILE = "AIR_pendant_block_air_test_Setup1.cnc";
+  const T1 = "Spiral O Metal 3.175*12mm Makera · flat end mill";
+  const T2 = "OSG 404-1250-BN 1/8 4FL Carbide Ball OSG 404-1250-BN · ball end mill";
+
+  // ---- bed map (RunScreen.BedMap) -------------------------------------------------------------
+  function bedMap(o = {}) {
+    const W = 334, H = 134;                       // drawing area inside the 7px padding
+    const bw = BED.x1 - BED.x0, bh = BED.y1 - BED.y0, k = Math.min(W / bw, H / bh);
+    const ox = (W - bw * k) / 2, oy = (H - bh * k) / 2;
+    const P = (x, y) => [ox + (x - BED.x0) * k, oy + (BED.y1 - y) * k];
+    let s = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">`;
+    const [bx, by] = P(BED.x0, BED.y1);
+    s += `<rect x="${bx}" y="${by}" width="${bw * k}" height="${bh * k}" fill="#2A2E33"/>`;
+    // 4 x 4 equal cells, so the grid ends on the bed's edges
+    for (let i = 1; i < 4; i++) {
+      const gx = BED.x0 + bw * i / 4, gy = BED.y0 + bh * i / 4;
+      const [a, b] = P(gx, BED.y0), [c, d] = P(gx, BED.y1), [e, f] = P(BED.x0, gy), [g, h] = P(BED.x1, gy);
+      s += `<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="#34393F"/><line x1="${e}" y1="${f}" x2="${g}" y2="${h}" stroke="#34393F"/>`;
+    }
+    // The anchor bracket at full size (anchor_width 15, anchor_length 100): Anchor 1 is its inside corner
+    const AW = 15, AL = 100;
+    const [lx, ly] = P(ANCHOR[0] - AW, ANCHOR[1] - AW + AL), [fx, fy] = P(ANCHOR[0] - AW, ANCHOR[1]);
+    s += `<rect x="${lx}" y="${ly}" width="${AW * k}" height="${AL * k}" fill="#8A929C"/><rect x="${fx}" y="${fy}" width="${AL * k}" height="${AW * k}" fill="#8A929C"/>`;
+    const org = o.origin || ORIGIN;
+    if (!o.loading) {
+      const [tlx, tly] = P(org[0] + EXT.minX, org[1] + EXT.maxY), [brx, bry] = P(org[0] + EXT.maxX, org[1] + EXT.minY);
+      const col = o.offBed ? "#F87171" : o.scan === "done" ? "#FB923C" : "#4ADE80";
+      s += `<rect x="${tlx}" y="${tly}" width="${brx - tlx}" height="${bry - tly}" fill="${col}" fill-opacity=".12" stroke="${col}" stroke-width="1.4" ${o.scan === "done" ? "" : 'stroke-dasharray="4 3"'}/>`;
+      if (o.level) for (let i = 0; i < o.level[0]; i++) for (let j = 0; j < o.level[1]; j++) {
+        const [x, y] = P(org[0] + EXT.minX + (i / (o.level[0] - 1)) * (EXT.maxX - EXT.minX), org[1] + EXT.minY + (j / (o.level[1] - 1)) * (EXT.maxY - EXT.minY));
+        s += `<circle cx="${x}" cy="${y}" r="1.8" fill="#FACC15"/>`;
+      }
+      const [cx, cy] = P(org[0], org[1]);
+      s += `<circle cx="${cx}" cy="${cy}" r="3" fill="#38BDF8"/>`;
+      if (o.z) { const [zx, zy] = o.zAt ? P(org[0] + EXT.minX + o.zAt[0], org[1] + EXT.minY + o.zAt[1]) : [cx, cy];
+        s += `<circle cx="${zx}" cy="${zy}" r="4.5" fill="none" stroke="#F87171" stroke-width="1.6"/>`; }
+    }
+    const sp = o.spindle || [-171.4, -150];
+    const [sx, sy] = o.scan === "running" ? P(org[0] + EXT.maxX, org[1] + EXT.minY) : P(sp[0], sp[1]);
+    if (o.scan === "running") s += `<circle cx="${sx}" cy="${sy}" r="3" fill="#FF3B30"/>`;
+    else s += `<path d="M${sx - 4} ${sy}h8M${sx} ${sy - 4}v8" stroke="#FFFFFF" stroke-width="1.1"/>`;
+    s += `</svg>`;
+    let leg;
+    if (o.loading) leg = `Loading X/Y limits…<div class="bar"><b style="width:${o.loading}%"></b></div>`;
+    else {
+      leg = `<div><i style="background:#4ADE80"></i>Cutting area 27.7 × 45.4</div><div><i style="background:#38BDF8"></i>Origin</div>`;
+      if (o.z) leg += `<div><i style="background:#F87171"></i>Z probe</div>`;
+      if (o.level) leg += `<div><i style="background:#FACC15"></i>Leveling</div>`;
+      if (o.scan === "running") leg += `<div><i style="background:#FF3B30"></i>Laser</div>`;
+      else leg += `<div><svg width="6" height="6" viewBox="0 0 6 6" style="margin-right:4px"><path d="M0 3h6M3 0v6" stroke="#fff" stroke-width="1.1"/></svg>Spindle</div>`;
+    }
+    return `<div class="map">${s}<div class="leg">${leg}</div></div>`;
+  }
+
+  // ---- pieces ---------------------------------------------------------------------------------
+  const sb = `<div class="sbar"><span>1:39</span><span>▾ ▴ ▮</span></div>`;
+  const tabs = step => `<div class="tabs">${["Origin", "Checks", "Assist", "Run"].map((t, i) =>
+      `<span class="${i === step ? "on" : i < step ? "done" : ""}">${t}</span>`).join("")}</div>`;
+  const sw = (on, dis) => `<span class="sw${on ? " on" : ""}${dis ? " dis" : ""}" role="img" aria-label="${on ? "on" : "off"}"></span>`;
+  const fld = (l, v) => `<div class="fld"><label>${l}</label>${v}</div>`;
+  const r2 = (k, v) => `<div class="r2"><span>${k}</span><span>${v}</span></div>`;
+
+  function runShell({ step, map, body, error, start = "on", overlay = "" }) {
+    const btns = step < 3
+      ? `<span class="btn out">${step === 0 ? "Cancel" : "Back"}</span><span class="btn">Next</span>`
+      : `<span class="btn out">Back</span><span class="btn go${start === "off" ? " dis" : ""}">Start job</span>`;
+    return `<div class="phone">${sb}<div class="scr">
+      <div class="title"><span class="x">✕</span><span class="t">Run ${FILE}</span></div>
+      ${tabs(step)}
+      ${step !== 2 ? map : ""}
+      <div class="body">${body}</div>
+      ${error ? `<div class="err">${error}</div>` : ""}
+      <div class="foot-btns">${btns}</div>
+    </div>${overlay}</div>`;
+  }
+
+  // Step 1: origin cards
+  function originCards(sel, extra = {}) {
+    const cards = [
+      ["CURRENT", "Current origin", "X 19.333 · Y 38.684 from Anchor 1"],
+      ["ANCHOR1", "Anchor 1", "X/Y zero at the bracket's inside corner, plus an offset"],
+      ["SPINDLE", "Where the spindle is", "X/Y zero right here"],
+      ["PROBE3D", "Custom · 3D probe", "Next opens the probe; set the zero to go on"],
+    ];
+    return cards.map(([id, l, sub]) => {
+      const on = id === sel;
+      let more = "";
+      if (on && id === "ANCHOR1") more = `<div class="fields" style="margin-top:6px">${fld("X", extra.off ? extra.off[0] : "0")}${fld("Y", extra.off ? extra.off[1] : "0")}</div>
+        <span class="btn txt dis" style="align-self:flex-start">Same as CAM (no offset in this file)</span>
+        <div class="s12 mut">0, 0 puts the work zero on the bracket's inside corner (stock pushed into it). Z is probed on the next step.</div>`;
+      if (on && id === "SPINDLE") more = `<div class="s12 mut" style="padding:3px 0 0 12px">Sets X/Y zero where the spindle is when you tap Next.</div>`;
+      if (on && id === "PROBE3D") more = `<div class="row" style="margin-top:5px"><span class="btn">${extra.probed ? "Probe again" : "Open the 3D probe"}</span>${extra.probed ? `<span class="okc s13">&nbsp;✓ Set with the 3D probe</span>` : ""}</div>`;
+      return `<div class="card${on ? " sel" : ""}"><div class="row"><span class="radio${on ? " on" : ""}"></span><div class="grow"><div class="s15 b">${l}</div><div class="s12 mut">${sub}</div></div></div>${more}</div>`;
+    }).join("");
+  }
+
+  // Step 2: checks
+  function checksBody({ banner, zOn = true, zLocked = false, scan = "none", scanNote, atStart = false, level = false, zMove = false }) {
+    const scanSub = { running: "Scanning… watch that the dot stays on the stock", done: "Scanned ✓", failed: scanNote || "The scan stopped", none: "The laser traces the cutting area" }[scan];
+    const scanCls = scan === "done" ? "okc" : scan === "failed" ? "badc" : "mut";
+    const scanBtn = scan === "running" ? `<span class="btn out red">Stop</span>` : `<span class="btn out">${scan === "done" ? "Scan again" : "Scan now"}</span>`;
+    return `${banner || ""}
+      <div class="card"><div class="row"><div class="grow"><div class="b">Probe Z at start</div><div class="s12 mut">${zLocked ? "Required with Anchor 1: sets Z zero on the stock top" : "Sets Z zero on the stock top"}</div></div>${sw(zOn)}</div>
+        ${!zOn ? "" : zMove
+          ? `<div class="row"><span class="grow s12 mut">Touch point, from the cutting area's front-left corner</span><span class="btn txt">Middle</span></div><div class="fields">${fld("X", "6")}${fld("Y", "35")}</div>`
+          : `<div class="row"><span class="grow s12 mut">Touches the middle of the cutting area (red ring)</span><span class="btn txt">Move</span></div>`}</div>
+      <div class="card"><div class="row"><div class="grow"><div class="b">Scan margin</div><div class="s12 ${scanCls}">${scanSub}</div></div>${scanBtn}</div>
+        <div class="row" style="margin-top:3px"><span class="grow s13">Also scan at the start of the job</span>${sw(atStart)}</div></div>
+      <div class="card"><div class="row"><div class="grow"><div class="b">Auto leveling at start</div><div class="s12 mut">Touches a grid over the cutting area; the job follows the surface</div></div>${sw(level)}</div>
+        ${level ? `<div class="fields" style="margin-top:6px"><div style="flex:1.3;display:flex">${fld("Start height", "5")}</div>${fld("X points", "3")}${fld("Y points", "3")}</div>
+        <div class="s12 mut">Start height: how far above the stock each touch starts (mm).</div>` : ""}</div>`;
+  }
+
+  const banner = {
+    needed: `<div class="banner warn">Laser probe needed · T1 is in the collet</div>`,
+    checkingMove: `<div class="banner info">Going to the tool change spot…</div>`,
+    waiting: `<div class="banner info">Put in the laser probe, then continue.<span class="btn">The laser probe is in · continue</span></div>`,
+    measuring: `<div class="banner info">Measuring it on the tool setter…</div>`,
+    ok: `<div class="banner ok">✓ Laser probe checked</div>`,
+    wrong: `<div class="banner bad">That's the 3D probe, not the laser probe.<span class="row"><span class="btn">Swap to the laser probe</span></span></div>`,
+    wrongUnknown: `<div class="banner bad">Its length doesn't match the laser probe's.<span class="row"><span class="btn">Swap to the laser probe</span><span class="btn txt">It's the laser probe: save its length</span></span></div>`,
+    failed: `<div class="banner bad">Laser probe check stopped: the setter reading didn't come through, so it couldn't tell which probe is in. Measure it again.<span class="btn txt">Try again</span></div>`,
+  };
+
+  const laserSheet = (probeIn) => {
+    const swap = p => `<div class="choice${p ? " pri" : ""}"><b>Swap to the laser probe</b><span>Goes to the tool change spot and waits while you swap, then measures it on the setter.</span></div>`;
+    const inNow = p => `<div class="choice${p ? " pri" : ""}"><b>It's already in</b><span>Sets T0 (no motion), then measures it on the setter and checks its length against the laser probe's.</span></div>`;
+    return `<div class="scrim"></div><div class="sheet"><div class="grab"></div><h4>This needs the laser probe</h4>
+      <div class="s14 mut">${probeIn ? "The machine says a probe is in (T9999). It measures it on the tool setter to tell which probe it is." : "T1 is in the collet now."}</div>
+      ${probeIn ? inNow(true) + swap(false) : swap(true) + inNow(false)}
+      <span class="btn txt" style="align-self:flex-start">Cancel</span></div>`;
+  };
+
+  // Step 4: run summary
+  function runBody({ laser = "none", checksLaser, block, margin = "scanned at start", atStart = "clear the old mesh, probe Z", time = true, idle = true }) {
+    const lb = laser === "none" ? "" : banner[laser];
+    const laserLine = checksLaser || { none: ["•", "Laser probe: checked when you start"], waiting: ["•", "Laser probe: being checked"], measuring: ["•", "Laser probe: being checked"], ok: ["✓", "Laser probe in"], wrong: ["•", "Laser probe: not confirmed"], failed: ["•", "Laser probe: not confirmed"] }[laser];
+    const line = (ok, t) => `<div class="${ok ? "okc" : "warnc"}">${ok ? "✓" : "•"} ${t}</div>`;
+    return `<div class="card">
+        ${r2("Origin", "Current origin")}${r2("Margin", margin)}${r2("At start", atStart)}${r2("Assist", "vacuum")}
+        ${time ? r2("Time", "about 13 min of machine time · 2 tool changes") : ""}
+      </div>${lb}
+      <div class="checks">${line(true, "Toolpath loaded")}${line(laserLine[0] === "✓", laserLine[1])}</div>
+      ${block ? `<div class="s13 warnc">${block}</div>` : ""}
+      <div class="s12 mut">Hold · Resume · Reset stay on the main screen.</div>`;
+  }
+
+
+  const ORIGIN_A1 = [ANCHOR[0] - EXT.minX, ANCHOR[1] - EXT.minY];
+  const TOOLS = [["T1", "Spiral O Metal 3.175*12mm Makera", "flat end mill", "1m 20s"], ["T2", "OSG 404-1250-BN 1/8 4FL Carbide Ball", "ball end mill", "12m 02s"]];
+  const STEP = {
+    scan: ["Scan the margin", "The laser traces the cutting area, so you can see it's on the stock"],
+    z: ["Probe Z", "Sets Z zero on the stock top, at the middle of the cutting area"],
+    level: ["Auto leveling, 3 × 3", "Touches a grid over the cutting area; the job follows the surface"],
+  };
+  const LSTAT = {
+    none: `<div class="lstat mut"><i></i>Uses the laser probe. It's checked when you tap Start.</div>`,
+    ok: `<div class="lstat okc"><i></i>Laser probe checked</div>`,
+    busy: `<div class="lstat pric"><i></i>Checking the laser probe…</div>`,
+    wrong: `<div class="lstat badc"><i></i>Not the laser probe</div>`,
+  };
+
+  function newRun({ before = ["scan", "z"], assist = ["Auto vacuum"], laser = "none", origin = ["Current origin", "X 19.333 · Y 38.684 from Anchor 1"], banner: bn = "", block = "" }) {
+    const tools = TOOLS.map(([t, n, k, tm]) => `<div class="tool"><span class="t">${t}</span><span class="d">${n}<small>${k}</small></span><span class="tm">${tm}</span></div>`).join("");
+    const seq = before.length
+      ? before.map((s, i) => `<div class="seq"><span class="n">${i + 1}</span><div><b>${STEP[s][0]}</b><span>${STEP[s][1]}</span></div></div>`).join("") + LSTAT[laser]
+      : "";
+    const as = assist.length ? `<div class="achips">${assist.map(a => `<span class="achip">${a}</span>`).join("")}</div>` : `<span class="mut">None on</span>`;
+    return `
+      <div class="sum">
+        <div class="hero"><b>13<small>m</small> 22<small>s</small></b><span>machine time, estimated</span></div>
+        <div class="rule"></div>
+        <div class="kv"><span style="width:auto;flex:1">Tool changes</span><span class="b" style="font-family:var(--f-appmono)">2</span></div>
+        <div class="rule"></div>${tools}
+      </div>
+      ${seq ? `<div class="sum"><div class="sec-h"><span>Precheck routine</span><span class="ed">Edit</span></div>${seq}</div>` : ""}
+      <div class="sum">
+        <div class="kv"><span>Origin</span><span class="v">${origin[0]}<small>${origin[1]}</small></span><span class="pric s13">Edit</span></div>
+        <div class="rule"></div>
+        <div class="kv"><span>Assist</span><span class="v">${as}</span><span class="pric s13">Edit</span></div>
+      </div>
+      ${bn}${block ? `<div class="s13 warnc">${block}</div>` : ""}`;
+  }
+
+
+  // Main screen with the drawer
+  function mainScreen({ pill = "Run 2%", pillCls = "", details = true, tool = false, dialog = "", sheet = "" }) {
+    const head = `<div class="mhead"><div class="nm"><b>Makera_Z1P</b><span>192.168.1.48 · 24 ms</span></div><span class="pill ${pillCls}">${pill}</span><span class="ico">▤</span><span class="ico">⌨</span><span class="ico">⚙</span></div>`;
+    const cells = (a, b, c) => `<div class="cells">${a}${b}${c}</div>`;
+    const cell = (t, v, sm, cls = "") => `<div class="cell"><span>${t}</span><b class="${cls}">${v}</b>${sm ? `<small>${sm}</small>` : ""}</div>`;
+    const tl = tool
+      ? `<div class="chips"><span class="done">T1</span><span class="sep">›</span><span class="now">T2</span><span style="flex:1"></span><span class="pric">⌄</span></div>
+         <div class="tl"><span class="k">Now</span><span class="t">T2</span><span>${T2}</span></div>`
+      : `<div class="chips"><span class="now">T1</span><span class="sep">›</span><span class="nx">T2</span><span style="flex:1"></span><span class="pric">⌄</span></div>
+         <div class="tl"><span class="k">Now</span><span class="t">T1</span><span>${T1}</span></div>
+         <div class="tl"><span class="k">Next</span><span class="t">T2</span><span>${T2} · in ~1 min</span></div>`;
+    const jd = `<div class="jd">
+        <div class="jfile"><span class="mut">▤</span><span class="n">${FILE}</span><span class="pric">⌄</span></div>
+        <div class="pct"><b>${tool ? "11%" : "2%"}</b><span class="s13 mut" style="padding-bottom:4px">line ${tool ? "84" : "31"} of 2,498</span></div>
+        <div class="pbar"><b style="width:${tool ? 11 : 2}%"></b></div>
+        ${tool ? `<div style="display:flex;background:var(--a-tile);border-radius:9px;overflow:hidden"><span style="width:4px;background:var(--a-pri)"></span><div style="padding:6px 9px"><div class="pric b s14">Tool change: put in T2</div><div class="s13 mut">Confirm on the machine, in Studio, or in the popup here.</div></div></div>` : ""}
+        ${cells(cell("Elapsed", tool ? "1m 41s" : "0m 12s"), cell("Left (est.)", tool ? "11m 52s" : "12m 58s"), cell("Done at", tool ? "1:52" : "1:52", "am"))}
+        ${tool ? "" : cells(cell("Feed", "1,000", "/1,000"), cell("Spindle", "10,000", "/10k"), cell("State", "Run", "", "pric"))}
+        <div class="tools">${tl}</div></div>`;
+    const feedRow = `<div class="feed"><span class="lbl">Feed</span><span class="step">−</span><span class="track"><b></b></span><span class="step">+</span><span class="p">100%</span></div>
+      <div class="feed"><span class="lbl">Spindle</span><span class="step">−</span><span class="track"><b></b></span><span class="step">+</span><span class="p">100%</span></div>`;
+    const stops = tool ? `<div class="stops"><span style="color:#F59E0B">Hold</span><span class="res">Resume</span><span style="color:#F87171">Reset</span></div>`
+                       : `<div class="stops"><span class="hold">Hold</span><span class="res">Resume</span><span class="rst">Reset</span></div>`;
+    let mid;
+    if (details) mid = `<div class="drawer full"><div class="handle"></div>${jd}${feedRow}${stops}</div>`;
+    else mid = `<div class="readouts">${["X", "Y", "Z", "A"].map((a, i) => `<div class="ro"><b>${a}</b><span class="w">${["-2.114", "8.930", "24.800", "0.000"][i]}</span><span class="m">M ${["-173.471", "-146.966", "-15.889", "0.000"][i]}</span></div>`).join("")}</div>
+        <div style="flex:1"></div>
+        <div class="drawer"><div class="handle"></div><div class="jline"><span class="mut">▤</span><b>2%</b><span class="pbar"><b style="width:2%"></b></span><span class="mut">12m 58s left</span><span class="pric">⌃</span></div>${feedRow}${stops}</div>`;
+    return `<div class="phone">${sb}<div class="scr">${head}${mid}</div>${dialog}${sheet}</div>`;
+  }
+
+  const toolDialog = `<div class="scrim"></div><div class="dialog">
+      <div class="row"><span class="grow pric b s13">Tool change</span><span class="s12 mut">line 84</span></div>
+      <div style="font-size:22.5px;font-weight:500">Put in T2</div>
+      <div class="s14">${T2}</div>
+      <div class="s13 mut">Take out T1 · ${T1}</div>
+      <div class="s13 mut">After you continue, the Z1 measures it on the tool setter, then carries on.</div>
+      <span class="btn" style="height:44px;font-size:13.8px">I've put in T2 · continue</span>
+      <span class="btn txt" style="align-self:flex-start">Hide</span></div>`;
+
+  const meshSheet = `<div class="scrim"></div><div class="sheet"><div class="grab"></div><h4>Leveling mesh · this job</h4>
+      <div class="s13 mut">3 × 3 points · spread 0.048 mm</div>
+      <div class="mesh" style="grid-template-columns:repeat(3,1fr)">${[[0.012, 0.031, 0.048], [-0.004, 0.015, 0.029], [0.000, 0.006, 0.021]].map(r => r.map(v => {
+        const t = (v + 0.004) / 0.052, c = `rgb(${Math.round(37 + (249 - 37) * t)},${Math.round(99 + (115 - 99) * t)},${Math.round(235 + (22 - 235) * t)})`;
+        return `<span style="background:${c}">${v.toFixed(3)}</span>`; }).join("")).join("")}</div>
+      <div class="s12 mut">lowest -0.004 · highest 0.048 mm</div>
+      <span class="btn txt" style="align-self:flex-start">Close</span></div>`;
+
+  const filesScreen = (block) => `<div class="phone">${sb}<div class="scr">
+      <div class="title"><span class="x">←</span><span class="t">Files · /sd/gcodes</span></div>
+      <div class="flist">${[["AIR_pendant_block_air_test_Setup1.cnc", "212 KB · today 12:41 am", "just uploaded"], ["pendant_block_air_test_Setup1.cnc", "209 KB · today 12:30 am"], ["can_lid_op1.cnc", "1.4 MB · Nov 12"], ["AIR_field_two_tool_19x38.cnc", "38 KB · today 12:05 am"]]
+        .map(([n, s, tag]) => `<div class="fitem"><span class="ic">▤</span><div class="grow" style="min-width:0"><div class="s15 b" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${n}${tag ? `<span class="tag" style="color:var(--a-pri);background:#0E2A3D">${tag}</span>` : ""}</div><div class="s12 mut">${s}</div></div></div>`).join("")}</div>
+    </div><div class="scrim"></div><div class="sheet"><div class="grab"></div>
+      <div class="s15 b" style="font-size:14.8px">${FILE}</div>
+      <div class="s12 mut">212 KB · today 12:41 am · /gcodes</div>
+      <div class="acts"><div${block ? ' style="opacity:.38"' : ""}><i>▶</i>Run</div><div><i>⚙</i>Job info</div><div><i>✎</i>Rename</div><div><i style="color:#F87171">🗑</i>Delete</div></div>
+      ${block ? `<div class="s13 warnc">${block}</div>` : ""}
+    </div></div>`;
+
+  // ---- the board ------------------------------------------------------------------------------
+  const S = { z1: ["z1", "Seen on the Z1"], sim: ["sim", "Simulator only"], no: ["no", "Not run yet"] };
+  const sections = [
+    { id: "open", n: "0", h: "Open a file", p: "Run starts from the file sheet in Files. The pendant then downloads the whole file to work out the toolpath box and the time estimate.", shots: [
+      { t: "File sheet: Run", s: "z1", d: "Tap a file, then Run. Run is off for the file the Z1 is already playing.", html: filesScreen() },
+      { t: "Run off: machine not Idle", s: "no", ch: 1, d: "New: Run only opens on an Idle machine with no job running, so the Run page no longer lists Idle as a check. Start still checks it once more.", html: filesScreen("Run needs the Z1 Idle (it's Alarm).") },
+    ]},
+    { id: "origin", n: "1", h: "Origin", p: "Where X/Y zero is for this job. Anchor 1 and Where the spindle is send the zero when you tap Next. Current origin and the 3D probe send nothing from here.", shots: [
+      { t: "Loading the file", s: "z1", d: "The map's legend shows download progress until the toolpath box is known.", html: runShell({ step: 0, map: bedMap({ loading: 64 }), body: originCards("CURRENT") }) },
+      { t: "Current origin (default)", s: "z1", d: "Keeps the work zero that's set now. The subtitle gives its distance from Anchor 1. Used on 2026-11-18 after probing the block center.", html: runShell({ step: 0, map: bedMap(), body: originCards("CURRENT") }) },
+      { t: "Anchor 1", s: "sim", ch: 1, d: "Reworded. 0, 0 is the bracket's inside corner, where the stock's corner sits when pushed in. The bracket is now drawn at its real size (15 mm wide, 100 mm arms, from the machine's config). This file's zero is the middle of the part, so at 0, 0 the toolpath sits over the bracket.", html: runShell({ step: 0, map: bedMap({ origin: [ANCHOR[0], ANCHOR[1]] }), body: originCards("ANCHOR1") }) },
+      { t: "Anchor 1 with an offset", s: "sim", ch: 1, d: "That's what the offset is for: the work zero's distance from the corner. Here X 13.75, Y 23.43 (half the toolpath) puts the toolpath's corner on the bracket's corner. The map redraws as you type.", html: runShell({ step: 0, map: bedMap({ origin: [ANCHOR[0] - EXT.minX, ANCHOR[1] - EXT.minY] }), body: originCards("ANCHOR1", { off: ["13.75", "23.43"] }) }) },
+      { t: "Custom · 3D probe, after probing", s: "sim", d: "Opens the probe wizard. When it comes back, the card shows a tick and Probe again.", html: runShell({ step: 0, map: bedMap(), body: originCards("PROBE3D", { probed: true }) }) },
+      { t: "Off the bed", s: "no", d: "Where the spindle is, with the spindle parked near the right edge: the box turns red, a warning shows under the map, and Start is blocked later.", html: runShell({ step: 0, map: bedMap({ origin: [-10, -30], spindle: [-10, -30], offBed: true }) + `<div class="err">With this origin the cutting area runs past the bed.</div>`, body: originCards("SPINDLE") }) },
+    ]},
+    { id: "checks", n: "2", h: "Checks", p: "Probe Z, the margin scan and leveling all use the laser probe (T0). If any of them is on, the pendant has to confirm the laser probe is in. It measures the probe on the tool setter and compares its length with the saved one.", shots: [
+      { t: "Checks: laser probe needed", s: "z1", ch: 1, d: "The Z probe point is now one line: it touches the middle of the toolpath (the red ring). The X/Y boxes only show after Move.", html: runShell({ step: 1, map: bedMap({ z: true }), body: checksBody({ banner: banner.needed, atStart: true }) }) },
+      { t: "Needs the laser probe (sheet)", s: "z1", d: "Opens from Scan now, or from Start on page 4, when the laser probe isn't confirmed. Swap is the first choice when a cutter is in.", html: runShell({ step: 1, map: bedMap({ z: true }), body: checksBody({ banner: banner.needed, atStart: true }), overlay: laserSheet(false) }) },
+      { t: "Same sheet, a probe already in", s: "sim", ch: 1, d: "When the machine reports a probe number, It's already in comes first. The length check then works out which probe it is.", html: runShell({ step: 1, map: bedMap({ z: true }), body: checksBody({ banner: `<div class="banner warn">Laser probe needed · a probe is in (T9999), checked when you go on</div>`, atStart: true }), overlay: laserSheet(true) }) },
+      { t: "Swap: waiting for you", s: "z1", ch: 1, d: "Now just says continue. The machine's front button still works too. It then measures the probe on the setter.", html: runShell({ step: 1, map: bedMap({ z: true }), body: checksBody({ banner: banner.waiting, atStart: true }) }) },
+      { t: "Z probe point moved", s: "sim", ch: 1, d: "After Move: X/Y from the toolpath's front-left corner, and the red ring follows. Middle puts it back. For when the middle of the toolpath is a hole or a pocket from an earlier op.", html: runShell({ step: 1, map: bedMap({ z: true, zAt: [6, 35] }), body: checksBody({ banner: banner.ok, atStart: true, zMove: true }) }) },
+      { t: "Scan now, running", s: "sim", d: "The laser traces the cutting area. The red dot on the map follows the machine. Stop sends a reset.", html: runShell({ step: 1, map: bedMap({ z: true, scan: "running" }), body: checksBody({ banner: banner.ok, scan: "running", atStart: true }) }) },
+      { t: "Scanned, leveling on", s: "no", ch: 1, d: "After a scan the box turns orange and solid. Leveling shows its grid points in yellow on the map. Clearance is now Start height, with a line saying what it is.", html: runShell({ step: 1, map: bedMap({ z: true, scan: "done", level: [3, 3] }), body: checksBody({ banner: banner.ok, scan: "done", atStart: true, level: true }) }) },
+      { t: "Wrong probe", s: "sim", d: "The length matched a different saved probe. Swap to the laser probe starts over. Nothing else runs until it's sorted.", html: runShell({ step: 1, map: bedMap({ z: true }), body: checksBody({ banner: banner.wrong, atStart: true }) }) },
+      { t: "Unknown length, or no reading", s: "sim", ch: 1, d: "Left: the length matches no saved probe, so you can say it is the laser probe and save the length. A missing setter reading is now a failed check, not a pass (fixed 2026-11-18).", html: runShell({ step: 1, map: bedMap({ z: true }), body: checksBody({ banner: banner.wrongUnknown + banner.failed, atStart: true }) }) },
+    ]},
+    { id: "assist", n: "3", h: "Assist", p: "Studio's assist modes. They're firmware settings that stay on until turned off, so the switches send M331/M332 at once and show what the machine reports.", shots: [
+      { t: "Assist", s: "z1", d: "No bed map on this page. Each switch reflects the status field, so it's greyed out until the machine has reported it.", html: runShell({ step: 2, map: "", body: `<div class="s12 mut">These stay on in the machine until turned off (here or in Studio).</div>` +
+        [["Auto vacuum", "Ext port on while the spindle runs", true], ["Auto blow", "Air on the cut while the spindle runs", false], ["Bed clean", "Cleans the bed after the job", false], ["Anti-static", "For plastics and wood dust", false]]
+        .map(([l, s, on]) => `<div class="card"><div class="row"><div class="grow"><div class="b">${l}</div><div class="s12 mut">${s}</div></div>${sw(on)}</div></div>`).join("") }) },
+    ]},
+    { id: "run", n: "4", h: "Run", p: "The summary before Start. Start sends M370, the buffered M495 line (margin, Z probe, leveling) and play, the same way Studio does.", shots: [
+      { t: "Ready to start", s: "z1", ch: 1, d: "Rebuilt 2026-11-19: the estimate as a duration, tool changes, each tool with its own time, then the precheck routine (hidden when there is none) and origin and assist with Edit links. Checked on the Pixel against the real Z1 (nothing started).", html: runShell({ step: 3, map: bedMap({ z: true }), body: newRun({}) }) },
+      { t: "Start: laser swap on this page", s: "sim", ch: 1, d: "After Start, the swap's progress and its continue button sit under the cards; the precheck card's laser line says it's being checked.", html: runShell({ step: 3, map: bedMap({ z: true }), body: newRun({ laser: "busy", banner: banner.waiting }) }) },
+      { t: "Start: checked, starting", s: "sim", ch: 1, d: "A match turns the precheck card's laser line green; no banner. Only a matching length (or a first reading, which is then saved) lets the job go on.", html: runShell({ step: 3, map: bedMap({ z: true }), body: newRun({ laser: "ok" }) }) },
+      { t: "Start: wrong probe", s: "sim", ch: 1, d: "The job doesn't start. After swapping, tap Start job again; it doesn't start on its own.", html: runShell({ step: 3, map: bedMap({ z: true }), body: newRun({ laser: "wrong", banner: banner.wrong }) }) },
+      { t: "Blocked: cuts before M6", s: "no", ch: 1, d: "Kept for the odd file (one that assumes the tool is already in, or hand-written G-code): the laser probe would still be in when it cuts. It only shows when it blocks Start.", html: runShell({ step: 3, map: bedMap({ z: true }), start: "off", body: newRun({ block: "The file cuts before its first tool change (M6): the laser probe would cut." }) }) },
+    ]},
+    { id: "after", n: "5", h: "After start", p: "The Run screen closes and the main screen takes over. The drawer opens fully expanded once for each new job (not when reconnecting to a job already running). Swipe down for the slim job line.", shots: [
+      { t: "Job details (drawer fully open)", s: "sim", d: "Opens on its own when the job starts. Left and Done at come from the file's time estimate, adjusted to how fast the machine is really going.", html: mainScreen({}) },
+      { t: "Drawer down: slim job line", s: "z1", d: "The readouts come back. The job line shows percent and time left; tap it or swipe up for the details.", html: mainScreen({ details: false }) },
+      { t: "Tool change popup", s: "z1", d: "Shown whenever the machine waits in a tool change, including after a reconnect. Continue sends M490.2, the same as the machine's button.", html: mainScreen({ pill: "Tool change", pillCls: "tool", tool: true, dialog: toolDialog }) },
+      { t: "Leveling mesh", s: "no", ch: 1, d: "When a leveling grid is active, a Mesh chip appears under the progress bar. Tapping it reads the grid (M375.1) and shows this sheet. The values here are examples.", html: mainScreen({ sheet: meshSheet }) },
+    ]},
+  ];
+
+  document.getElementById("board").innerHTML = sections.map(sec => `
+    <section id="${sec.id}"><header><span class="n">${sec.n}</span><h2>${sec.h}</h2></header><p>${sec.p}</p>
+      <div class="grid">${sec.shots.map(sh => `<figure>${sh.html}<figcaption><div class="top"><h3>${sh.t}${sh.ch ? '<span class="chg">changed</span>' : ""}</h3><span class="st ${S[sh.s][0]}">${S[sh.s][1]}</span></div><p>${sh.d}</p></figcaption></figure>`).join("")}</div>
+    </section>`).join("");
+})();
+</script>

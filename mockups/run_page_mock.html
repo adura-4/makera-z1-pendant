@@ -1,0 +1,409 @@
+<title>Run Page Redesign</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a review board. Page shell follows the viewer's theme; the phones are the app's own fixed dark palette. */
+:root {
+  --page: #EEF1F5; --ink: #18202B; --muted: #5A6675; --rule: #D3D9E1; --panel: #FFFFFF; --accent: #0A7FB5;
+  --st-z1: #157F3B; --st-z1-bg: #DDF3E4; --st-sim: #0A6FA0; --st-sim-bg: #DCEFF8; --st-no: #8A5A00; --st-no-bg: #FBEFD3;
+  --frame: #0E1420;
+  /* the app (App.kt darkColorScheme + RunScreen.kt) */
+  --a-bg: #0B1120; --a-card: #172033; --a-tile: #1E293B; --a-pri: #38BDF8; --a-onpri: #00222F; --a-txt: #E2E8F0; --a-mut: #94A3B8;
+  --a-ok: #86EFAC; --a-okbg: #0F2E1C; --a-warn: #FDE68A; --a-warnbg: #3A2A0B; --a-bad: #F87171; --a-badbg: #3B1212;
+  --a-sheet: #111A2B; --a-map: #202326; --a-outline: #64748B; --a-green: #22C55E; --a-green-ink: #052E16;
+  --f-head: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --f-app: Roboto, "Segoe UI", system-ui, sans-serif;
+  --f-appmono: "Roboto Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --page: #0F141B; --ink: #E3E8EF; --muted: #9AA6B5; --rule: #273140; --panel: #161D27; --accent: #5CC3EE;
+  --st-z1: #7EE2A0; --st-z1-bg: #12301E; --st-sim: #7CCBF0; --st-sim-bg: #0F2A3A; --st-no: #F3CF7A; --st-no-bg: #33270C;
+  --frame: #000000; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --page: #0F141B; --ink: #E3E8EF; --muted: #9AA6B5; --rule: #273140; --panel: #161D27; --accent: #5CC3EE;
+  --st-z1: #7EE2A0; --st-z1-bg: #12301E; --st-sim: #7CCBF0; --st-sim-bg: #0F2A3A; --st-no: #F3CF7A; --st-no-bg: #33270C;
+  --frame: #000000; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font: 14px/1.5 var(--f-body); margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; }
+h1, h2 { font-family: var(--f-head); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 600; letter-spacing: .2px; }
+.lede { color: var(--muted); max-width: 70ch; margin: 6px 0 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.st { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px/1 var(--f-body); letter-spacing: .3px; text-transform: uppercase; padding: 5px 8px; border-radius: 4px; white-space: nowrap; }
+.st::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.st.z1 { color: var(--st-z1); background: var(--st-z1-bg); }
+.st.sim { color: var(--st-sim); background: var(--st-sim-bg); }
+.st.no { color: var(--st-no); background: var(--st-no-bg); }
+nav.steps { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--page); border-bottom: 1px solid var(--rule); margin-top: 22px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--page); }
+nav.steps ol { list-style: none; display: flex; gap: 4px; margin: 0; padding: 10px 0; overflow-x: auto; }
+nav.steps a { display: block; padding: 6px 12px; border-radius: 4px; color: var(--ink); text-decoration: none; font: 500 13px var(--f-body); white-space: nowrap; }
+nav.steps a:hover, nav.steps a:focus-visible { background: var(--panel); outline: 2px solid transparent; box-shadow: 0 0 0 1px var(--rule); }
+nav.steps a span { font-family: var(--f-mono); color: var(--accent); margin-right: 6px; }
+section { padding-top: 34px; scroll-margin-top: 56px; }
+section > header { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--rule); padding-bottom: 8px; }
+section > header .n { font-family: var(--f-mono); color: var(--accent); font-size: 15px; }
+section > header h2 { font-size: 22px; font-weight: 600; }
+section > p { color: var(--muted); max-width: 72ch; margin: 8px 0 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 30px 26px; margin-top: 18px; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+figcaption { display: flex; flex-direction: column; gap: 6px; max-width: 372px; }
+figcaption .top { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+figcaption h3 { margin: 0; font: 600 15px/1.3 var(--f-body); }
+figcaption p { margin: 0; color: var(--muted); font-size: 13px; }
+figcaption code { font-family: var(--f-mono); font-size: 12px; color: var(--ink); }
+.open { margin-top: 40px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
+.open h2 { font-size: 20px; }
+.open ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 6px; max-width: 80ch; }
+.foot { color: var(--muted); font-size: 12.5px; margin-top: 18px; max-width: 80ch; }
+
+/* ---------- phone ---------- */
+.phone { width: 372px; max-width: 100%; min-height: 740px; border: 6px solid var(--frame); border-radius: 30px; background: var(--a-bg); color: var(--a-txt);
+  font: 400 11.5px/1.35 var(--f-app); position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 10px 28px rgba(10,20,40,.18); }
+.sbar { height: 22px; display: flex; justify-content: space-between; align-items: center; padding: 0 18px; font-size: 10.5px; color: var(--a-mut); flex: none; }
+.scr { flex: 1; display: flex; flex-direction: column; gap: 7px; padding: 4px 10px 10px; min-height: 0; }
+.mut { color: var(--a-mut); } .okc { color: var(--a-ok); } .warnc { color: var(--a-warn); } .badc { color: var(--a-bad); } .pric { color: var(--a-pri); }
+.s12 { font-size: 10.5px; } .s13 { font-size: 11.4px; } .s14 { font-size: 12.2px; } .s15 { font-size: 13px; }
+.b { font-weight: 500; }
+.title { display: flex; align-items: center; gap: 6px; }
+.title .x { width: 34px; height: 34px; display: grid; place-items: center; font-size: 18px; color: var(--a-txt); }
+.title .t { font-size: 15.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.tabs { display: flex; gap: 2px; height: 26px; flex: none; }
+.tabs span { flex: 1; display: grid; place-items: center; font-size: 10.5px; white-space: nowrap; background: var(--a-card); color: var(--a-mut); padding: 0 8px;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%, 8px 50%); }
+.tabs span:first-child { clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); padding-left: 0; border-radius: 8px 0 0 8px; }
+.tabs span:last-child { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 8px 50%); padding-right: 0; border-radius: 0 8px 8px 0; }
+.tabs span.done { color: var(--a-pri); background: rgba(56,189,248,.22); }
+.tabs span.on { background: var(--a-pri); color: var(--a-onpri); font-weight: 500; }
+.chg { display: inline-block; font: 600 10.5px var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
+.map { position: relative; height: 148px; border-radius: 9px; background: var(--a-map); flex: none; }
+.map > svg { position: absolute; inset: 7px; width: calc(100% - 14px); height: calc(100% - 14px); }
+.leg { position: absolute; left: 7px; top: 7px; background: rgba(60,64,70,.8); border-radius: 5px; padding: 3px 6px; font-size: 8.7px; line-height: 1.45; }
+.leg i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: 0; }
+.leg .bar { width: 96px; height: 3px; background: #3A3F47; margin-top: 2px; border-radius: 2px; overflow: hidden; }
+.leg .bar b { display: block; height: 100%; background: var(--a-pri); }
+.body { flex: 1; display: flex; flex-direction: column; gap: 7px; min-height: 0; }
+.card { background: var(--a-card); border-radius: 9px; padding: 9px; display: flex; flex-direction: column; gap: 4px; }
+.card.sel { box-shadow: inset 0 0 0 1.4px var(--a-pri); }
+.row { display: flex; align-items: center; gap: 8px; }
+.row > .grow { flex: 1; min-width: 0; }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--a-mut); flex: none; margin: 0 6px 0 2px; position: relative; }
+.radio.on { border-color: var(--a-pri); }
+.radio.on::after { content: ""; position: absolute; inset: 2px; border-radius: 50%; background: var(--a-pri); }
+.sw { width: 36px; height: 21px; border-radius: 11px; border: 2px solid var(--a-outline); background: var(--a-tile); position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; width: 11px; height: 11px; border-radius: 50%; background: var(--a-outline); left: 3px; top: 3px; }
+.sw.on { background: var(--a-pri); border-color: var(--a-pri); }
+.sw.on::after { width: 15px; height: 15px; left: 17px; top: 1px; background: var(--a-onpri); }
+.sw.dis { opacity: .38; }
+.fields { display: flex; gap: 7px; }
+.fld { flex: 1; min-width: 0; border: 1px solid var(--a-outline); border-radius: 4px; padding: 9px 9px 7px; position: relative; font: 13px var(--f-appmono); }
+.fld label { position: absolute; top: -7px; left: 7px; padding: 0 3px; background: var(--a-card); font: 9.5px var(--f-app); color: var(--a-mut); }
+.btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 20px; padding: 8px 16px; font-weight: 500; font-size: 12px; background: var(--a-pri); color: var(--a-onpri); white-space: nowrap; }
+.btn.out { background: transparent; color: var(--a-pri); box-shadow: inset 0 0 0 1px var(--a-outline); }
+.btn.out.red { color: var(--a-bad); box-shadow: inset 0 0 0 1px var(--a-bad); }
+.btn.txt { background: transparent; color: var(--a-pri); padding: 6px 8px; }
+.btn.dis { opacity: .38; }
+.foot-btns { display: flex; gap: 9px; flex: none; }
+.foot-btns .btn { flex: 1; height: 42px; font-size: 13.8px; }
+.btn.go { background: var(--a-green); color: var(--a-green-ink); font-weight: 600; }
+.btn.go.dis { background: rgba(226,232,240,.12); color: rgba(226,232,240,.38); opacity: 1; }
+.banner { border-radius: 9px; padding: 9px; font-size: 11.4px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.banner.warn { background: var(--a-warnbg); color: var(--a-warn); }
+.banner.ok { background: var(--a-okbg); color: var(--a-ok); }
+.banner.bad { background: var(--a-badbg); color: var(--a-bad); }
+.banner.info { background: var(--a-card); color: var(--a-pri); }
+.r2 { display: flex; gap: 0; padding: 1.5px 0; font-size: 11.4px; }
+.r2 > span:first-child { width: 70px; flex: none; color: var(--a-mut); }
+.checks { display: flex; flex-direction: column; gap: 2px; font-size: 11.4px; }
+.err { color: var(--a-bad); font-size: 11.4px; flex: none; }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--a-sheet); border-radius: 22px 22px 0 0; padding: 10px 14px 20px; display: flex; flex-direction: column; gap: 9px; }
+.sheet .grab { width: 32px; height: 4px; border-radius: 2px; background: var(--a-mut); opacity: .5; align-self: center; margin-bottom: 6px; }
+.sheet h4 { margin: 0; font-size: 15.5px; font-weight: 500; color: #fff; }
+.choice { background: var(--a-card); border-radius: 9px; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.choice b { font-weight: 500; font-size: 13px; } .choice span { font-size: 10.9px; color: var(--a-mut); }
+.choice.pri { box-shadow: inset 0 0 0 1.4px var(--a-pri); }
+.dialog { position: absolute; left: 22px; right: 22px; top: 50%; transform: translateY(-50%); background: var(--a-sheet); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 7px; }
+
+/* files */
+.flist { display: flex; flex-direction: column; }
+.fitem { display: flex; gap: 10px; padding: 9px 4px; align-items: center; border-bottom: 1px solid rgba(148,163,184,.08); }
+.fitem .ic { width: 18px; color: var(--a-mut); text-align: center; }
+.tag { font-size: 9.5px; border-radius: 7px; padding: 0 5px; margin-left: 5px; }
+.acts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.acts div { background: var(--a-tile); border-radius: 9px; padding: 9px 0 7px; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; }
+.acts div i { font-style: normal; font-size: 15px; color: var(--a-pri); }
+
+/* main screen + drawer */
+.mhead { display: flex; align-items: center; gap: 6px; padding-top: 3px; }
+.mhead .nm { flex: 1; min-width: 0; } .mhead .nm b { display: block; font-weight: 500; font-size: 12.2px; } .mhead .nm span { font-size: 9.6px; color: var(--a-mut); }
+.pill { border-radius: 20px; padding: 5px 12px; font-weight: 700; font-size: 12.2px; color: #fff; background: #16A34A; white-space: nowrap; }
+.pill.tool { background: var(--a-pri); color: var(--a-onpri); }
+.ico { width: 26px; text-align: center; color: var(--a-txt); font-size: 14px; }
+.readouts { display: flex; flex-direction: column; gap: 5px; }
+.ro { background: var(--a-tile); border-radius: 9px; padding: 8px 10px; display: flex; align-items: center; gap: 10px; font-family: var(--f-appmono); }
+.ro b { color: var(--a-pri); width: 14px; } .ro .w { font-size: 17px; font-weight: 600; flex: 1; } .ro .m { font-size: 10px; color: var(--a-mut); }
+.drawer { background: var(--a-card); border-radius: 14px 14px 9px 9px; display: flex; flex-direction: column; padding: 0 7px 7px; gap: 5px; }
+.drawer.full { flex: 1; }
+.handle { height: 26px; display: grid; place-items: center; position: relative; }
+.handle::before { content: ""; width: 35px; height: 4px; border-radius: 2px; background: var(--a-mut); opacity: .6; }
+.jd { display: flex; flex-direction: column; gap: 7px; flex: 1; }
+.jfile { display: flex; align-items: center; gap: 7px; padding: 3px; font-size: 12.2px; }
+.jfile .n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pct { display: flex; align-items: flex-end; gap: 9px; }
+.pct b { font: 600 29px/1 var(--f-appmono); }
+.pbar { height: 10px; border-radius: 5px; background: #0F1A2E; overflow: hidden; } .pbar b { display: block; height: 100%; background: var(--a-pri); border-radius: 5px; }
+.cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.cell { background: var(--a-tile); border-radius: 9px; padding: 5px 8px; min-width: 0; }
+.cell span { display: block; font-size: 9.6px; color: var(--a-mut); }
+.cell b { font: 600 14px var(--f-appmono); white-space: nowrap; } .cell small { font-size: 9.6px; color: var(--a-mut); margin-left: 2px; }
+.tools { background: var(--a-tile); border-radius: 9px; padding: 7px 9px; display: flex; flex-direction: column; gap: 6px; }
+.chips { display: flex; align-items: center; gap: 4px; font: 11.4px var(--f-appmono); }
+.chips .now { color: var(--a-pri); font-weight: 600; box-shadow: inset 0 0 0 1px var(--a-pri); border-radius: 5px; padding: 0 5px; }
+.chips .done { color: var(--a-mut); opacity: .55; text-decoration: line-through; padding: 0 5px; }
+.chips .nx { padding: 0 5px; } .chips .sep { color: var(--a-mut); opacity: .6; }
+.tl { display: flex; gap: 7px; font-size: 10.9px; align-items: baseline; }
+.tl .k { width: 30px; flex: none; font-size: 9.6px; color: var(--a-mut); } .tl .t { width: 26px; flex: none; color: var(--a-pri); font: 600 11.4px var(--f-appmono); }
+.feed { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.feed .lbl { width: 54px; } .feed .step { width: 26px; text-align: center; color: var(--a-pri); font-size: 17px; }
+.feed .track { flex: 1; height: 26px; border-radius: 8px; background: var(--a-tile); position: relative; overflow: hidden; }
+.feed .track b { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: rgba(56,189,248,.22); }
+.feed .p { width: 46px; text-align: right; font: 13px var(--f-appmono); }
+.stops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.stops span { height: 44px; border-radius: 22px; display: grid; place-items: center; font-size: 13.8px; background: var(--a-tile); }
+.stops .hold { background: #D97706; color: #fff; } .stops .res { color: #22C55E; } .stops .rst { background: #DC2626; color: #fff; }
+.jline { display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 3px; font-size: 11.4px; }
+.jline .pbar { flex: 1; height: 5px; }
+.mesh { display: grid; gap: 3px; } .mesh span { text-align: center; border-radius: 4px; padding: 7px 0; font: 10.5px var(--f-appmono); color: #fff; }
+@media (prefers-reduced-motion: no-preference) { nav.steps a { transition: background .15s; } }
+/* ---------- proposed Run page ---------- */
+.sum { background: var(--a-card); border-radius: 9px; padding: 10px 11px; display: flex; flex-direction: column; gap: 7px; }
+.sec-h { display: flex; align-items: center; justify-content: space-between; font-size: 9.8px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--a-mut); }
+.sec-h .ed { color: var(--a-pri); text-transform: none; letter-spacing: 0; font-size: 11.4px; }
+.hero { display: flex; align-items: baseline; gap: 8px; }
+.hero b { font: 600 30px/1 var(--f-appmono); letter-spacing: -.5px; }
+.hero span { font-size: 11.4px; color: var(--a-mut); } .hero b small { font-size: 16px; font-weight: 500; color: var(--a-mut); margin-left: 1px; }
+.rule { height: 1px; background: rgba(148,163,184,.14); }
+.tool { display: flex; gap: 8px; align-items: baseline; font-size: 11.4px; }
+.tool .t { color: var(--a-pri); font: 600 11.4px var(--f-appmono); width: 22px; flex: none; }
+.tool .d { min-width: 0; flex: 1; } .tool .tm { font: 500 11.4px var(--f-appmono); color: var(--a-txt); flex: none; } .tool .d small { display: block; font-size: 10.2px; color: var(--a-mut); }
+.seq { display: flex; gap: 9px; align-items: flex-start; }
+.seq .n { width: 19px; height: 19px; border-radius: 50%; background: var(--a-tile); color: var(--a-pri); display: grid; place-items: center; font: 600 10px var(--f-appmono); flex: none; margin-top: 1px; }
+.seq b { display: block; font-weight: 500; font-size: 12.2px; } .seq span { font-size: 10.5px; color: var(--a-mut); }
+.kv { display: flex; align-items: baseline; gap: 10px; font-size: 12.2px; }
+.kv > span:first-child { width: 52px; flex: none; color: var(--a-mut); font-size: 11.4px; }
+.kv .v { flex: 1; min-width: 0; } .kv .v small { display: block; font-size: 10.2px; color: var(--a-mut); }
+.achips { display: flex; flex-wrap: wrap; gap: 5px; }
+.achip { font-size: 10.9px; padding: 2px 9px; border-radius: 12px; background: rgba(56,189,248,.16); color: var(--a-pri); }
+.lstat { display: flex; align-items: center; gap: 6px; font-size: 10.9px; padding-top: 1px; }
+.lstat i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.side { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 372px), 1fr)); gap: 30px 26px; margin-top: 18px; }
+.qs { margin-top: 40px; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 20px; }
+.qs h2 { font-size: 20px; } .qs ol, .qs ul { margin: 10px 0 0; padding-left: 20px; display: grid; gap: 8px; max-width: 80ch; }
+.tagnew { color: var(--accent); font: 600 10.5px var(--f-mono); letter-spacing: .05em; text-transform: uppercase; }
+
+</style>
+<div class="wrap">
+  <h1>Run page, redesigned</h1>
+  <p class="lede">A proposal for the last page of Run, the one with Start job. Left is the page as it is now; the rest are the new layout in the states it has to handle. The new layout is a mockup only. The app still has the old page.</p>
+  <div class="meta">
+    <span>Job <b>AIR_pendant_block_air_test_Setup1.cnc</b></span>
+    <span>Estimate <b>802 s = 13m 22s</b> from the pendant's estimator (JobTime.kt) on this file</span>
+  </div>
+  <div class="side" id="board"></div>
+
+  <div class="qs">
+    <h2>What changed from the current page</h2>
+    <ul>
+      <li><b>Time first, as the real estimate:</b> 13m 22s, not "about 13 min". It covers the file's moves only; the precheck routine (scan, Z probe, leveling) and the time you spend at tool changes aren't in it.</li>
+      <li><b>Tool changes</b> as a plain count.</li>
+      <li><b>Durations read as durations:</b> 13m 22s, 1m 20s, and 1h 05m once a job passes an hour, so they can't be mistaken for a clock time.</li>
+      <li><b>The tools the job needs,</b> from the file's own tool comments, in the order it uses them, each with its own estimate: the moves from its tool change to the next one. On this job that's 1m 20s and 12m 02s; the real passes took 1m 20s and 11m 46s.</li>
+      <li><b>"Precheck routine"</b> lists what the machine does first, in the order it runs them, with what each one is. Clearing the old leveling mesh isn't listed: it happens on every start, so it isn't a choice worth showing.</li>
+      <li><b>Assist</b> shows the modes that are on as their own names, in chips. "None on" when nothing is.</li>
+      <li><b>The checklist is gone.</b> The laser probe's state is one line inside "Precheck routine", the only place it matters. Anything that stops Start (still loading, off the bed, cuts before M6) shows as one line above the buttons, as now.</li>
+      <li>"Hold · Resume · Reset stay on the main screen." is dropped.</li>
+    </ul>
+  </div>
+  <div class="qs">
+    <h2>Your call</h2>
+    <ol>
+      <li><b>Edit links.</b> Each card has an Edit link that jumps back to its page (Precheck routine → Checks, Origin and Assist → their pages). Keep them, or leave the Back button as the only way back?</li>
+      <li><b>Tool lines.</b> Files from your Fusion post carry a description for each tool. A file with no tool comments would show just T1, T2. Fine?</li>
+      <li><b>No leveling mesh line.</b> Should it say anything when an old mesh is cleared, or stay silent as shown?</li>
+    </ol>
+  </div>
+  <p class="foot">Mockup only, rebuilt with the same phone styles as the Run flow review. Not in the app yet.</p>
+</div>
+
+<script>
+(() => {
+  // ---- tonight's numbers ----------------------------------------------------------------------
+  const BED = { x0: -207, x1: -1, y0: -206, y1: -1 };
+  const ORIGIN = [-171.357, -155.896], ANCHOR = [-190.69, -194.58];
+  const EXT = { minX: -13.747, minY: -23.434, maxX: 13.99, maxY: 22.002 };
+  const FILE = "AIR_pendant_block_air_test_Setup1.cnc";
+  const T1 = "Spiral O Metal 3.175*12mm Makera · flat end mill";
+  const T2 = "OSG 404-1250-BN 1/8 4FL Carbide Ball OSG 404-1250-BN · ball end mill";
+
+  // ---- bed map (RunScreen.BedMap) -------------------------------------------------------------
+  function bedMap(o = {}) {
+    const W = 334, H = 134;                       // drawing area inside the 7px padding
+    const bw = BED.x1 - BED.x0, bh = BED.y1 - BED.y0, k = Math.min(W / bw, H / bh);
+    const ox = (W - bw * k) / 2, oy = (H - bh * k) / 2;
+    const P = (x, y) => [ox + (x - BED.x0) * k, oy + (BED.y1 - y) * k];
+    let s = `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">`;
+    const [bx, by] = P(BED.x0, BED.y1);
+    s += `<rect x="${bx}" y="${by}" width="${bw * k}" height="${bh * k}" fill="#2A2E33"/>`;
+    // 4 x 4 equal cells, so the grid ends on the bed's edges
+    for (let i = 1; i < 4; i++) {
+      const gx = BED.x0 + bw * i / 4, gy = BED.y0 + bh * i / 4;
+      const [a, b] = P(gx, BED.y0), [c, d] = P(gx, BED.y1), [e, f] = P(BED.x0, gy), [g, h] = P(BED.x1, gy);
+      s += `<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="#34393F"/><line x1="${e}" y1="${f}" x2="${g}" y2="${h}" stroke="#34393F"/>`;
+    }
+    // The anchor bracket at full size (anchor_width 15, anchor_length 100): Anchor 1 is its inside corner
+    const AW = 15, AL = 100;
+    const [lx, ly] = P(ANCHOR[0] - AW, ANCHOR[1] - AW + AL), [fx, fy] = P(ANCHOR[0] - AW, ANCHOR[1]);
+    s += `<rect x="${lx}" y="${ly}" width="${AW * k}" height="${AL * k}" fill="#8A929C"/><rect x="${fx}" y="${fy}" width="${AL * k}" height="${AW * k}" fill="#8A929C"/>`;
+    const org = o.origin || ORIGIN;
+    if (!o.loading) {
+      const [tlx, tly] = P(org[0] + EXT.minX, org[1] + EXT.maxY), [brx, bry] = P(org[0] + EXT.maxX, org[1] + EXT.minY);
+      const col = o.offBed ? "#F87171" : o.scan === "done" ? "#FB923C" : "#4ADE80";
+      s += `<rect x="${tlx}" y="${tly}" width="${brx - tlx}" height="${bry - tly}" fill="${col}" fill-opacity=".12" stroke="${col}" stroke-width="1.4" ${o.scan === "done" ? "" : 'stroke-dasharray="4 3"'}/>`;
+      if (o.level) for (let i = 0; i < o.level[0]; i++) for (let j = 0; j < o.level[1]; j++) {
+        const [x, y] = P(org[0] + EXT.minX + (i / (o.level[0] - 1)) * (EXT.maxX - EXT.minX), org[1] + EXT.minY + (j / (o.level[1] - 1)) * (EXT.maxY - EXT.minY));
+        s += `<circle cx="${x}" cy="${y}" r="1.8" fill="#FACC15"/>`;
+      }
+      const [cx, cy] = P(org[0], org[1]);
+      s += `<circle cx="${cx}" cy="${cy}" r="3" fill="#38BDF8"/>`;
+      if (o.z) { const [zx, zy] = o.zAt ? P(org[0] + EXT.minX + o.zAt[0], org[1] + EXT.minY + o.zAt[1]) : [cx, cy];
+        s += `<circle cx="${zx}" cy="${zy}" r="4.5" fill="none" stroke="#F87171" stroke-width="1.6"/>`; }
+    }
+    const sp = o.spindle || [-171.4, -150];
+    const [sx, sy] = o.scan === "running" ? P(org[0] + EXT.maxX, org[1] + EXT.minY) : P(sp[0], sp[1]);
+    if (o.scan === "running") s += `<circle cx="${sx}" cy="${sy}" r="3" fill="#FF3B30"/>`;
+    else s += `<path d="M${sx - 4} ${sy}h8M${sx} ${sy - 4}v8" stroke="#FFFFFF" stroke-width="1.1"/>`;
+    s += `</svg>`;
+    let leg;
+    if (o.loading) leg = `Loading X/Y limits…<div class="bar"><b style="width:${o.loading}%"></b></div>`;
+    else {
+      leg = `<div><i style="background:#4ADE80"></i>Cutting area 27.7 × 45.4</div><div><i style="background:#38BDF8"></i>Origin</div>`;
+      if (o.z) leg += `<div><i style="background:#F87171"></i>Z probe</div>`;
+      if (o.level) leg += `<div><i style="background:#FACC15"></i>Leveling</div>`;
+      if (o.scan === "running") leg += `<div><i style="background:#FF3B30"></i>Laser</div>`;
+    }
+    return `<div class="map">${s}<div class="leg">${leg}</div></div>`;
+  }
+
+  // ---- pieces ---------------------------------------------------------------------------------
+  const sb = `<div class="sbar"><span>1:39</span><span>▾ ▴ ▮</span></div>`;
+  const tabs = step => `<div class="tabs">${["Origin", "Checks", "Assist", "Run"].map((t, i) =>
+      `<span class="${i === step ? "on" : i < step ? "done" : ""}">${t}</span>`).join("")}</div>`;
+  const sw = (on, dis) => `<span class="sw${on ? " on" : ""}${dis ? " dis" : ""}" role="img" aria-label="${on ? "on" : "off"}"></span>`;
+  const fld = (l, v) => `<div class="fld"><label>${l}</label>${v}</div>`;
+  const r2 = (k, v) => `<div class="r2"><span>${k}</span><span>${v}</span></div>`;
+
+  function runShell({ step, map, body, error, start = "on", overlay = "" }) {
+    const btns = step < 3
+      ? `<span class="btn out">${step === 0 ? "Cancel" : "Back"}</span><span class="btn">Next</span>`
+      : `<span class="btn out">Back</span><span class="btn go${start === "off" ? " dis" : ""}">Start job</span>`;
+    return `<div class="phone">${sb}<div class="scr">
+      <div class="title"><span class="x">✕</span><span class="t">Run ${FILE}</span></div>
+      ${tabs(step)}
+      ${step !== 2 ? map : ""}
+      <div class="body">${body}</div>
+      ${error ? `<div class="err">${error}</div>` : ""}
+      <div class="foot-btns">${btns}</div>
+    </div>${overlay}</div>`;
+  }
+
+  const banner = {
+    needed: `<div class="banner warn">Laser probe needed · T1 is in the collet</div>`,
+    checkingMove: `<div class="banner info">Going to the tool change spot…</div>`,
+    waiting: `<div class="banner info">Put in the laser probe, then continue.<span class="btn">The laser probe is in · continue</span></div>`,
+    measuring: `<div class="banner info">Measuring it on the tool setter…</div>`,
+    ok: `<div class="banner ok">✓ Laser probe checked</div>`,
+    wrong: `<div class="banner bad">That's the 3D probe, not the laser probe.<span class="row"><span class="btn">Swap to the laser probe</span></span></div>`,
+    wrongUnknown: `<div class="banner bad">Its length doesn't match the laser probe's.<span class="row"><span class="btn">Swap to the laser probe</span><span class="btn txt">It's the laser probe: save its length</span></span></div>`,
+    failed: `<div class="banner bad">Laser probe check stopped: the setter reading didn't come through, so it couldn't tell which probe is in. Measure it again.<span class="btn txt">Try again</span></div>`,
+  };
+
+  const laserSheet = (probeIn) => {
+    const swap = p => `<div class="choice${p ? " pri" : ""}"><b>Swap to the laser probe</b><span>Goes to the tool change spot and waits while you swap, then measures it on the setter.</span></div>`;
+    const inNow = p => `<div class="choice${p ? " pri" : ""}"><b>It's already in</b><span>Sets T0 (no motion), then measures it on the setter and checks its length against the laser probe's.</span></div>`;
+    return `<div class="scrim"></div><div class="sheet"><div class="grab"></div><h4>This needs the laser probe</h4>
+      <div class="s14 mut">${probeIn ? "The machine says a probe is in (T9999). It measures it on the tool setter to tell which probe it is." : "T1 is in the collet now."}</div>
+      ${probeIn ? inNow(true) + swap(false) : swap(true) + inNow(false)}
+      <span class="btn txt" style="align-self:flex-start">Cancel</span></div>`;
+  };
+
+  // Step 4: run summary
+  function runBody({ laser = "none", checksLaser, block, margin = "scanned at start", atStart = "clear the old mesh, probe Z", time = true, idle = true }) {
+    const lb = laser === "none" ? "" : banner[laser];
+    const laserLine = checksLaser || { none: ["•", "Laser probe: checked when you start"], waiting: ["•", "Laser probe: being checked"], measuring: ["•", "Laser probe: being checked"], ok: ["✓", "Laser probe in"], wrong: ["•", "Laser probe: not confirmed"], failed: ["•", "Laser probe: not confirmed"] }[laser];
+    const line = (ok, t) => `<div class="${ok ? "okc" : "warnc"}">${ok ? "✓" : "•"} ${t}</div>`;
+    return `<div class="card">
+        ${r2("Origin", "Current origin")}${r2("Margin", margin)}${r2("At start", atStart)}${r2("Assist", "vacuum")}
+        ${time ? r2("Time", "about 13 min of machine time · 2 tool changes") : ""}
+      </div>${lb}
+      <div class="checks">${line(true, "Toolpath loaded")}${line(laserLine[0] === "✓", laserLine[1])}</div>
+      ${block ? `<div class="s13 warnc">${block}</div>` : ""}
+      <div class="s12 mut">Hold · Resume · Reset stay on the main screen.</div>`;
+  }
+
+
+  const ORIGIN_A1 = [ANCHOR[0] - EXT.minX, ANCHOR[1] - EXT.minY];
+  const TOOLS = [["T1", "Spiral O Metal 3.175*12mm Makera", "flat end mill", "1m 20s"], ["T2", "OSG 404-1250-BN 1/8 4FL Carbide Ball", "ball end mill", "12m 02s"]];
+  const STEP = {
+    scan: ["Scan the margin", "The laser traces the cutting area, so you can see it's on the stock"],
+    z: ["Probe Z", "Sets Z zero on the stock top, at the middle of the cutting area"],
+    level: ["Auto leveling, 3 × 3", "Touches a grid over the cutting area; the job follows the surface"],
+  };
+  const LSTAT = {
+    none: `<div class="lstat mut"><i></i>Uses the laser probe. It's checked when you tap Start.</div>`,
+    ok: `<div class="lstat okc"><i></i>Laser probe checked</div>`,
+    busy: `<div class="lstat pric"><i></i>Checking the laser probe…</div>`,
+    wrong: `<div class="lstat badc"><i></i>Not the laser probe</div>`,
+  };
+
+  function newRun({ before = ["scan", "z"], assist = ["Auto vacuum"], laser = "none", origin = ["Current origin", "X 19.333 · Y 38.684 from Anchor 1"], banner: bn = "", block = "" }) {
+    const tools = TOOLS.map(([t, n, k, tm]) => `<div class="tool"><span class="t">${t}</span><span class="d">${n}<small>${k}</small></span><span class="tm">${tm}</span></div>`).join("");
+    const seq = before.length
+      ? before.map((s, i) => `<div class="seq"><span class="n">${i + 1}</span><div><b>${STEP[s][0]}</b><span>${STEP[s][1]}</span></div></div>`).join("") + LSTAT[laser]
+      : "";
+    const as = assist.length ? `<div class="achips">${assist.map(a => `<span class="achip">${a}</span>`).join("")}</div>` : `<span class="mut">None on</span>`;
+    return `
+      <div class="sum">
+        <div class="hero"><b>13<small>m</small> 22<small>s</small></b><span>machine time, estimated</span></div>
+        <div class="rule"></div>
+        <div class="kv"><span style="width:auto;flex:1">Tool changes</span><span class="b" style="font-family:var(--f-appmono)">2</span></div>
+        <div class="rule"></div>${tools}
+      </div>
+      ${seq ? `<div class="sum"><div class="sec-h"><span>Precheck routine</span><span class="ed">Edit</span></div>${seq}</div>` : ""}
+      <div class="sum">
+        <div class="kv"><span>Origin</span><span class="v">${origin[0]}<small>${origin[1]}</small></span><span class="pric s13">Edit</span></div>
+        <div class="rule"></div>
+        <div class="kv"><span>Assist</span><span class="v">${as}</span><span class="pric s13">Edit</span></div>
+      </div>
+      ${bn}${block ? `<div class="s13 warnc">${block}</div>` : ""}`;
+  }
+
+  const S = { now: ["no", "Now"], new: ["sim", "Proposed"] };
+  const shots = [
+    { s: "now", t: "The page today", d: "For comparison: the summary rows, the checklist and the main-screen note.", html: runShell({ step: 3, map: bedMap({ z: true }), body: runBody({}) }) },
+    { s: "new", t: "Ready to start (tonight's job)", d: "Margin scan and Z probe at start, auto vacuum on. The time is the estimator's 13m 22s for this file, split per tool; the tools come from its comments.", html: runShell({ step: 3, map: bedMap({ z: true }), body: newRun({}) }) },
+    { s: "new", t: "Everything on, Anchor 1", d: "Leveling as well, and the laser probe already checked on the Checks page, so its line is green. Origin shows the offset.", html: runShell({ step: 3, map: bedMap({ origin: ORIGIN_A1, z: true, level: [3, 3] }), body: newRun({ before: ["scan", "z", "level"], laser: "ok", assist: ["Auto vacuum", "Auto blow"], origin: ["Anchor 1", "Offset X 13.75 · Y 23.43 from the bracket's corner"] }) }) },
+    { s: "new", t: "No precheck routine", d: "Current origin with Z already set, no scan, no leveling, no assist: the Precheck routine card isn't shown at all.", html: runShell({ step: 3, map: bedMap(), body: newRun({ before: [], assist: [] }) }) },
+    { s: "new", t: "Start: laser swap waiting", d: "After Start, the swap's progress and its continue button sit under the cards, as on today's page.", html: runShell({ step: 3, map: bedMap({ z: true }), body: newRun({ laser: "busy", banner: banner.waiting }) }) },
+    { s: "new", t: "Start blocked", d: "Whatever stops Start is one line above the buttons. Start stays off.", html: runShell({ step: 3, map: bedMap({ z: true }), start: "off", body: newRun({ block: "The file cuts before its first tool change (M6): the laser probe would cut." }) }) },
+  ];
+  document.getElementById("board").innerHTML = shots.map(sh => `<figure>${sh.html}<figcaption><div class="top"><h3>${sh.t}</h3><span class="st ${S[sh.s][0]}">${S[sh.s][1]}</span></div><p>${sh.d}</p></figcaption></figure>`).join("");
+})();
+</script>

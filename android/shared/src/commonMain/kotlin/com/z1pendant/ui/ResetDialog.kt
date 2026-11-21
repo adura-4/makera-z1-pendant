@@ -25,7 +25,7 @@ import androidx.compose.ui.window.Dialog
  * halts until it's unlocked. Hold stays one tap: that's the quick way to pause.
  */
 @Composable
-fun ResetDialog(onReset: () -> Unit, onDismiss: () -> Unit) {
+fun ResetDialog(onReset: () -> Unit, onDismiss: () -> Unit, jobActive: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     val bold = SpanStyle(fontWeight = FontWeight.SemiBold)
     Dialog(onDismissRequest = onDismiss) {
@@ -34,7 +34,7 @@ fun ResetDialog(onReset: () -> Unit, onDismiss: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Warning, null, Modifier.size(30.dp), tint = Color(0xFFF87171))
                     Spacer(Modifier.width(10.dp))
-                    Text("Reset machine?", fontSize = 24.sp)
+                    Text(if (jobActive) "Cancel the job?" else "Stop the machine?", fontSize = 24.sp)
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Cancel") }
                 }
@@ -44,10 +44,9 @@ fun ResetDialog(onReset: () -> Unit, onDismiss: () -> Unit) {
                     }, fontSize = 15.sp)
                     Column(Modifier.padding(start = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text("•  motion and the spindle stop", fontSize = 14.sp)
-                        Text("•  a running job is cancelled (it can't be resumed)", fontSize = 14.sp)
-                        Text(buildAnnotatedString {
-                            append("•  the controller halts: "); withStyle(bold) { append("Unlock") }; append(" before moving again")
-                        }, fontSize = 14.sp)
+                        if (jobActive) Text("•  the job is cancelled (it can't be resumed)", fontSize = 14.sp)
+                        Text("•  then the alarm is cleared, so you can move again", fontSize = 14.sp)
+                        if (jobActive) Text("•  and you're back on the main screen", fontSize = 14.sp)
                     }
                     Text(buildAnnotatedString {
                         append("To pause and carry on, use "); withStyle(bold) { append("Hold") }; append(" instead.")
@@ -56,7 +55,7 @@ fun ResetDialog(onReset: () -> Unit, onDismiss: () -> Unit) {
                     Button(onClick = onReset,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White),
                         modifier = Modifier.align(Alignment.CenterHorizontally).fillMaxWidth(0.6f).height(50.dp)) {
-                        Text("Reset", fontSize = 18.sp)
+                        Text(if (jobActive) "Cancel job" else "Stop", fontSize = 18.sp)
                     }
                 }
             }

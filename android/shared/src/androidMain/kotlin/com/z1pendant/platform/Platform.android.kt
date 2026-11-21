@@ -17,6 +17,25 @@ actual fun nowMs(): Long = SystemClock.elapsedRealtime()
 
 actual fun wallClockHms(): String = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
 
+actual fun epochSeconds(): Long = System.currentTimeMillis() / 1000
+
+actual fun utcOffsetSeconds(epochSec: Long): Int = java.util.TimeZone.getDefault().getOffset(epochSec * 1000) / 1000
+
+@Composable
+actual fun rememberFilePicker(onPicked: (name: String, bytes: ByteArray) -> Unit): () -> Unit {
+    val ctx = LocalContext.current
+    val callback = androidx.compose.runtime.rememberUpdatedState(onPicked)
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val name = ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+            ?: uri.lastPathSegment?.substringAfterLast('/') ?: "file.nc"
+        val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@rememberLauncherForActivityResult
+        callback.value(name, bytes)
+    }
+    return remember(launcher) { { launcher.launch(arrayOf("*/*")) } }
+}
+
 actual fun platformLog(level: Char, tag: String, msg: String) {
     when (level) {
         'D' -> Log.d(tag, msg)

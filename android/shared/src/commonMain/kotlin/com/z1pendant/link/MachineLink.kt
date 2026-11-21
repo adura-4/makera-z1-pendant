@@ -51,6 +51,25 @@ interface MachineLink {
     fun queryJobFile() {}
     /** A file on the machine's SD card as text, or null if it can't be read. */
     suspend fun downloadFile(path: String): String? = null
+    /** The same, reporting packets read of the total as it goes. */
+    suspend fun downloadFile(path: String, onProgress: (done: Int, total: Int) -> Unit): String? = downloadFile(path)
+
+    // ---- files on the machine's SD card (answered by the Wi-Fi board; nothing moves) ----
+    /** A folder's entries, or null if it couldn't be read. A missing folder reads as empty on the Z1. */
+    suspend fun listDir(path: String): List<RemoteEntry>? = null
+    /** The rest return null when done, or the reason it failed. */
+    suspend fun makeDir(path: String): String? = "not supported"
+    suspend fun rename(from: String, to: String): String? = "not supported"
+    /** A folder is deleted with everything inside. */
+    suspend fun delete(path: String): String? = "not supported"
+    /**
+     * Copy [data] to [path], replacing a file of the same name. [onProgress] gets bytes sent and the total,
+     * and returns false to cancel. Busy (another app transferring) is retried for up to 15 s.
+     */
+    suspend fun uploadFile(path: String, data: ByteArray,
+                           onProgress: (sent: Long, total: Long) -> Boolean = { _, _ -> true }): String? = "not supported"
+    /** The start of a file: read until [enough] says so (or [maxBytes]), then stop the transfer. */
+    suspend fun readFileHead(path: String, maxBytes: Int = 65536, enough: (String) -> Boolean = { false }): String? = null
 
     /** Backend-specific commands, so built-ins don't hard-code one dialect. */
     val dialect: Dialect
@@ -65,6 +84,9 @@ data class JobFile(val path: String, val md5: String) {
 }
 
 private val NoJobFile = kotlinx.coroutines.flow.MutableStateFlow<JobFile?>(null)
+
+/** One entry of a folder on the SD card. [modified] is the Z1's UTC time stamp, "YYYYMMDDhhmmss". */
+data class RemoteEntry(val name: String, val isDir: Boolean, val size: Long, val modified: String)
 
 data class MachineTarget(val name: String, val host: String, val port: Int)
 
@@ -98,6 +120,12 @@ data class MachineStatus(
     /** Feed actually moving at / programmed, mm/min (`|F:actual,set,override|`). */
     val feedActual: Double? = null,
     val feedSet: Double? = null,
+    /** The raw `|S:` fields (current, target, override, then the assist modes and temperatures). */
+    val sFields: List<String>? = null,
+    /** A leveling grid is active: `|O:` (the grid's largest correction, mm). */
+    val mesh: Double? = null,
+    /** Why the machine halted (`|H:`, only while halted): 13 e-stop, 3 probe fail, … (see haltText). */
+    val halt: Int? = null,
 ) {
     val isIdle get() = state.equals("Idle", ignoreCase = true)
     val isAlarm get() = state.equals("Alarm", ignoreCase = true)

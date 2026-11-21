@@ -16,13 +16,17 @@ For installing and using the app, see the [README](../README.md).
       runner with guards (ask first, Idle only).
     - `ui/*`: all the Compose UI: main screen, handwheel, jog pad, hotkey grid and editor, Move box,
       settings, console. `AppViewModel.kt`: state and actions.
+    - `probe/`: the probe wizard's model (`ProbeModel.kt`: setups, Makera's M480 commands, the
+      pendant's own touch sequences, which probe is in by its setter height) and controller
+      (`ProbeController.kt`: load/calibrate, runs, undo and set-zero).
     - `platform/Platform.kt`: what each phone supplies (preferences, hotkeys.json, haptics, clock,
       back button, hotkey file picker); `util/Fmt.kt`: number formatting identical to Java's.
   - `shared/src/androidMain`: SharedPreferences "z1pendant", filesDir/hotkeys.json, vibrator, file pickers.
   - `shared/src/iosMain`: NSUserDefaults, Documents/hotkeys.json, Taptic feedback, and
     `MainViewController()` for the iOS app. Not compiled on Windows; the Xcode project comes later on a Mac.
-  - `shared/src/androidUnitTest`: formatter vs Java, hotkey JSON vs org.json, frames, and the link
-    against `z1sim.py` (`gradlew :shared:testDebugUnitTest`).
+  - `shared/src/androidUnitTest`: formatter vs Java, hotkey JSON vs org.json, frames, probing
+    sequences, and the link and the probe wizard's controller against `z1sim.py`
+    (`gradlew :shared:testDebugUnitTest`).
   - `app/`: the Android shell: `MainActivity` (key events, Wi-Fi low-latency lock, keep-screen-on,
     adb test hooks), manifest, icon.
 - `python/z1proto.py`: wire protocol (frames, CRC, status and discovery parsers) with a self-test.
@@ -31,6 +35,78 @@ For installing and using the app, see the [README](../README.md).
 - `python/z1sim.py`: machine simulator: discovery broadcast, TCP 2222, G0/G1/G90/G91/G10 L20/G53/$H/$X,
   M220, M821/M822, M851/M852, `diagnose`, hold/resume/halt, a 32-block queue with the firmware's 100 ms
   start delay, and soft limits X −207..−1, Y −206..−1, Z −102..−1 that alarm like the real machine.
+- `python/z1sim_probe.py`: probing for the simulator: a block and a pocket to probe, G38.2/G38.6 with
+  `[PRB:]`, Makera's M480.1–.10 routines, M491 and `M6 T9999` with the tool-change wait (M490.2
+  continues) and the setter calibration. `simprobe dead` makes the probe never trigger;
+  `simprobe len <dz>` makes the setter trip dz mm higher, standing in for another probe.
+- `python/z1upload.py`: send a file to the SD card (`/sd/gcodes/…`) or fetch one, over Wi-Fi. One file,
+  standard library only, so a Fusion add-in can carry it. Refuses while a job runs and never overwrites
+  the playing file. The simulator answers uploads like the Wi-Fi board (`simxfer drop <seq>` loses one
+  data packet); `python/test_z1upload.py` runs the cases against it. Like Makera's app it sets the Wi-Fi
+  board's clock first (`time <Unix seconds>`), so files aren't dated 1980.
+- `LiveDownloadTest` (unit tests) checks the app's file download on a real machine, read-only; it runs only
+  with `Z1_LIVE_HOST=<ip>` (and optionally `Z1_LIVE_FILE=/sd/gcodes/<name>`) set.
+- `python/fsprobe.py`: send the Wi-Fi board's file commands (`ls -s`, `mkdir`, `mv`, `rm`) and print every reply
+  frame raw. The simulator answers them like the board (`Machine.fs_command`).
+
+## Files screen
+The top bar's folder icon opens `FilesScreen` (`ui/FilesScreen.kt`, state in `files/FilesController.kt`; mockup
+`mockups/files_mock.html`): browse `/sd/gcodes` and its folders, Job info, rename, delete (also several at once),
+new folder, upload from the phone (Android document picker, iOS Files picker via `rememberFilePicker`).
+Everything is answered by the Wi-Fi board; nothing moves the machine.
+- Commands, measured on the Z1 2026-11-16 (`reference/file_commands_notes.md` in the parent project): `ls -s <dir>`
+  answers 0x83 chunks (`name/ 0 YYYYMMDDhhmmss` for folders, `name  size YYYYMMDDhhmmss` for files, UTC, spaces
+  as 0x01) and 0x84 `Load directory finished.`; `mkdir`, `mv <from> <to>`, `rm` answer 0x84 `ok` (plus 0x90 info) or
+  0x85 with the reason. `rm` on a folder deletes everything in it. `mv`/`rm` keep the `.md5` cache in step.
+  0x84 is also an "ok": `MakeraLink.fsCommand` takes these frames while a command waits, so it's never taken as
+  a G-code ack.
+- Upload is `z1upload.py`'s protocol in Kotlin (`MakeraLink.uploadFile`): cancel any leftover transfer, set the
+  clock, B0 + B1 (MD5, `util/Md5.kt`), then answer the board's B2/B3 requests; 0x91 or a leftover is retried for 15 s.
+- Job info reads only the file's header (`MachineLink.readFileHead`, stopped once a line of G-code has arrived):
+  stock height and Z zero from the Carvera community post's header, each tool once (`JobFileParser`)
+  (`files/JobInfo.kt`). Only what Fusion's own post output carries: the stock's X × Y size isn't in it, so
+  the pendant doesn't show one, and rows the file doesn't have are left out.
+- Rules: nothing writes to the card (upload, delete, rename, new folder) while the Z1 is running, paused, changing
+  tools or homing, and never the playing file. Names are cleaned like the Fusion plugin's (spaces → `_`). An upload
+  to a taken name asks: replace, keep both (`name_2.cnc`), or cancel. Newest first by default.
+- Tests: `FilesParseTest` (listing, labels, names, Job info, MD5 against Java's), `FilesSimTest` (list, mkdir,
+  upload into a folder, cancel, rename, header read, delete, the controller's rules) and `LiveFilesTest` (opt-in
+  with `Z1_LIVE_HOST`, works only in a throwaway `_pendant_live_test` folder; `Z1_LIVE_INFO_FILE` adds a Job info read).
+
+## Run a job
+`ui/RunScreen.kt` (state in `run/RunController.kt`, pure parts in `run/RunModel.kt`; mockup
+`mockups/run_mock.html`). Opened from the Run tile (`BuiltIn.RUN_JOB`, which opens Files as "Select File";
+added once to existing hotkey sets) or a file's sheet.
+- How Studio starts a job, captured 2026-11-17 (`reference/captures/studio_job_start_20261117.md` in the parent
+  project): `buffer M495 X<minX>Y<minY>[C<maxX>D<maxY>][O<dx>F<dy>][A<w>B<h>I<nx>J<ny>H<h>]P1`, then
+  `play <path>`. X/Y are the toolpath's min corner in work coordinates (feed moves' end points,
+  `Toolpath.extents`, which matches Studio on can_lid_op1.cnc); P1 = go there at safe Z first. M495 never
+  sets an origin: Studio uses `G10L2P0X…Y…` (machine coordinates) separately. The pendant sends `M370`
+  (clear the old leveling grid) before the buffer line.
+- Origin, applied on Next from step 1: Anchor 1 = `G10L2P0X<anchor1+offX>Y<anchor1+offY>` with Anchor 1 read
+  live (`config-get sd coordinate.anchor1_x/_y`); where the spindle is = `G10L20P0X0Y0` (sent once per choice).
+  "Same as CAM" = the community post's "X/Y Offset" header lines (the WCS from Fusion's part attach point:
+  only right if the setup's part position is set and the stock sits in the bracket).
+- The firmware's M495 (community `ATCHandler.cpp`) inserts its own M6 T0 unless the active tool is 0, and
+  refuses an uncalibrated probe. So before Scan now or a start that probes, the pendant gets the laser probe
+  in itself: `M6 T0` (swap + setter calibration) or, "already in", `M493.2 T0` then `M491` (setting the
+  number marks the length unmeasured, so this order). `ProbeController.checkAs = LASER` compares the setter
+  height with the laser probe's learned length; another probe's length stops it. The check holds while the
+  machine says T0.
+- Scan now = `M495 X Y C D` on its own; done on "Done ATC" (or the M494.2 after the trace); the live dot is the
+  machine position. Not homed: the firmware silently does nothing, so no echo in 4 s reads as a failure.
+- Assist switches: `M331[.n]` on / `M332[.n]` off, state from `|S:` fields 4, 7, 8, 10 (n = 0, 1, 2, 4).
+  Plain M331 answers "extend out mode" on this firmware.
+- Mesh: `|O:` in the status while a grid is active (the chip); `M375.1` prints it (`Mesh.parse` takes the plain
+  rows and the human-readable table). The firmware applies an active grid to every move (jogs too) until
+  `M370`, and outside the probed area the stock build uses the nearest grid edge's value, so the pendant
+  clears it when a job ends or is cancelled. On connect, a grid with the machine Idle and no job (three
+  statuses without `|P:`) opens a Clear / Keep popup (`AppViewModel.meshPrompt`).
+- Tool change popup (`ToolChangePopup`): state `Tool`, the wanted tool from `|T:` field 3, Continue = `M490.2`.
+- Tests: `RunModelTest` (extents, the M495 line against Studio's, origin lines, CAM offset, M6 guard, mesh,
+  assist/mesh status fields). The simulator (`python/z1sim.py`) answers config-get, buffer, M495 (scan, Z probe,
+  leveling, P), M331/M332, M370/M375.1 and G10 L2; run on the Dell it's reached from the phone with
+  `adb reverse tcp:2222 tcp:2222` and 127.0.0.1 (the Dell's firewall blocks 2222).
 
 ## Protocol (Makera app decompile + community firmware `MakeraFrame.h`)
 `86 68 | len u16 BE | type | payload | CRC u16 BE | 55 AA`, len = 1 + payload + 2,
@@ -78,11 +154,26 @@ that are dropped (one thud vibration per 150 ms at most), so when input stops or
 axis stops within that distance. Moves are clamped to the soft limits while the machine is homed.
 
 A **jog session** starts from the machine position in a status that arrived *after* the first click
-(never an older reading, which could be stale after a Wi-Fi gap), and ends once the machine is Idle and
-quiet for 0.3 s. During a session the reported position must stay on the commanded path (between the
-start and the targets sent, ±0.02 for status rounding) and the other axes must stay put. If not,
-something else moved the machine: the session ends (thud, clicks dropped) and the next click starts
-over from a fresh reading.
+(never an older reading, which could be stale after a Wi-Fi gap), taken while the machine is
+**settled**: Idle, or "Run, no job, feed 0" (spindle on, axes still) that has lasted 0.6 s. Every move
+starts with ~0.1 s of exactly "Run, feed 0" (the queue delay) while the status still shows the old
+position, so a session started there would aim from a stale spot. The session ends once the machine is
+settled **at its target** (or, if it stopped elsewhere, after 2 s still). During a session the reported
+position must stay on the commanded path (between the start and the targets sent, ±0.02 for status
+rounding) and X, Y and A must stay put. If not, something else moved the machine: the session ends
+(thud, clicks dropped) and the next click starts over from a fresh reading.
+
+**Z while moving reads differently.** Idle, the Z1 reports the planned position; moving, the motors'
+position. On 2026-11-20 Z read +0.3492 mm higher while moving, at every X/Y, with no leveling grid loaded
+(no `|O:`), cause unknown. A leveling grid adds its correction the same way. So Z is never an "other
+axis" in the path check, and the engine learns the offset during X/Y/A jogs (still Z, moving vs Idle)
+and takes it off moving Z readings (`JogEngine.planned`), so a Z jog's lead and path use planned Z. Before
+it has been learned, a moving Z gets 1 mm of slack. Before this, the 0.35 mm "jump" ended every jog the
+moment the machine moved, and the next click restarted from a stale position: once it sent the machine
+back 4 mm.
+
+**Trace:** while jogging, the engine logs every click, status, session start/end and move sent with its
+numbers under logcat tag `JogTrace` (`adb logcat -v epoch -s JogTrace:D JogEngine:I MakeraLink:*`).
 
 Jog pad: a tap is one click; a held button repeats after 0.4 s at `max(120 ms, step / axis max speed)`,
 and letting go drops any clicks not yet sent.
@@ -111,6 +202,10 @@ while the machine had little queued.
 ## Haptics
 VibrationEffect composition primitives: TICK per detent, CLICK every 10th, THUD when clicks are dropped
 or blocked, a double click at a soft limit. Strength is in Settings.
+Phones without primitives (the Galaxy S21 has none) get short one-shot pulses at an amplitude that
+follows the strength (12 ms detent, 20 ms every 10th, 40 ms thud, two 20 ms pulses 60 ms apart at a
+limit). A phone without amplitude control either plays the predefined tick/click effects at a fixed
+strength; Settings then says the slider only switches vibration on or off.
 On Android 13+ they play as `USAGE_PHYSICAL_EMULATION` (vibrations that stand in for a hardware part,
 here the handwheel's detents). Without attributes Android files short primitives as touch feedback, and
 the phone's **Touch feedback** switch then silences them; many people turn that off to quiet the
@@ -238,6 +333,8 @@ skipped queue delay doesn't show. `$J F0.05` ran at about 60 mm/min, so its rate
 1200 mm/min. A burst of ten `$J X-0.05` 40 ms apart all ran (0.5 mm exactly).
 
 ## Still unverified
+- The Run flow on the real Z1 (built and run against the simulator 2026-11-17): M495 with O/F/A/B/I/J/H letters,
+  Scan now outside a job, the "Done ATC" end of a direct M495, the `|O:` format, and `M375.1`'s output.
 - The file download on the real machine (protocol from the Makera app + Wi-Fi board decompiles; run on the simulator).
 - Whether the stock firmware takes `M223` with two decimals and what its spindle "target" field means.
 - Y/Z upper soft limits (assumed −1 like X).

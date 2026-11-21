@@ -1,0 +1,91 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bed Mesh Mock</title>
+<style>
+:root{--bg:#0B1120;--tile:#1E293B;--muted:#94A3B8;--pri:#38BDF8;--txt:#E2E8F0}
+body{margin:0;background:#05080f;color:var(--txt);font-family:system-ui,Segoe UI,Roboto,sans-serif;display:flex;gap:28px;justify-content:center;padding:24px 16px;flex-wrap:wrap}
+.phone{width:360px;background:var(--bg);border-radius:28px;padding:18px 14px;box-shadow:0 0 0 2px #1f2937}
+h1{font-size:18px;font-weight:500;margin:4px 0 12px;display:flex;align-items:center;gap:8px}
+h1 span{color:var(--pri)}
+.seg{display:flex;background:var(--tile);border-radius:10px;padding:3px;margin-bottom:10px}
+.seg button{flex:1;border:0;background:none;color:var(--muted);padding:8px;border-radius:8px;font-size:14px}
+.seg button.on{background:#0f2a3f;color:var(--pri);box-shadow:inset 0 0 0 1px var(--pri)}
+canvas{width:332px;height:300px;background:#111A2B;border-radius:16px;display:block;touch-action:none}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}
+.stat{background:var(--tile);border-radius:10px;padding:7px 4px;text-align:center}
+.stat b{display:block;font-family:ui-monospace,Consolas,monospace;font-size:14px;font-weight:500}
+.stat i{font-style:normal;font-size:11px;color:var(--muted)}
+.row{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);margin:8px 2px}
+.row input[type=range]{flex:1}
+.legend{height:10px;border-radius:5px;background:linear-gradient(90deg,#2563EB,#22C55E,#EAB308,#EF4444);margin:4px 2px 2px}
+.lg{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;margin:0 2px}
+.note{max-width:380px;font-size:13.5px;line-height:1.5;color:#cbd5e1}
+.note h2{font-size:15px;color:var(--txt)}
+.btn{width:100%;border:0;border-radius:24px;background:var(--pri);color:#062033;font-size:16px;padding:12px;margin-top:10px}
+</style></head><body>
+<div class="phone">
+  <h1><span>◎</span>Bed mesh</h1>
+  <div class="seg"><button id="b3d" class="on">3D</button><button id="bmap">Heat map</button></div>
+  <canvas id="c" width="664" height="600"></canvas>
+  <div class="legend"></div><div class="lg"><span id="lmin"></span><span>0</span><span id="lmax"></span></div>
+  <div class="stats">
+    <div class="stat"><b id="smin"></b><i>lowest</i></div>
+    <div class="stat"><b id="smax"></b><i>highest</i></div>
+    <div class="stat"><b id="srange"></b><i>range</i></div>
+    <div class="stat"><b>5 × 5</b><i>points</i></div>
+  </div>
+  <div class="row" id="exrow">Height ×<input id="ex" type="range" min="50" max="600" value="250"><span id="exv"></span></div>
+  <div class="row"><label><input id="wire" type="checkbox" checked> Wireframe</label>&nbsp;&nbsp;<label><input id="pts" type="checkbox" checked> Probed points</label></div>
+  <button class="btn">Probe the mesh</button>
+</div>
+<div class="note">
+  <h2>What this mock shows</h2>
+  <p>Sample data, not your machine: a 5×5 grid over 120×80 mm with a slight tilt and a bow, ±0.06 mm.</p>
+  <p><b>3D:</b> drag to rotate (one finger), the surface is smoothed between probed points (the same bilinear interpolation the firmware applies while cutting), colored by height, with the probed points as dots. "Height ×" exaggerates Z so 0.05 mm is visible.</p>
+  <p><b>Heat map:</b> the grid from above with each probed value printed: easier to read numbers on a phone.</p>
+  <p>Stats like Mainsail: lowest, highest, range (Mainsail calls max−min "variance").</p>
+</div>
+<script>
+const NX=5,NY=5,W=120,H=80;
+const Z=[];for(let j=0;j<NY;j++){Z.push([]);for(let i=0;i<NX;i++){const x=i/(NX-1)*W,y=j/(NY-1)*H;
+ Z[j].push(+(0.00045*x-0.0004*y+0.035*Math.sin(Math.PI*x/W)*Math.sin(Math.PI*y/H)-0.03+0.004*Math.sin(i*7+j*3)).toFixed(4))}}
+const flat=Z.flat(),zmin=Math.min(...flat),zmax=Math.max(...flat);
+const f=v=>(v>=0?'+':'')+v.toFixed(3);
+smin.textContent=f(zmin);smax.textContent=f(zmax);srange.textContent=(zmax-zmin).toFixed(3);lmin.textContent=f(zmin);lmax.textContent=f(zmax);
+function zAt(x,y){const gx=x/W*(NX-1),gy=y/H*(NY-1);const i=Math.min(NX-2,Math.floor(gx)),j=Math.min(NY-2,Math.floor(gy));const u=gx-i,v=gy-j;
+ return Z[j][i]*(1-u)*(1-v)+Z[j][i+1]*u*(1-v)+Z[j+1][i]*(1-u)*v+Z[j+1][i+1]*u*v}
+const stops=[[37,99,235],[34,197,94],[234,179,8],[239,68,68]];
+function col(z,a=1){let t=(z-zmin)/(zmax-zmin||1);t=Math.max(0,Math.min(1,t))*(stops.length-1);const k=Math.min(stops.length-2,Math.floor(t)),u=t-k;
+ const c=stops[k].map((s,n)=>Math.round(s+(stops[k+1][n]-s)*u));return `rgba(${c},${a})`}
+const cv=document.getElementById('c'),g=cv.getContext('2d');let yaw=-0.6,pitch=0.9,mode='3d';
+function proj(x,y,z){const ex=+document.getElementById('ex').value;const s=3.6;
+ let px=(x-W/2),py=(y-H/2),pz=z*ex;
+ const cx=px*Math.cos(yaw)-py*Math.sin(yaw),cy=px*Math.sin(yaw)+py*Math.cos(yaw);
+ const sy=cy*Math.cos(pitch)-pz*Math.sin(pitch),depth=cy*Math.sin(pitch)+pz*Math.cos(pitch);
+ return [332+cx*s,330-sy*s*-1*-1+0,depth]}
+function draw(){g.clearRect(0,0,664,600);exv.textContent=document.getElementById('ex').value;
+ if(mode==='map')return drawMap();
+ const S=24,q=[];
+ for(let j=0;j<S;j++)for(let i=0;i<S;i++){const x0=i/S*W,x1=(i+1)/S*W,y0=j/S*H,y1=(j+1)/S*H;
+  const p=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(([x,y])=>{const z=zAt(x,y);return [...proj(x,y,z),z]});
+  q.push({p,d:p.reduce((a,b)=>a+b[2],0)/4,z:p.reduce((a,b)=>a+b[3],0)/4})}
+ // base plane outline at z = lowest
+ const base=[[0,0],[W,0],[W,H],[0,H]].map(([x,y])=>proj(x,y,zmin-0.02));g.strokeStyle='#334155';g.lineWidth=1.5;g.beginPath();base.forEach((b,n)=>n?g.lineTo(b[0],b[1]):g.moveTo(b[0],b[1]));g.closePath();g.stroke();
+ q.sort((a,b)=>a.d-b.d);const wire=document.getElementById('wire').checked;
+ for(const k of q){g.beginPath();k.p.forEach((b,n)=>n?g.lineTo(b[0],b[1]):g.moveTo(b[0],b[1]));g.closePath();g.fillStyle=col(k.z);g.fill();
+  g.strokeStyle=wire?'rgba(11,17,32,.35)':col(k.z);g.lineWidth=wire?0.8:1;g.stroke()}
+ if(document.getElementById('pts').checked)for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const p=proj(i/(NX-1)*W,j/(NY-1)*H,Z[j][i]);g.fillStyle='#fff';g.beginPath();g.arc(p[0],p[1],4.5,0,7);g.fill();g.strokeStyle='#0B1120';g.lineWidth=1.5;g.stroke()}
+ // axis hints
+ const o=proj(0,0,zmin-0.02),ax=proj(W,0,zmin-0.02),ay=proj(0,H,zmin-0.02);g.fillStyle='#94A3B8';g.font='22px system-ui';g.fillText('X',ax[0]+8,ax[1]+8);g.fillText('Y',ay[0]-26,ay[1]);g.fillText('front',(o[0]+ax[0])/2-24,(o[1]+ax[1])/2+34)}
+function drawMap(){const m=24,cw=(664-2*m)/NX,ch=(600-2*m-30)/NY;g.font='500 25px ui-monospace,Consolas,monospace';g.textAlign='center';g.textBaseline='middle';
+ for(let j=0;j<NY;j++)for(let i=0;i<NX;i++){const x=m+i*cw,y=m+(NY-1-j)*ch;g.fillStyle=col(Z[j][i],.85);g.beginPath();g.roundRect(x+3,y+3,cw-6,ch-6,10);g.fill();
+  g.fillStyle='#0B1120';g.fillText(Z[j][i].toFixed(3),x+cw/2,y+ch/2)}
+ g.fillStyle='#94A3B8';g.font='21px system-ui';g.fillText('front (−Y)',332,600-22);g.textAlign='left'}
+let drag=null;cv.onpointerdown=e=>{drag=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId)};
+cv.onpointermove=e=>{if(!drag||mode!=='3d')return;yaw+=(e.clientX-drag[0])*0.01;pitch=Math.max(0.15,Math.min(1.45,pitch+(e.clientY-drag[1])*0.01));drag=[e.clientX,e.clientY];draw()};
+cv.onpointerup=()=>drag=null;
+['ex','wire','pts'].forEach(id=>document.getElementById(id).oninput=draw);
+b3d.onclick=()=>{mode='3d';b3d.className='on';bmap.className='';exrow.style.display='';draw()};
+bmap.onclick=()=>{mode='map';bmap.className='on';b3d.className='';exrow.style.display='none';draw()};
+draw();
+</script></body></html>

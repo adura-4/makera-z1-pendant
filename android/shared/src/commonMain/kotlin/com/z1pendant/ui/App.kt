@@ -47,6 +47,13 @@ fun PendantTheme(content: @Composable () -> Unit) {
 fun App(vm: AppViewModel) {
     var settings by remember { mutableStateOf(false) }
     var console by remember { mutableStateOf(false) }
+    var files by remember { mutableStateOf(false) }
+    var probing by remember { mutableStateOf(false) }
+    /** The probe wizard was opened from the Run flow's Custom origin: it goes back there. */
+    var probeFromRun by remember { mutableStateOf(false) }
+    val runActive by vm.run.active.collectAsState()
+    val runPick by vm.runPick.collectAsState()
+    var meshOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Hotkey?>(null) }
     var editorOpen by remember { mutableStateOf(false) }
     val confirm by vm.confirmFor.collectAsState()
@@ -61,7 +68,7 @@ fun App(vm: AppViewModel) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         // Full-screen pages live in the activity window (not Dialogs) so dispatchKeyEvent sees
         // every button press, which the "press any button to bind" flow relies on.
-        vm.onMainScreen = !(editorOpen || settings || console)
+        vm.onMainScreen = !(editorOpen || settings || console || probing || files || runActive || runPick)
         // Windows 600 dp or wider (iPad, Android tablet) get the wide layout; see LocalWide.
         androidx.compose.runtime.CompositionLocalProvider(LocalWide provides (maxWidth >= 600.dp),
             LocalLandscape provides (maxWidth >= 840.dp && maxWidth > maxHeight)) {
@@ -69,15 +76,40 @@ fun App(vm: AppViewModel) {
                 editorOpen -> HotkeyEditor(vm, editing) { editorOpen = false; editing = null; vm.capture.value = null }
                 settings -> SettingsScreen(vm) { settings = false }
                 console -> ConsoleScreen(vm) { console = false }
-                else -> MainScreen(vm, onSettings = { settings = true }, onConsole = { console = true },
-                    onEdit = { editing = it; editorOpen = true }, scroll = mainScroll)
+                probing -> ProbeWizard(vm, doneLabel = if (probeFromRun) "Next" else "Done", requireZero = probeFromRun) { zeroSet ->
+                    probing = false
+                    if (probeFromRun) { probeFromRun = false; vm.run.probeReturned(zeroSet) }
+                }
+                runActive -> RunScreen(vm, onProbe = { probeFromRun = true; probing = true })
+                files || runPick -> FilesScreen(vm, pickForRun = runPick && !files,
+                    onRun = { p -> files = false; vm.runPick.value = false; vm.run.open(p) }) { files = false; vm.runPick.value = false }
+                else -> MainScreen(vm, onSettings = { settings = true }, onConsole = { console = true }, onFiles = { files = true },
+                    onEdit = { editing = it; editorOpen = true }, scroll = mainScroll, onProbe = { probing = true })
             }
         }
+        if (vm.onMainScreen) ToolChangePopup(vm)
         SnackbarHost(snackHost, Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing))
     } }
     if (spindleAsk) SpindleDialog(vm) { vm.spindleAsk.value = false }
     if (spindleStopAsk) SpindleStopDialog(vm) { vm.spindleStopAsk.value = false }
-    if (resetAsk) ResetDialog(onReset = vm::confirmReset, onDismiss = { vm.resetAsk.value = false })
+    if (meshOpen) MeshSheet(vm) { meshOpen = false }
+    LaunchedEffect(Unit) { vm.run.meshShow.collect { if (it) { meshOpen = true; vm.run.meshShow.value = false } } }
+    if (resetAsk) ResetDialog(onReset = vm::confirmReset, onDismiss = { vm.resetAsk.value = false },
+        jobActive = vm.link.status.collectAsState().value?.job != null)
+    val alarmSheet by vm.alarmSheet.collectAsState()
+    if (alarmSheet) AlarmSheet(vm)
+    // A leveling grid found on connect (Idle, no job): it shifts Z everywhere until cleared.
+    vm.meshPrompt.collectAsState().value?.let { max ->
+        AlertDialog(onDismissRequest = {},
+            title = { Text("Leveling mesh still active") },
+            text = {
+                Text("The Z1 still has a leveling mesh loaded (largest correction ${com.z1pendant.util.Fmt.fixed(max, 3)} mm), " +
+                    "usually left over from an earlier job. Until it's cleared, the machine adds it to Z on every move, " +
+                    "jogging and setting zero included, so Z positions can be off by that much.")
+            },
+            confirmButton = { TextButton(onClick = vm::clearMesh) { Text("Clear mesh") } },
+            dismissButton = { TextButton(onClick = vm::keepMesh) { Text("Keep") } })
+    }
     confirm?.let { h ->
         AlertDialog(onDismissRequest = { vm.confirmFor.value = null },
             title = { Text("Run “${h.label}”?") },

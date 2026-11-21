@@ -1,0 +1,255 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Probe Tablet Mock</title>
+<style>
+:root{--bg:#0B1120;--tile:#1E293B;--sv:#172033;--muted:#94A3B8;--dim:#64748B;--pri:#38BDF8;--txt:#E2E8F0;--grn:#22C55E;--amb:#F59E0B;--red:#DC2626}
+*{box-sizing:border-box}
+body{margin:0;background:#E5E9F0;font-family:Roboto,system-ui,Segoe UI,sans-serif;padding:20px;color:var(--txt)}
+.cap{color:#1f2937;font-size:15px;margin:22px 4px 8px}
+.tab{width:1180px;height:820px;background:var(--bg);border-radius:30px;padding:16px 22px 18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 0 0 2px #111}
+.sb{display:flex;justify-content:space-between;font-size:12px;color:#cbd5e1;padding:0 6px}
+.hd{display:flex;align-items:center;gap:10px;font-size:22px}
+.hd .x{margin-left:auto;font-size:26px;color:#cbd5e1}
+.ic{color:var(--pri);font-size:24px}
+.prog{display:flex;gap:6px}.prog i{flex:1;height:5px;border-radius:3px;background:#2B3648}.prog i.on{background:var(--pri)}
+.body{flex:1;display:flex;gap:18px;min-height:0}
+.pane{display:flex;flex-direction:column;gap:10px;min-width:0}
+.l{flex:1}.r{flex:1}
+.lab{font-size:13px;color:var(--muted);margin-top:4px}
+.tiles{display:grid;gap:10px}
+.t{background:var(--tile);border-radius:12px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:15px;border:1px solid transparent}
+.t.on{background:#13263b;border-color:var(--pri);color:var(--pri)}
+.t.off{opacity:.35}
+.t small{font-size:11.5px;color:var(--muted)}
+.note{font-size:13px;color:var(--muted)}
+.btns{display:flex;gap:12px;justify-content:flex-end}
+.b{height:54px;border-radius:27px;display:flex;align-items:center;justify-content:center;font-size:18px;min-width:220px}
+.b.p{background:var(--pri);color:#062033}.b.o{border:1.5px solid #cbd5e1;color:var(--pri)}.b.dis{background:#1e2635;color:#4b5563}
+.b.stop{background:var(--red);color:#fff;font-weight:600;font-size:21px;height:64px;width:100%}
+.card{background:var(--tile);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:12px;align-items:flex-start}
+.chk{width:24px;height:24px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:15px;color:#0B1120;font-weight:700}
+.chk.g{background:var(--grn)}.chk.a{background:var(--amb)}
+.ct{font-size:16px;font-weight:500}.cs{font-size:13px;color:var(--muted);line-height:1.4}
+.sm{height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:15px;border:1.5px solid #64748b;color:var(--pri)}
+.sm.p{background:var(--pri);color:#062033;border:0}
+.ro{background:var(--sv);border-radius:14px;padding:6px 0}
+.rr{display:flex;align-items:center;padding:4px 18px;gap:12px}
+.rr.sel{background:#1b3550}
+.rr b{font-size:34px;width:36px;color:#cbd5e1}.rr.sel b{color:var(--pri)}
+.rv{flex:1;text-align:right;font-family:ui-monospace,Consolas,monospace}
+.rv .w{font-size:40px;font-weight:600;line-height:1}.rv .m{font-size:14px;color:var(--muted)}
+.steps{display:flex;border:1px solid #334155;border-radius:10px;overflow:hidden;font-family:ui-monospace,Consolas,monospace;font-size:16px}
+.steps span{flex:1;text-align:center;padding:9px}.steps .on{background:var(--pri);color:#062033}
+.seg{display:flex;background:var(--tile);border-radius:12px;padding:4px}
+.seg span{flex:1;text-align:center;padding:11px;border-radius:9px;color:var(--muted);font-size:15px}
+.seg .on{background:#13263b;color:var(--pri);box-shadow:inset 0 0 0 1px var(--pri)}
+.f{display:flex;align-items:center;gap:14px}
+.fa{width:110px;height:84px;border-radius:12px;background:var(--tile);border:1px solid #334155;flex:none}
+.fl{flex:1;font-size:16px}
+.fb{width:130px;height:46px;border-radius:11px;border:1px solid #5B6474;display:flex;align-items:baseline;justify-content:flex-end;gap:5px;padding:0 12px;line-height:46px;font-family:ui-monospace,Consolas,monospace;font-size:19px}
+.fb small{font-size:12px;color:var(--muted);font-family:Roboto,sans-serif}
+.art{background:#111A2B;border-radius:18px;flex:1;display:flex;align-items:center;justify-content:center}
+.sl{display:flex;gap:10px;align-items:center;font-size:16px;padding:7px 2px}
+.sl .d{width:22px;height:22px;border-radius:50%;flex:none}
+.chips{display:flex;gap:8px}.chips span{background:var(--tile);border-radius:8px;padding:6px 10px;font-family:ui-monospace,Consolas,monospace;font-size:14px;color:#cbd5e1}
+.cells{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cell{background:var(--tile);border-radius:12px;padding:12px}.cell i{font-style:normal;font-size:12.5px;color:var(--muted)}.cell b{display:block;font-family:ui-monospace,Consolas,monospace;font-size:24px;font-weight:500}
+.link{color:var(--pri);font-size:15px}
+.info h4{margin:0 0 2px;font-size:15px;font-weight:500}.info p{margin:0;font-size:13px;color:var(--muted);line-height:1.45}
+</style></head><body>
+
+<!-- reusable SVG bits -->
+<svg width="0" height="0" style="position:absolute">
+ <defs>
+  <symbol id="probe3d" viewBox="0 0 60 60"><rect x="25" y="4" width="10" height="22" rx="2" fill="#94A3B8"/><rect x="21" y="24" width="18" height="12" rx="3" fill="#64748B"/><rect x="28.5" y="36" width="3" height="12" fill="#CBD5E1"/><circle cx="30" cy="50" r="4" fill="#38BDF8"/></symbol>
+  <symbol id="rod" viewBox="0 0 60 60"><path d="M24 25 C14 25 7 30 3 42" stroke="#64748B" stroke-width="5.2" fill="none" stroke-linecap="round"/><path d="M24 25 C14 25 7 30 3 42" stroke="#1E293B" stroke-width="3.8" fill="none" stroke-linecap="round"/><rect x="27.3" y="2" width="5.4" height="16" fill="#CBD5E1"/><rect x="28.4" y="34" width="3.2" height="23" fill="#CBD5E1"/><rect x="23.5" y="17" width="13" height="18" rx="2.5" fill="#1E293B" stroke="#64748B"/><rect x="19" y="21.5" width="6" height="7" rx="1" fill="#1E293B"/></symbol>
+  <symbol id="laser" viewBox="0 0 60 60"><path d="M20 18 C20 10 14 6 10 2" stroke="#64748B" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M20 18 C20 10 14 6 10 2" stroke="#1E293B" stroke-width="3.6" fill="none" stroke-linecap="round"/><rect x="30.5" y="2" width="6" height="9" fill="#CBD5E1"/><rect x="32" y="10" width="3" height="8" fill="#CBD5E1"/><path d="M15 18H42V46H24L15 37Z" fill="#1E293B" stroke="#64748B"/><circle cx="22" cy="31" r="1.3" fill="#EF4444"/><rect x="29.5" y="46" width="8" height="4" rx="1" fill="#CBD5E1"/><rect x="32.3" y="50" width="2.4" height="7" rx="1" fill="#E0A526"/></symbol>
+  <symbol id="block" viewBox="0 0 100 70"><path d="M50 8 L88 26 L50 44 L12 26Z" fill="#475569" stroke="#94A3B8"/><path d="M12 26 L50 44 L50 62 L12 44Z" fill="#334155" stroke="#94A3B8"/><path d="M88 26 L50 44 L50 62 L88 44Z" fill="#253041" stroke="#94A3B8"/></symbol>
+  <symbol id="corner" viewBox="0 0 100 70"><use href="#block"/><g stroke="#38BDF8" fill="none" stroke-width="1.6"><circle cx="31" cy="35" r="4"/><path d="M24 31 L38 39 M24 39 L38 31"/></g></symbol>
+  <symbol id="inside" viewBox="0 0 100 70"><path d="M50 6 L92 26 L50 46 L8 26Z" fill="#475569" stroke="#94A3B8"/><path d="M8 26 L50 46 L50 62 L8 42Z" fill="#334155" stroke="#94A3B8"/><path d="M92 26 L50 46 L50 62 L92 42Z" fill="#253041" stroke="#94A3B8"/><path d="M50 14 L76 26 L50 38 L24 26Z" fill="#0B1120" stroke="#94A3B8"/><g stroke="#38BDF8" fill="none" stroke-width="1.6"><circle cx="37" cy="32" r="4"/><path d="M30 28 L44 36 M30 36 L44 28"/></g></symbol>
+  <symbol id="hole" viewBox="0 0 100 70"><use href="#block"/><ellipse cx="50" cy="26" rx="15" ry="7.5" fill="#0B1120" stroke="#94A3B8"/><g stroke="#38BDF8" fill="none" stroke-width="1.6"><circle cx="50" cy="26" r="4"/><path d="M43 22 L57 30 M43 30 L57 22"/></g></symbol>
+  <symbol id="boss" viewBox="0 0 100 70"><path d="M50 22 L88 40 L50 58 L12 40Z" fill="#334155" stroke="#94A3B8"/><rect x="38" y="16" width="24" height="14" fill="#475569"/><ellipse cx="50" cy="30" rx="12" ry="6" fill="#475569" stroke="#94A3B8"/><ellipse cx="50" cy="16" rx="12" ry="6" fill="#64748B" stroke="#94A3B8"/><g stroke="#38BDF8" fill="none" stroke-width="1.6"><circle cx="50" cy="16" r="4"/><path d="M43 12 L57 20 M43 20 L57 12"/></g></symbol>
+  <symbol id="top" viewBox="0 0 100 70"><use href="#block"/><g stroke="#38BDF8" fill="none" stroke-width="1.6"><circle cx="50" cy="26" r="4"/><path d="M43 22 L57 30 M43 30 L57 22"/></g></symbol>
+  <symbol id="dial" viewBox="0 0 400 400"><circle cx="200" cy="200" r="190" fill="#111827" stroke="#334155" stroke-width="5"/><circle cx="200" cy="200" r="95" fill="#0f172a"/><g stroke="#475569" stroke-width="4" stroke-linecap="round" id="tk"></g><line x1="200" y1="20" x2="200" y2="70" stroke="#38BDF8" stroke-width="8" stroke-linecap="round"/><circle cx="200" cy="80" r="17" fill="#38BDF8"/><text x="200" y="215" text-anchor="middle" fill="#38BDF8" font-size="58" font-weight="700">X</text><text x="200" y="250" text-anchor="middle" fill="#94A3B8" font-size="18" font-family="Consolas,monospace">0.1mm/click</text></symbol>
+ </defs>
+</svg>
+
+<!-- 1 ------------------------------------------------------------------------------------------>
+<div class="cap">1 · Probe and operation: tools and operation side by side, everything visible at once</div>
+<div class="tab">
+ <div class="sb"><span>3:10 PM Sat Nov 15</span><span>Wi-Fi 64%</span></div>
+ <div class="hd"><span class="ic">◎</span>Probe<span class="x">✕</span></div>
+ <div class="prog"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+ <div class="body">
+  <div class="pane" style="flex:0 0 330px">
+   <div class="lab">Probe</div>
+   <div class="tiles" style="grid-template-columns:1fr">
+    <div class="t on" style="flex-direction:row;justify-content:flex-start;padding:10px 16px;gap:14px"><svg width="54" height="54"><use href="#probe3d"/></svg>3D probe</div>
+    <div class="t" style="flex-direction:row;justify-content:flex-start;padding:10px 16px;gap:14px"><svg width="54" height="54"><use href="#rod"/></svg>Probe rod</div>
+    <div class="t" style="flex-direction:row;justify-content:flex-start;padding:10px 16px;gap:14px"><svg width="54" height="54"><use href="#laser"/></svg>Laser probe</div>
+   </div>
+   <div class="note">Probe rod: metal parts only. Laser probe: Top only.</div>
+  </div>
+  <div class="pane r">
+   <div class="lab">Probing operation</div>
+   <div class="tiles" style="grid-template-columns:repeat(3,1fr)">
+    <div class="t on"><svg width="120" height="84"><use href="#corner"/></svg>Outside corner</div>
+    <div class="t"><svg width="120" height="84"><use href="#inside"/></svg>Inside corner</div>
+    <div class="t"><svg width="120" height="84"><use href="#top"/></svg>Top only</div>
+    <div class="t"><div style="display:flex"><svg width="96" height="68"><use href="#hole"/></svg><svg width="96" height="68"><use href="#hole"/></svg></div>Hole center<small>round or square</small></div>
+    <div class="t"><div style="display:flex"><svg width="96" height="68"><use href="#boss"/></svg><svg width="96" height="68"><use href="#block"/></svg></div>Block center<small>round or square</small></div>
+    <div></div>
+   </div>
+   <div class="lab">Corner</div>
+   <div class="tiles" style="grid-template-columns:repeat(4,1fr)">
+    <div class="t">back-left</div><div class="t">back-right</div><div class="t on">front-left</div><div class="t">front-right</div>
+   </div>
+   <div style="flex:1"></div>
+   <div class="btns"><div class="b p">Next</div></div>
+  </div>
+ </div>
+</div>
+
+<!-- 2 ------------------------------------------------------------------------------------------>
+<div class="cap">2 · Check the probe: the checks on the left, "How these work" always open on the right (no sheet to pop up)</div>
+<div class="tab">
+ <div class="sb"><span>3:10 PM Sat Nov 15</span><span>Wi-Fi 64%</span></div>
+ <div class="hd"><span class="ic">◎</span>Check the probe<span class="x">✕</span></div>
+ <div class="prog"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+ <div class="body">
+  <div class="pane l">
+   <div class="card"><div class="row"><div class="chk g">✓</div><div><div class="ct">3D probe in the spindle</div><div class="cs">T9999</div></div></div></div>
+   <div class="card"><div class="row"><div class="chk g">✓</div><div><div class="ct">Calibrated on the tool setter</div><div class="cs">Probe triggered on the setter</div></div></div><div class="sm">⤓ Calibrate again</div></div>
+   <div class="card"><div class="row"><div class="chk a">!</div><div><div class="ct">This looks like the laser probe</div><div class="cs">Setter Z -78.531 matches the laser probe (-78.537), not the 3D probe (-69.570).</div></div></div>
+    <div class="sm p">It's the laser probe</div><div class="cs" style="font-size:12px">The laser probe can only do Top only.</div><div class="sm">No, it's the 3D probe: remember this length</div></div>
+  </div>
+  <div class="pane r">
+   <div class="card info" style="gap:14px">
+    <div><h4>Probe in the spindle</h4><p>The machine only knows a tool number (T9999). If the number is left over from last time, load the probe: it moves to the tool change spot, waits while you swap, then calibrates.</p></div>
+    <div><h4>Calibrated on the tool setter</h4><p>Measures the probe's length on the setter and checks it triggers. Done once each time the probe goes in.</p></div>
+    <div><h4>Which probe is in</h4><p>Each probe trips the setter at its own height. The first calibration of each probe is remembered, so a wrong probe gets caught before it touches your part.</p></div>
+   </div>
+   <div style="flex:1"></div>
+   <div class="btns"><div class="b o">Back</div><div class="b dis">Next</div></div>
+  </div>
+ </div>
+</div>
+
+<!-- 3 ------------------------------------------------------------------------------------------>
+<div class="cap">3 · Move the probe into place: like the main screen (readout left, dial right), the hint and the setup summary under the readout</div>
+<div class="tab">
+ <div class="sb"><span>3:10 PM Sat Nov 15</span><span>Wi-Fi 64%</span></div>
+ <div class="hd"><span class="ic">◎</span>Move the probe into place<span class="x">✕</span></div>
+ <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+ <div class="body">
+  <div class="pane l">
+   <div class="ro">
+    <div class="rr sel"><b>X</b><div class="rv"><div class="w">30.700</div><div class="m">M -85.448</div></div></div>
+    <div class="rr"><b>Y</b><div class="rv"><div class="w">20.000</div><div class="m">M -106.980</div></div></div>
+    <div class="rr"><b>Z</b><div class="rv"><div class="w">5.000</div><div class="m">M -61.000</div></div></div>
+   </div>
+   <div class="card"><div class="row" style="align-items:center"><svg width="90" height="63"><use href="#corner"/></svg><div><div class="ct">Outside corner · front-left</div><div class="cs">Park the ball about 5 mm above the top, over the part, inside the corner. The X and Y start offsets are measured from here.</div></div><span class="link" style="margin-left:auto">edit</span></div></div>
+   <div style="flex:1"></div>
+  </div>
+  <div class="pane r">
+   <div class="steps"><span>0.005</span><span>0.01</span><span class="on">0.1</span><span>1</span><span>5</span></div>
+   <div style="flex:1;display:flex;justify-content:center;align-items:center"><svg width="440" height="440" viewBox="0 0 400 400"><use href="#dial"/></svg></div>
+   <div class="btns"><div class="b o">Back</div><div class="b p">Next</div></div>
+  </div>
+ </div>
+</div>
+
+<!-- 4 ------------------------------------------------------------------------------------------>
+<div class="cap">4 · Settings + Run: the big drawing, mode switch and status on the left; the fields on the right</div>
+<div class="tab">
+ <div class="sb"><span>3:10 PM Sat Nov 15</span><span>Wi-Fi 64%</span></div>
+ <div class="hd"><span class="ic">◎</span>Outside corner · front-left<span class="x">✕</span></div>
+ <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+ <div class="body">
+  <div class="pane l">
+   <div class="art"><svg width="380" height="266"><use href="#corner"/></svg></div>
+   <div class="seg"><span class="on">Set work zero</span><span>Measure only</span></div>
+   <div class="cs">Sets X0 Y0 Z0 at the corner. · Probe in, calibrated, machine Idle.</div>
+  </div>
+  <div class="pane r">
+   <span class="link">ⓘ How these work</span>
+   <div class="note">Distances are from where the probe is now.</div>
+   <div class="f"><div class="fa"></div><div class="fl">X start offset</div><div class="fb">20<small>mm</small></div></div>
+   <div class="f"><div class="fa"></div><div class="fl">Y start offset</div><div class="fb">20<small>mm</small></div></div>
+   <div class="f"><div class="fa"></div><div class="fl">Side depth</div><div class="fb">2.000<small>mm</small></div></div>
+   <div class="f"><div class="fa"></div><div class="fl">Tip diameter</div><div class="fb">2.000<small>mm</small></div></div>
+   <div style="flex:1"></div>
+   <div class="btns"><div class="b o">Back</div><div class="b p">▶ Run probe</div></div>
+  </div>
+ </div>
+</div>
+
+<!-- 5 ------------------------------------------------------------------------------------------>
+<div class="cap">5 · Probing: the run picture big on the left; steps, live position and Stop on the right (Stop stays where the Next button was)</div>
+<div class="tab">
+ <div class="sb"><span>3:10 PM Sat Nov 15</span><span>Wi-Fi 64%</span></div>
+ <div class="hd"><span class="ic">◎</span>Probing<span class="x" style="opacity:.3">✕</span></div>
+ <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+ <div class="body">
+  <div class="pane l">
+   <div class="art">
+    <svg width="520" height="412" viewBox="0 0 120 95">
+     <rect x="44" y="12" width="70" height="56" rx="1.5" fill="#334155" stroke="#94A3B8" stroke-width=".8"/>
+     <circle cx="58" cy="54" r="2.2" fill="none" stroke="#CBD5E1" stroke-width=".8"/>
+     <path d="M58 54 L16 54" stroke="#22C55E" stroke-width=".9" stroke-dasharray="2 1.5"/><path d="M16 54 L41.2 54" stroke="#22C55E" stroke-width=".9"/>
+     <path d="M39.2 52 l4 4 m0 -4 l-4 4" stroke="#22C55E" stroke-width="1"/>
+     <path d="M58 54 L58 88" stroke="#38BDF8" stroke-width=".9" stroke-dasharray="2 1.5"/><path d="M58 88 L58 70.8" stroke="#38BDF8" stroke-width=".9"/>
+     <circle cx="58" cy="70.8" r="5" fill="#38BDF8" opacity=".35"/><circle cx="58" cy="70.8" r="2.8" fill="#38BDF8"/>
+     <path d="M56 52 l4 4 m0 -4 l-4 4" stroke="#22C55E" stroke-width="1"/>
+     <g stroke="#475569" fill="none"><circle cx="44" cy="68" r="2.6"/><path d="M39.5 68h9M44 63.5v9" stroke-width=".8"/></g>
+    </svg>
+   </div>
+  </div>
+  <div class="pane" style="flex:0 0 400px">
+   <div class="ct" style="font-size:19px">Outside corner · front-left</div><div class="cs">Set work zero</div>
+   <div class="card" style="gap:2px">
+    <div class="sl"><div class="d" style="background:var(--grn)"></div>Touch the top<span class="cs" style="margin-left:auto">Z0 set</span></div>
+    <div class="sl"><div class="d" style="background:var(--grn)"></div>Touch the X side<span class="cs" style="margin-left:auto">X0 set</span></div>
+    <div class="sl" style="color:var(--pri);font-weight:500"><div class="d" style="background:var(--pri)"></div>Touch the Y side</div>
+    <div class="sl" style="color:var(--dim)"><div class="d" style="border:2px solid #475569"></div>Move over the corner</div>
+   </div>
+   <div class="chips"><span>X -101.240</span><span>Y -133.002</span><span>Z -72.000</span></div>
+   <div style="flex:1"></div>
+   <div class="b stop">■ Stop</div>
+   <div class="cs" style="text-align:center">Halts the machine at once (reset). Unlock afterwards.</div>
+  </div>
+ </div>
+</div>
+
+<!-- 6 ------------------------------------------------------------------------------------------>
+<div class="cap">6 · Result: the readout (as on the main screen) on the left; what was set, Undo, Probe again / Done on the right</div>
+<div class="tab">
+ <div class="sb"><span>3:10 PM Sat Nov 15</span><span>Wi-Fi 64%</span></div>
+ <div class="hd"><span class="ic">◎</span>Probe finished<span class="x">✕</span></div>
+ <div class="prog"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+ <div class="body" style="flex-direction:column;gap:10px">
+  <!-- the two cards share one row, so they're always the same height -->
+  <div style="display:flex;gap:18px;align-items:stretch">
+   <div class="ro" style="flex:1;display:flex;flex-direction:column;justify-content:space-around">
+    <div class="rr"><b>X</b><div class="rv"><div class="w">0.000</div><div class="m">M -150.000</div></div></div>
+    <div class="rr"><b>Y</b><div class="rv"><div class="w">0.000</div><div class="m">M -150.000</div></div></div>
+    <div class="rr"><b>Z</b><div class="rv"><div class="w">5.000</div><div class="m">M -65.000</div></div></div>
+   </div>
+   <div class="card" style="flex:1;justify-content:space-between">
+    <div class="row"><div class="chk g">✓</div><div><div class="ct">Work zero set: X0 Y0 Z0</div><div class="cs">At the front-left corner, on the top.</div></div></div>
+    <div class="cells"><div class="cell"><i>moved X0 by</i><b>+12.346</b></div><div class="cell"><i>moved Y0 by</i><b>-3.210</b></div></div>
+    <span class="link">↶ Undo X and Y</span>
+   </div>
+  </div>
+  <div class="cs">The probe is parked 5 mm above the corner.</div>
+  <div style="flex:1"></div>
+  <div class="btns"><div class="b o">Probe again</div><div class="b p">Done</div></div>
+ </div>
+</div>
+<script>
+// dial ticks
+const g=document.getElementById('tk');for(let k=0;k<40;k++){const a=k/40*Math.PI*2,l=k%5?18:30;const x1=200+Math.sin(a)*165,y1=200-Math.cos(a)*165,x2=200+Math.sin(a)*(165-l),y2=200-Math.cos(a)*(165-l);
+ const ln=document.createElementNS('http://www.w3.org/2000/svg','line');ln.setAttribute('x1',x1);ln.setAttribute('y1',y1);ln.setAttribute('x2',x2);ln.setAttribute('y2',y2);g.appendChild(ln)}
+</script>
+</body></html>

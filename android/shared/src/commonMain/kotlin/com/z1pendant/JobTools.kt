@@ -4,8 +4,20 @@ package com.z1pendant
 data class ToolChange(val tool: Int, val line: Long)
 
 /** What the pendant knows about a job file's tools: the changes in order, descriptions, total lines. */
-data class JobTools(val changes: List<ToolChange>, val descriptions: Map<Int, String>, val lines: Int) {
+data class JobTools(val changes: List<ToolChange>, val descriptions: Map<Int, String>, val lines: Int,
+                    /** Estimated time per line (JobTime.kt), for the time left. */
+                    val time: JobTime? = null) {
     fun describe(tool: Int): String? = descriptions[tool]
+
+    /**
+     * Each tool change with its estimated machine time: from its change to the next one (the first
+     * also gets anything before it). Null times when there's no estimate.
+     */
+    fun toolTimes(): List<Pair<ToolChange, Double?>> = changes.mapIndexed { i, c ->
+        val t = time
+        val to = changes.getOrNull(i + 1)?.line
+        c to t?.let { (if (to == null) it.total else it.at(to)) - it.at(if (i == 0) 0L else c.line) }
+    }
 }
 
 /**
@@ -54,7 +66,7 @@ object JobFileParser {
             changes += ToolChange(t, n)
             current = t
         }
-        return JobTools(changes, desc, n.toInt())
+        return JobTools(changes, desc, n.toInt(), runCatching { JobTimeEstimator.estimate(text) }.getOrNull())
     }
 
     /** "Spiral O Metal 3.175*12mm  Makera    D=3.175 SD=… - ZMIN=-5.45 - flat end mill" → "Spiral O Metal 3.175*12mm Makera · flat end mill". */

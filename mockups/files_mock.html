@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pendant Files Mockup</title>
+<style>
+  :root { --bg:#0B1120; --tile:#1E293B; --tile2:#162033; --line:#2A3850; --muted:#94A3B8; --pri:#38BDF8; --txt:#E2E8F0;
+          --ok:#22C55E; --warn:#F59E0B; --bad:#F87171; --page:#E9EBEE; --ptext:#1f2937; --pmuted:#6b7280; --card:#fff; --cardline:#d8dbe0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--page); color:var(--ptext); font:13px/1.4 "Segoe UI", Roboto, system-ui, sans-serif; }
+  header.page { padding:18px 24px 4px; }
+  header.page h1 { margin:0 0 4px; font-size:20px; }
+  header.page p { margin:0; color:var(--pmuted); max-width:1150px; }
+  .row { display:flex; flex-wrap:wrap; gap:22px; padding:14px 24px; align-items:flex-start; }
+  .shot h2 { font-size:14px; margin:0 0 2px; }
+  .shot .sub { color:var(--pmuted); font-size:12px; margin:0 0 8px; width:300px; }
+  .phone { width:300px; height:620px; background:var(--bg); color:var(--txt); border-radius:28px; border:6px solid #111827; position:relative; overflow:hidden; font-family:Roboto, "Segoe UI", sans-serif; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+  .sb { height:20px; font-size:10px; color:var(--muted); display:flex; justify-content:space-between; padding:3px 16px 0; }
+  .new { outline:2px dashed #ff8a00; outline-offset:2px; border-radius:6px; }
+  /* main screen bits */
+  .top { display:flex; align-items:center; gap:8px; padding:8px 12px 4px; }
+  .top .nm { flex:1; min-width:0; } .top .nm b { display:block; font-size:14px; } .top .nm.small b { font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .top .nm.small span { font-size:9.5px; } .top .nm span { font-size:10px; color:var(--muted); }
+  .pill { background:var(--ok); color:#06210f; font-weight:700; border-radius:14px; padding:4px 10px; font-size:11px; }
+  .pill.run { background:var(--pri); color:#04263a; }
+  .ic { width:28px; height:28px; display:grid; place-items:center; border-radius:8px; }
+  .ic svg { width:18px; height:18px; fill:none; stroke:var(--txt); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .dro { margin:6px 12px; background:var(--tile2); border-radius:10px; padding:6px 10px; font-family:"Roboto Mono", Consolas, monospace; }
+  .dro div { display:flex; justify-content:space-between; padding:3px 0; font-size:15px; } .dro i { color:var(--muted); font-style:normal; }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:6px 12px; }
+  .tile { background:var(--tile); border-radius:8px; height:56px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:10px; gap:4px; color:var(--txt); }
+  .tile svg { width:18px; height:18px; fill:none; stroke:var(--txt); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .drawerbar { position:absolute; bottom:0; left:0; right:0; padding:10px 14px 14px; font-size:10px; color:var(--muted); display:flex; justify-content:space-between; }
+  /* files page */
+  .ph { display:flex; align-items:center; gap:8px; padding:8px 12px 2px; }
+  .ph h3 { flex:1; margin:0; font-size:18px; font-weight:600; }
+  .crumb { padding:0 14px 6px; font-size:11px; color:var(--muted); display:flex; gap:4px; align-items:center; }
+  .crumb b { color:var(--pri); font-weight:500; }
+  .chips { display:flex; gap:6px; padding:2px 12px 8px; }
+  .chip { font-size:11px; border:1px solid var(--line); border-radius:14px; padding:3px 10px; color:var(--muted); }
+  .chip.on { border-color:var(--pri); color:var(--pri); background:#0e2a3d; }
+  .list { padding:0 8px; }
+  .it { display:flex; align-items:center; gap:10px; padding:8px 8px; border-radius:8px; }
+  .it + .it { border-top:1px solid #172235; }
+  .it .fi svg { width:22px; height:22px; fill:none; stroke:var(--muted); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .it .fi.folder svg { stroke:var(--pri); }
+  .it .tx { flex:1; min-width:0; } .it .tx b { display:block; font-weight:500; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .it .tx span { font-size:10.5px; color:var(--muted); }
+  .it .ch { color:var(--muted); font-size:16px; }
+  .it.sel { background:#0e2a3d; }
+  .cb { width:16px; height:16px; border:1.5px solid var(--muted); border-radius:4px; display:grid; place-items:center; font-size:11px; }
+  .cb.y { background:var(--pri); border-color:var(--pri); color:#04263a; font-weight:900; }
+  .tag { font-size:9.5px; border-radius:8px; padding:1px 6px; margin-left:4px; vertical-align:1px; }
+  .tag.play { background:#123b23; color:#86efac; } .tag.new2 { background:#0e2a3d; color:var(--pri); }
+  .foot { position:absolute; bottom:0; left:0; right:0; padding:8px 14px 14px; font-size:10.5px; color:var(--muted); display:flex; justify-content:space-between; border-top:1px solid #172235; background:var(--bg); }
+  .banner { margin:2px 12px 8px; background:#0e2a3d; border:1px solid #1d4d6e; border-radius:8px; padding:7px 10px; font-size:11px; color:#bae6fd; }
+  .banner.warn { background:#3a2a0b; border-color:#6b4f12; color:#fde68a; }
+  .prog { margin:0 12px 6px; background:var(--tile); border-radius:8px; padding:8px 10px; font-size:11px; }
+  .prog .bar { height:4px; background:#0b1a2c; border-radius:3px; margin:6px 0 2px; overflow:hidden; } .prog .bar i { display:block; height:100%; width:45%; background:var(--pri); }
+  .prog .row2 { display:flex; justify-content:space-between; color:var(--muted); font-size:10.5px; }
+  /* sheets and dialogs */
+  .scrim { position:absolute; inset:0; background:rgba(2,6,15,.6); }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:#111a2b; border-radius:16px 16px 0 0; padding:8px 14px 16px; border-top:1px solid var(--line); }
+  .sheet .grab { width:36px; height:4px; border-radius:3px; background:#3b4b66; margin:0 auto 10px; }
+  .sheet h4 { margin:0; font-size:14px; font-weight:600; word-break:break-all; }
+  .sheet .meta { color:var(--muted); font-size:11px; margin:2px 0 10px; }
+  .acts { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .act { background:var(--tile); border-radius:10px; padding:9px 4px; display:flex; flex-direction:column; align-items:center; gap:4px; font-size:10.5px; }
+  .act svg { width:18px; height:18px; fill:none; stroke:var(--txt); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .act.dis { opacity:.38; } .act.bad { color:var(--bad); } .act.bad svg { stroke:var(--bad); }
+  .tools { margin-top:10px; background:var(--tile2); border-radius:10px; padding:8px 10px; font-size:11px; }
+  .tools .h { color:var(--muted); font-size:10.5px; margin-bottom:4px; display:flex; justify-content:space-between; }
+  .tools div.t { display:flex; gap:8px; padding:2px 0; } .tools div.t b { color:var(--pri); width:22px; }
+  .tools .k { color:var(--muted); width:40px; flex:none; }
+  .tools .tl { display:flex; gap:8px; padding:3px 0; border-top:1px solid #1f2b40; }
+  .tools .tl b { color:var(--pri); width:24px; flex:none; } .tools .tl i { font-style:normal; color:var(--muted); margin-left:auto; }
+  .tools .scroll { max-height:150px; overflow:hidden; position:relative; }
+  .tools .scroll::after { content:""; position:absolute; left:0; right:0; bottom:0; height:22px; background:linear-gradient(transparent, var(--tile2)); }
+  .dlg { position:absolute; left:20px; right:20px; top:190px; background:#111a2b; border:1px solid var(--line); border-radius:14px; padding:14px; }
+  .dlg h4 { margin:0 0 6px; font-size:14px; } .dlg p { margin:0 0 12px; font-size:11.5px; color:#cbd5e1; }
+  .dlg .btns { display:flex; justify-content:flex-end; gap:14px; font-weight:600; font-size:12px; }
+  .dlg .btns span { color:var(--pri); } .dlg .btns .bad { color:var(--bad); } .dlg .btns .dim { color:var(--muted); }
+  .dlg .col { display:flex; flex-direction:column; gap:8px; font-weight:600; font-size:12px; }
+  .dlg .col span { padding:8px; border-radius:8px; background:var(--tile); text-align:center; color:var(--pri); }
+  .dlg .col span.dim { background:none; color:var(--muted); }
+  .selbar { display:flex; align-items:center; gap:10px; padding:8px 12px 8px; background:#0e2a3d; }
+  .selbar b { flex:1; font-size:14px; }
+  .notes { width:430px; }
+  .card { background:var(--card); border:1px solid var(--cardline); border-radius:6px; padding:10px 12px; margin-bottom:12px; }
+  .card h3 { margin:0 0 6px; font-size:13px; } .card ul, .card ol { margin:0; padding-left:18px; } .card li { margin-bottom:5px; }
+  .card code { background:#f1f2f4; padding:0 3px; border-radius:3px; font-size:12px; }
+  .card table { border-collapse:collapse; font-size:12px; width:100%; } .card td { border-top:1px solid #eceef1; padding:3px 4px; vertical-align:top; }
+  .q { background:#fff8e1; border-color:#e6c66b; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --page:#16181c; --ptext:#e5e7eb; --pmuted:#9ca3af; --card:#22252b; --cardline:#33373f; }
+    :root:not([data-theme="light"]) .card code { background:#33373f; }
+    :root:not([data-theme="light"]) .q { background:#3a3220; border-color:#6b5a2a; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10l3 2-3 2M12 15h5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+    <symbol id="i-tool" viewBox="0 0 24 24"><path d="M10 3h4v6l2 2v3h-8v-3l2-2z"/><path d="M12 14v7"/></symbol>
+    <symbol id="i-zero" viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 20h14"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></symbol>
+    <symbol id="i-light" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></symbol>
+    <symbol id="i-newfolder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/></symbol>
+  </defs>
+</svg>
+
+<header class="page">
+  <h1>Pendant: files on the Z1</h1>
+  <p>Six phone screens in the pendant's style. <span style="outline:2px dashed #ff8a00;padding:0 6px;border-radius:4px">dashed orange</span> = new. Version 1 is browse, details, delete (and rename), and upload from the phone; <b>Run</b> appears greyed as the spot it will go later. Static mockup.</p>
+</header>
+
+<div class="row">
+  <!-- 1. entry point -->
+  <div class="shot">
+    <h2>1. Getting there</h2>
+    <p class="sub">A folder icon in the top bar, next to Console and Settings. The machine name is smaller to make room (it was the biggest thing in the bar).</p>
+    <div class="phone">
+      <div class="sb"><span>17:40</span><span>Wi-Fi 82%</span></div>
+      <div class="top">
+        <div class="nm small new"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 22 ms</span></div>
+        <span class="pill">Idle</span>
+        <span class="ic new"><svg><use href="#i-folder"/></svg></span>
+        <span class="ic"><svg><use href="#i-term"/></svg></span>
+        <span class="ic"><svg><use href="#i-gear"/></svg></span>
+      </div>
+      <div class="dro">
+        <div><span>X</span><span>30.700 <i>M -85.448</i></span></div>
+        <div><span>Y</span><span>20.000 <i>M -106.980</i></span></div>
+        <div><span>Z</span><span>1.000 <i>M -1.000</i></span></div>
+        <div><span>A</span><span>-90.000 <i>M 0.000</i></span></div>
+      </div>
+      <div style="height:250px;margin:6px 12px;border-radius:50%;border:2px solid #22324a;display:grid;place-items:center;color:var(--pri);font-size:30px;font-weight:700">Y</div>
+      <div class="tiles">
+        <div class="tile"><svg><use href="#i-zero"/></svg>Zero Z</div>
+        <div class="tile"><svg><use href="#i-home"/></svg>Home</div>
+        <div class="tile"><svg><use href="#i-light"/></svg>Light</div>
+        <div class="tile"><svg><use href="#i-lock"/></svg>Unlock</div>
+      </div>
+      <div class="drawerbar"><span>Feed 100%</span><span>Hold · Resume · Reset</span></div>
+    </div>
+  </div>
+
+  <!-- 2. list -->
+  <div class="shot">
+    <h2>2. The file list</h2>
+    <p class="sub">/sd/gcodes, the folder Studio shows. Folders first; newest first by default. Hidden: the Z1's own .md5 and .lz folders. Pull down to refresh.</p>
+    <div class="phone">
+      <div class="sb"><span>17:40</span><span>Wi-Fi 82%</span></div>
+      <div class="ph">
+        <span class="ic"><svg><use href="#i-x"/></svg></span>
+        <h3>Files</h3>
+        <span class="ic new"><svg><use href="#i-newfolder"/></svg></span>
+        <span class="ic new"><svg><use href="#i-up"/></svg></span>
+      </div>
+      <div class="crumb"><b>SD</b> › <b>gcodes</b></div>
+      <div class="chips"><span class="chip on">Newest</span><span class="chip">Name</span><span class="chip">Size</span></div>
+      <div class="list">
+        <div class="it"><span class="fi folder"><svg><use href="#i-folder"/></svg></span><div class="tx"><b>Examples</b><span>folder · 6 files</span></div><span class="ch">›</span></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op_1_Setup4.cnc</b><span>1.4 MB · today 17:04</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_Setup2.cnc</b><span>612 KB · today 16:58</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_Setup1.cnc</b><span>1.1 MB · today 16:58</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>_upload_test_200k.cnc</b><span>194 KB · today 11:47</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op4.cnc</b><span>1.4 MB · Nov 10</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op2.cnc</b><span>21 KB · Nov 9</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>goto-pack-pos-z1.nc</b><span>54 bytes · Aug 27</span></div></div>
+      </div>
+      <div class="foot"><span>12 files · 6.3 MB</span><span>tap a file · hold to select</span></div>
+    </div>
+  </div>
+
+  <!-- 3. details sheet -->
+  <div class="shot">
+    <h2>3. Tap a file: "Job info"</h2>
+    <p class="sub">Run is where starting a job will go later (greyed for now). <b>Job info</b> reads the file once (about 25 s for 1.4 MB) and shows what you need at the machine: the stock, where zero is, and the tools in the order they're used.</p>
+    <div class="phone">
+      <div class="sb"><span>17:41</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3>Files</h3><span class="ic"><svg><use href="#i-up"/></svg></span></div>
+      <div class="crumb"><b>SD</b> › <b>gcodes</b></div>
+      <div class="list" style="opacity:.5">
+        <div class="it"><span class="fi folder"><svg><use href="#i-folder"/></svg></span><div class="tx"><b>Examples</b><span>folder · 6 files</span></div></div>
+        <div class="it sel"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op_1_Setup4.cnc</b><span>1.4 MB · today 17:04</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_Setup2.cnc</b><span>612 KB · today 16:58</span></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet new" style="outline-offset:-2px">
+        <div class="grab"></div>
+        <h4>can_lid_op_1_Setup4.cnc</h4>
+        <div class="meta">1.4 MB · today 17:04 · /sd/gcodes</div>
+        <div class="acts">
+          <div class="act dis"><svg><use href="#i-play"/></svg>Run<span style="font-size:9px;color:var(--muted)">later</span></div>
+          <div class="act"><svg><use href="#i-tool"/></svg>Job info</div>
+          <div class="act"><svg><use href="#i-pen"/></svg>Rename</div>
+          <div class="act bad"><svg><use href="#i-trash"/></svg>Delete</div>
+        </div>
+        <div class="tools new" style="outline-offset:1px">
+          <div class="h"><span>Job info</span><span>read in 24 s</span></div>
+          <div class="t"><span class="k">Stock height</span><span>5.5 mm</span></div>
+          <div class="t"><span class="k">Zero</span><span>stock top</span></div>
+          <div class="h" style="margin-top:6px"><span>Tools, in the order they're used</span><span>2</span></div>
+          <div class="tl"><b>T4</b><span>Engraving 30°</span><i>0.3 mm</i></div>
+          <div class="tl"><b>T1</b><span>Flat end mill</span><i>3.175 mm</i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- 3b. many tools -->
+  <div class="shot">
+    <h2>3b. Job info with 4+ tools</h2>
+    <p class="sub">One row per tool, in the order the job uses them. With more than four, the sheet opens taller and the list scrolls inside it; the buttons stay at the top.</p>
+    <div class="phone">
+      <div class="sb"><span>17:41</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3>Files</h3><span class="ic"><svg><use href="#i-newfolder"/></svg></span><span class="ic"><svg><use href="#i-up"/></svg></span></div>
+      <div class="crumb"><b>SD</b> › <b>gcodes</b></div>
+      <div class="scrim"></div>
+      <div class="sheet new" style="outline-offset:-2px;top:96px">
+        <div class="grab"></div>
+        <h4>enclosure_lid_Setup1.cnc</h4>
+        <div class="meta">3.8 MB · Nov 12 · /sd/gcodes</div>
+        <div class="acts">
+          <div class="act dis"><svg><use href="#i-play"/></svg>Run<span style="font-size:9px;color:var(--muted)">later</span></div>
+          <div class="act" style="outline:1.5px solid var(--pri)"><svg><use href="#i-tool"/></svg>Job info</div>
+          <div class="act"><svg><use href="#i-pen"/></svg>Rename</div>
+          <div class="act bad"><svg><use href="#i-trash"/></svg>Delete</div>
+        </div>
+        <div class="tools">
+          <div class="h"><span>Job info</span><span>read in 64 s</span></div>
+          <div class="t"><span class="k">Stock height</span><span>6 mm</span></div>
+          <div class="t"><span class="k">Zero</span><span>stock top</span></div>
+          <div class="h" style="margin-top:6px"><span>Tools, in the order they're used</span><span>7</span></div>
+          <div class="tl"><b>T5</b><span>Flat end mill</span><i>6.0 mm</i></div>
+          <div class="tl"><b>T1</b><span>Flat end mill</span><i>3.175 mm</i></div>
+          <div class="tl"><b>T2</b><span>Ball end mill</span><i>2.0 mm</i></div>
+          <div class="tl"><b>T3</b><span>Drill</span><i>1.5 mm</i></div>
+          <div class="tl"><b>T6</b><span>Chamfer 90°</span><i>6.0 mm</i></div>
+          <div class="tl"><b>T1</b><span>Flat end mill <span style="color:var(--muted)">(again)</span></span><i>3.175 mm</i></div>
+          <div class="tl"><b>T4</b><span>Engraving 30°</span><i>0.3 mm</i></div>
+          <div style="text-align:center;color:var(--muted);font-size:10px;margin-top:4px">scrolls if it's longer than the screen</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. select + delete -->
+  <div class="shot">
+    <h2>4. Hold to select, then delete</h2>
+    <p class="sub">Long-press starts selecting; the top bar turns into "N selected" with a bin. One confirm for all of them.</p>
+    <div class="phone">
+      <div class="sb"><span>17:42</span><span>Wi-Fi 82%</span></div>
+      <div class="selbar new"><span class="ic"><svg><use href="#i-x"/></svg></span><b>3 selected</b><span class="ic"><svg style="stroke:var(--bad)"><use href="#i-trash"/></svg></span></div>
+      <div class="crumb" style="padding-top:6px"><b>SD</b> › <b>gcodes</b></div>
+      <div class="list">
+        <div class="it"><span class="cb"></span><div class="tx"><b>can_lid_op_1_Setup4.cnc</b><span>1.4 MB · today 17:04</span></div></div>
+        <div class="it"><span class="cb"></span><div class="tx"><b>bracket_Setup2.cnc</b><span>612 KB · today 16:58</span></div></div>
+        <div class="it sel"><span class="cb y">✓</span><div class="tx"><b>_upload_test_200k.cnc</b><span>194 KB · today 11:47</span></div></div>
+        <div class="it sel"><span class="cb y">✓</span><div class="tx"><b>_upload_test.cnc</b><span>57 bytes · today 11:31</span></div></div>
+        <div class="it sel"><span class="cb y">✓</span><div class="tx"><b>_upload_test_next.cnc</b><span>57 bytes · today 12:10</span></div></div>
+        <div class="it"><span class="cb"></span><div class="tx"><b>can_lid_op4.cnc</b><span>1.4 MB · Nov 10</span></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dlg">
+        <h4>Delete 3 files?</h4>
+        <p>They're removed from the Z1's SD card and can't be brought back.<br><br>_upload_test_200k.cnc<br>_upload_test.cnc<br>_upload_test_next.cnc</p>
+        <div class="btns"><span class="dim">Cancel</span><span class="bad">Delete</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. upload -->
+  <div class="shot">
+    <h2>5. Upload from the phone</h2>
+    <p class="sub">The upload icon opens the phone's own file picker (Files / Drive / Downloads). Progress shows at the top of the list; you can leave the screen. If the name is taken, you choose.</p>
+    <div class="phone">
+      <div class="sb"><span>17:43</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3>Files</h3><span class="ic"><svg><use href="#i-up"/></svg></span></div>
+      <div class="crumb"><b>SD</b> › <b>gcodes</b></div>
+      <div class="prog new">
+        <div><b>Uploading bracket_Setup1.cnc</b></div>
+        <div class="bar"><i></i></div>
+        <div class="row2"><span>512 KB of 1.1 MB · 9 s left</span><span style="color:var(--pri)">Cancel</span></div>
+      </div>
+      <div class="list">
+        <div class="it"><span class="fi folder"><svg><use href="#i-folder"/></svg></span><div class="tx"><b>Examples</b><span>folder · 6 files</span></div><span class="ch">›</span></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op_1_Setup4.cnc</b><span>1.4 MB · today 17:04</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_Setup2.cnc <span class="tag new2">just uploaded</span></b><span>612 KB · today 17:43</span></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dlg new" style="top:260px">
+        <h4>bracket_Setup1.cnc is already on the Z1</h4>
+        <p>1.1 MB · today 16:58</p>
+        <div class="col"><span>Replace it</span><span>Keep both (bracket_Setup1_2.cnc)</span><span class="dim">Cancel</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. running -->
+  <div class="shot">
+    <h2>6. While a job is running</h2>
+    <p class="sub">You can look, but nothing writes to the card: upload, delete and rename are off, and the playing file is marked.</p>
+    <div class="phone">
+      <div class="sb"><span>17:50</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3>Files</h3><span class="ic" style="opacity:.35"><svg><use href="#i-up"/></svg></span></div>
+      <div class="crumb"><b>SD</b> › <b>gcodes</b></div>
+      <div class="banner warn new">The Z1 is running a job. Files are read-only until it's idle.</div>
+      <div class="list">
+        <div class="it"><span class="fi folder"><svg><use href="#i-folder"/></svg></span><div class="tx"><b>Examples</b><span>folder · 6 files</span></div><span class="ch">›</span></div>
+        <div class="it sel"><span class="fi"><svg style="stroke:var(--ok)"><use href="#i-play"/></svg></span><div class="tx"><b>can_lid_op_1_Setup4.cnc <span class="tag play">Playing 34%</span></b><span>1.4 MB · today 17:04</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_Setup2.cnc</b><span>612 KB · today 16:58</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_Setup1.cnc</b><span>1.1 MB · today 16:58</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op4.cnc</b><span>1.4 MB · Nov 10</span></div></div>
+      </div>
+      <div class="foot"><span>12 files · 6.3 MB</span><span>read-only while running</span></div>
+    </div>
+  </div>
+
+</div>
+<div class="row">
+  <!-- 7. rename -->
+  <div class="shot">
+    <h2>7. Rename</h2>
+    <p class="sub">From the sheet. The extension stays as it is; spaces become _ as in the Fusion plugin. Off while a job is running.</p>
+    <div class="phone">
+      <div class="sb"><span>17:44</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3>Files</h3><span class="ic"><svg><use href="#i-newfolder"/></svg></span><span class="ic"><svg><use href="#i-up"/></svg></span></div>
+      <div class="crumb"><b>SD</b> › <b>gcodes</b></div>
+      <div class="list">
+        <div class="it"><span class="fi folder"><svg><use href="#i-folder"/></svg></span><div class="tx"><b>Examples</b><span>folder · 6 files</span></div><span class="ch">›</span></div>
+        <div class="it sel"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op_1_Setup4.cnc</b><span>1.4 MB · today 17:04</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_Setup2.cnc</b><span>612 KB · today 16:58</span></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dlg new">
+        <h4>Rename</h4>
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:12px">
+          <div style="flex:1;border:1.5px solid var(--pri);border-radius:8px;padding:8px;font-size:12.5px">can_lid_engrave<span style="border-left:1.5px solid var(--pri);margin-left:1px"></span></div>
+          <span style="color:var(--muted);font-size:12.5px">.cnc</span>
+        </div>
+        <div class="btns"><span class="dim">Cancel</span><span>Rename</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. folders -->
+  <div class="shot">
+    <h2>8. Folders</h2>
+    <p class="sub">Tap a folder to go in; the path at the top takes you back. The new-folder icon makes one where you are. Uploads go to the folder you're in.</p>
+    <div class="phone">
+      <div class="sb"><span>17:45</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3>Files</h3><span class="ic"><svg><use href="#i-newfolder"/></svg></span><span class="ic"><svg><use href="#i-up"/></svg></span></div>
+      <div class="crumb new" style="margin:0 12px 6px;padding:2px"><b>SD</b> › <b>gcodes</b> › <span style="color:var(--txt)">brackets</span></div>
+      <div class="chips"><span class="chip on">Newest</span><span class="chip">Name</span><span class="chip">Size</span></div>
+      <div class="list">
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_v2_Setup1.cnc</b><span>1.1 MB · today 16:58</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>bracket_v2_Setup2.cnc</b><span>612 KB · today 16:58</span></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dlg new" style="top:230px">
+        <h4>New folder in gcodes › brackets</h4>
+        <div style="border:1.5px solid var(--pri);border-radius:8px;padding:8px;font-size:12.5px;margin-bottom:12px">v3<span style="border-left:1.5px solid var(--pri);margin-left:1px"></span></div>
+        <div class="btns"><span class="dim">Cancel</span><span>Create</span></div>
+      </div>
+      <div class="foot"><span>2 files · 1.7 MB</span><span>‹ back goes up a folder</span></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="card">
+      <h3>What the Z1 lets us do (all on its Wi-Fi board, nothing touches motion)</h3>
+      <table>
+        <tr><td><b>List</b></td><td><code>ls -s /sd/gcodes</code>: name, size, date per entry (what Studio uses)</td></tr>
+        <tr><td><b>Delete</b></td><td><code>rm</code>; on a folder it deletes everything inside</td></tr>
+        <tr><td><b>Rename</b></td><td><code>mv</code> from → to</td></tr>
+        <tr><td><b>New folder</b></td><td><code>mkdir</code></td></tr>
+        <tr><td><b>Upload / read</b></td><td>the upload and download we already have working</td></tr>
+        <tr><td><b>Run</b></td><td><code>play &lt;file&gt;</code> exists; not in version 1</td></tr>
+      </table>
+      <p style="margin:6px 0 0;color:var(--pmuted);font-size:12px">From the ESP32 firmware's own command table. The exact argument formats for <code>rm</code> and <code>mv</code> need a live check before building.</p>
+    </div>
+    <div class="card">
+      <h3>What I'd do</h3>
+      <ul>
+        <li><b>Folder icon in the top bar</b> as the way in, like Console and Settings. A tile can be lost when you rearrange tiles; a file browser shouldn't be. Offer "Files" as a tile type too if you like it.</li>
+        <li><b>Full-screen Files page</b> like Console: list, tap for a sheet, hold to multi-select.</li>
+        <li><b>Safety:</b> nothing that writes (upload, delete, rename) while the Z1 is running or paused, the playing file can never be touched, and deleting always asks once.</li>
+        <li><b>Upload</b> uses the phone's system picker, so files can come from Downloads, Drive, email, wherever. Names get the same clean-up as the Fusion plugin (spaces → _).</li>
+        <li><b>Run later</b> drops into the sheet's first button; the job drawer already handles a running job.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Decided (your answers)</h3>
+      <ol>
+        <li>Way in: the top-bar folder icon; the machine name gets smaller.</li>
+        <li>Rename is in version 1.</li>
+        <li>Browse into folders and create new ones.</li>
+        <li>Keep the tool list, as "Job info" with stock and zero too (no cut extents).</li>
+        <li>Name clash on upload: ask each time.</li>
+        <li>Newest first.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Running from a folder inside gcodes</h3>
+      <p style="margin:0">Yes, as far as I can see: <code>play</code> takes a full path, the Z1 reports the playing file by its full path, and Makera ships an <code>Examples</code> folder inside <code>/sd/gcodes</code> whose files are meant to be run. I'd prove it on the machine with a file that has no moves in it before relying on it.</p>
+    </div>
+    <div class="card">
+      <h3>Where "Job info" comes from</h3>
+      <ul>
+        <li><b>Already in every file you post</b> (the Makera post writes it): stock <b>height</b>, Z zero (e.g. "Stock Top"), cut depth, the tools.</li>
+        <li><b>Not shown: the stock's X × Y size.</b> Fusion's post output doesn't carry it (only the height and Z zero), and the pendant only shows what a normal post writes.</li>
+        <li><b>Files from elsewhere</b> (or posted before that change): Job info shows the thickness and says the size isn't in the file (3b).</li>
+      </ul>
+    </div>
+</div>
+  </div>
+</div>
+</body>
+</html>

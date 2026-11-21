@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pendant Run Mockup</title>
+<style>
+  :root { --bg:#0B1120; --tile:#1E293B; --tile2:#162033; --line:#2A3850; --muted:#94A3B8; --pri:#38BDF8; --txt:#E2E8F0;
+          --ok:#22C55E; --warn:#F59E0B; --bad:#F87171; --page:#E9EBEE; --ptext:#1f2937; --pmuted:#6b7280; --card:#fff; --cardline:#d8dbe0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--page); color:var(--ptext); font:13px/1.4 "Segoe UI", Roboto, system-ui, sans-serif; }
+  header.page { padding:18px 24px 4px; }
+  header.page h1 { margin:0 0 4px; font-size:20px; }
+  header.page p { margin:0; color:var(--pmuted); max-width:1150px; }
+  .row { display:flex; flex-wrap:wrap; gap:22px; padding:14px 24px; align-items:flex-start; }
+  .shot h2 { font-size:14px; margin:0 0 2px; }
+  .shot .sub { color:var(--pmuted); font-size:12px; margin:0 0 8px; width:300px; }
+  .phone { width:300px; height:620px; background:var(--bg); color:var(--txt); border-radius:28px; border:6px solid #111827; position:relative; overflow:hidden; font-family:Roboto, "Segoe UI", sans-serif; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+  .sb { height:20px; font-size:10px; color:var(--muted); display:flex; justify-content:space-between; padding:3px 16px 0; }
+  .new { outline:2px dashed #ff8a00; outline-offset:2px; border-radius:6px; }
+  /* main screen bits */
+  .top { display:flex; align-items:center; gap:8px; padding:8px 12px 4px; }
+  .top .nm { flex:1; min-width:0; } .top .nm b { display:block; font-size:14px; } .top .nm.small b { font-size:11.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .top .nm.small span { font-size:9.5px; } .top .nm span { font-size:10px; color:var(--muted); }
+  .pill { background:var(--ok); color:#06210f; font-weight:700; border-radius:14px; padding:4px 10px; font-size:11px; }
+  .pill.run { background:var(--pri); color:#04263a; }
+  .ic { width:28px; height:28px; display:grid; place-items:center; border-radius:8px; }
+  .ic svg { width:18px; height:18px; fill:none; stroke:var(--txt); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .dro { margin:6px 12px; background:var(--tile2); border-radius:10px; padding:6px 10px; font-family:"Roboto Mono", Consolas, monospace; }
+  .dro div { display:flex; justify-content:space-between; padding:3px 0; font-size:15px; } .dro i { color:var(--muted); font-style:normal; }
+  .tiles { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:6px 12px; }
+  .tile { background:var(--tile); border-radius:8px; height:56px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:10px; gap:4px; color:var(--txt); }
+  .tile svg { width:18px; height:18px; fill:none; stroke:var(--txt); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .drawerbar { position:absolute; bottom:0; left:0; right:0; padding:10px 14px 14px; font-size:10px; color:var(--muted); display:flex; justify-content:space-between; }
+  /* files page */
+  .ph { display:flex; align-items:center; gap:8px; padding:8px 12px 2px; }
+  .ph h3 { flex:1; margin:0; font-size:18px; font-weight:600; }
+  .crumb { padding:0 14px 6px; font-size:11px; color:var(--muted); display:flex; gap:4px; align-items:center; }
+  .crumb b { color:var(--pri); font-weight:500; }
+  .chips { display:flex; gap:6px; padding:2px 12px 8px; }
+  .chip { font-size:11px; border:1px solid var(--line); border-radius:14px; padding:3px 10px; color:var(--muted); }
+  .chip.on { border-color:var(--pri); color:var(--pri); background:#0e2a3d; }
+  .list { padding:0 8px; }
+  .it { display:flex; align-items:center; gap:10px; padding:8px 8px; border-radius:8px; }
+  .it + .it { border-top:1px solid #172235; }
+  .it .fi svg { width:22px; height:22px; fill:none; stroke:var(--muted); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+  .it .fi.folder svg { stroke:var(--pri); }
+  .it .tx { flex:1; min-width:0; } .it .tx b { display:block; font-weight:500; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .it .tx span { font-size:10.5px; color:var(--muted); }
+  .it .ch { color:var(--muted); font-size:16px; }
+  .it.sel { background:#0e2a3d; }
+  .cb { width:16px; height:16px; border:1.5px solid var(--muted); border-radius:4px; display:grid; place-items:center; font-size:11px; }
+  .cb.y { background:var(--pri); border-color:var(--pri); color:#04263a; font-weight:900; }
+  .tag { font-size:9.5px; border-radius:8px; padding:1px 6px; margin-left:4px; vertical-align:1px; }
+  .tag.play { background:#123b23; color:#86efac; } .tag.new2 { background:#0e2a3d; color:var(--pri); }
+  .foot { position:absolute; bottom:0; left:0; right:0; padding:8px 14px 14px; font-size:10.5px; color:var(--muted); display:flex; justify-content:space-between; border-top:1px solid #172235; background:var(--bg); }
+  .banner { margin:2px 12px 8px; background:#0e2a3d; border:1px solid #1d4d6e; border-radius:8px; padding:7px 10px; font-size:11px; color:#bae6fd; }
+  .banner.warn { background:#3a2a0b; border-color:#6b4f12; color:#fde68a; }
+  .prog { margin:0 12px 6px; background:var(--tile); border-radius:8px; padding:8px 10px; font-size:11px; }
+  .prog .bar { height:4px; background:#0b1a2c; border-radius:3px; margin:6px 0 2px; overflow:hidden; } .prog .bar i { display:block; height:100%; width:45%; background:var(--pri); }
+  .prog .row2 { display:flex; justify-content:space-between; color:var(--muted); font-size:10.5px; }
+  /* sheets and dialogs */
+  .scrim { position:absolute; inset:0; background:rgba(2,6,15,.6); }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:#111a2b; border-radius:16px 16px 0 0; padding:8px 14px 16px; border-top:1px solid var(--line); }
+  .sheet .grab { width:36px; height:4px; border-radius:3px; background:#3b4b66; margin:0 auto 10px; }
+  .sheet h4 { margin:0; font-size:14px; font-weight:600; word-break:break-all; }
+  .sheet .meta { color:var(--muted); font-size:11px; margin:2px 0 10px; }
+  .acts { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .act { background:var(--tile); border-radius:10px; padding:9px 4px; display:flex; flex-direction:column; align-items:center; gap:4px; font-size:10.5px; }
+  .act svg { width:18px; height:18px; fill:none; stroke:var(--txt); stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .act.dis { opacity:.38; } .act.bad { color:var(--bad); } .act.bad svg { stroke:var(--bad); }
+  .tools { margin-top:10px; background:var(--tile2); border-radius:10px; padding:8px 10px; font-size:11px; }
+  .tools .h { color:var(--muted); font-size:10.5px; margin-bottom:4px; display:flex; justify-content:space-between; }
+  .tools div.t { display:flex; gap:8px; padding:2px 0; } .tools div.t b { color:var(--pri); width:22px; }
+  .tools .k { color:var(--muted); width:40px; flex:none; }
+  .tools .tl { display:flex; gap:8px; padding:3px 0; border-top:1px solid #1f2b40; }
+  .tools .tl b { color:var(--pri); width:24px; flex:none; } .tools .tl i { font-style:normal; color:var(--muted); margin-left:auto; }
+  .tools .scroll { max-height:150px; overflow:hidden; position:relative; }
+  .tools .scroll::after { content:""; position:absolute; left:0; right:0; bottom:0; height:22px; background:linear-gradient(transparent, var(--tile2)); }
+  .dlg { position:absolute; left:20px; right:20px; top:190px; background:#111a2b; border:1px solid var(--line); border-radius:14px; padding:14px; }
+  .dlg h4 { margin:0 0 6px; font-size:14px; } .dlg p { margin:0 0 12px; font-size:11.5px; color:#cbd5e1; }
+  .dlg .btns { display:flex; justify-content:flex-end; gap:14px; font-weight:600; font-size:12px; }
+  .dlg .btns span { color:var(--pri); } .dlg .btns .bad { color:var(--bad); } .dlg .btns .dim { color:var(--muted); }
+  .dlg .col { display:flex; flex-direction:column; gap:8px; font-weight:600; font-size:12px; }
+  .dlg .col span { padding:8px; border-radius:8px; background:var(--tile); text-align:center; color:var(--pri); }
+  .dlg .col span.dim { background:none; color:var(--muted); }
+  .selbar { display:flex; align-items:center; gap:10px; padding:8px 12px 8px; background:#0e2a3d; }
+  .selbar b { flex:1; font-size:14px; }
+  .notes { width:430px; }
+  .card { background:var(--card); border:1px solid var(--cardline); border-radius:6px; padding:10px 12px; margin-bottom:12px; }
+  .card h3 { margin:0 0 6px; font-size:13px; } .card ul, .card ol { margin:0; padding-left:18px; } .card li { margin-bottom:5px; }
+  .card code { background:#f1f2f4; padding:0 3px; border-radius:3px; font-size:12px; }
+  .card table { border-collapse:collapse; font-size:12px; width:100%; } .card td { border-top:1px solid #eceef1; padding:3px 4px; vertical-align:top; }
+  .q { background:#fff8e1; border-color:#e6c66b; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --page:#16181c; --ptext:#e5e7eb; --pmuted:#9ca3af; --card:#22252b; --cardline:#33373f; }
+    :root:not([data-theme="light"]) .card code { background:#33373f; }
+    :root:not([data-theme="light"]) .q { background:#3a3220; border-color:#6b5a2a; }
+  }
+</style>
+<style>
+  .steps { display:flex; gap:4px; padding:2px 12px 8px; }
+  .steps span { flex:1; text-align:center; font-size:10px; padding:5px 0; border-radius:6px; background:var(--tile); color:var(--muted); }
+  .steps span.on { background:var(--pri); color:#04263a; font-weight:700; }
+  .steps span.done { background:#0e2a3d; color:var(--pri); }
+  .opts { padding:0 12px; display:flex; flex-direction:column; gap:6px; }
+  .opt { display:flex; gap:10px; background:var(--tile2); border:1px solid #1f2b40; border-radius:10px; padding:9px 10px; }
+  .opt.on { border-color:var(--pri); background:#0e2234; }
+  .opt b { display:block; font-size:12.5px; font-weight:600; } .opt span { font-size:10.5px; color:var(--muted); display:block; }
+  .rd { width:14px; height:14px; border-radius:50%; border:1.5px solid var(--muted); flex:none; margin-top:2px; }
+  .rd.y { border:4px solid var(--pri); }
+  .fields { display:flex; gap:6px; margin:5px 0 2px; }
+  .fields label { font-size:10px; color:var(--muted); display:flex; align-items:center; gap:4px; }
+  .fields em { font-style:normal; color:var(--txt); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:3px 6px; font-family:Consolas, monospace; font-size:11px; min-width:34px; }
+  .link { color:var(--pri) !important; font-size:11px !important; font-weight:600; margin-top:4px; display:inline-block !important; }
+  .bottom { position:absolute; bottom:0; left:0; right:0; display:flex; gap:8px; padding:10px 12px 14px; background:var(--bg); border-top:1px solid #172235; }
+  .bottom .btn { flex:1; text-align:center; background:var(--pri); color:#04263a; font-weight:700; border-radius:10px; padding:10px 0; font-size:13px; }
+  .bottom .btn.ghost { background:none; border:1px solid var(--line); color:var(--txt); font-weight:500; }
+  .bottom.col { flex-direction:column; align-items:stretch; gap:6px; }
+  .bottom .btn.big { padding:14px 0; font-size:15px; background:var(--ok); color:#06210f; }
+  .dim2 { font-size:10px; color:var(--muted); text-align:center; }
+  .box { margin:0 12px 6px; background:var(--tile2); border-radius:10px; padding:8px 10px; font-size:11.5px; }
+  .box .bh { font-size:10.5px; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:3px; } .box .bh i { font-style:normal; }
+  .box .dim { font-size:10.5px; color:var(--muted); }
+  .box.dis { opacity:.45; }
+  .sw { display:flex; align-items:center; justify-content:space-between; } .sw b { font-weight:600; font-size:12px; }
+  .tg { width:30px; height:16px; border-radius:9px; background:#334155; position:relative; flex:none; }
+  .tg::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#cbd5e1; }
+  .tg.on { background:var(--pri); } .tg.on::after { left:16px; background:#04263a; }
+  .later { font-size:10px; border:1px solid var(--line); border-radius:8px; padding:0 6px; color:var(--muted); }
+  .sum { margin:0 12px; background:var(--tile2); border-radius:10px; padding:6px 10px; }
+  .sum div { display:flex; justify-content:space-between; gap:8px; padding:4px 0; font-size:11px; } .sum div + div { border-top:1px solid #1f2b40; }
+  .sum span { color:var(--muted); } .sum b { font-weight:500; text-align:right; }
+  .checks { display:flex; gap:10px; flex-wrap:wrap; padding:8px 14px; font-size:10.5px; color:#86efac; }
+  .res { margin:6px 12px; background:var(--tile2); border-radius:10px; padding:8px 10px; font-size:11.5px; }
+  .res .h { color:var(--muted); font-size:10.5px; margin-bottom:4px; }
+  .res div { display:flex; gap:10px; padding:3px 0; } .res div span { color:var(--muted); width:16px; } .res b { font-weight:500; }
+  .res .ok { color:#86efac; margin-top:4px; }
+  .jobp { margin:6px 12px; background:var(--tile); border-radius:10px; padding:8px 10px; font-size:11px; }
+  .jobp .jh { display:flex; justify-content:space-between; } .jobp .jh b { font-weight:600; }
+  .jobp .bar { height:4px; background:#0b1a2c; border-radius:3px; margin:6px 0 4px; overflow:hidden; } .jobp .bar i { display:block; height:100%; background:var(--pri); }
+  .jobp .jr { display:flex; justify-content:space-between; color:var(--muted); font-size:10.5px; }
+  .act.run1 { color:var(--ok); } .act.run1 svg { stroke:var(--ok); }
+  .sheet.tc { padding-bottom:18px; }
+  .tch { display:flex; justify-content:space-between; font-size:11px; color:var(--warn); font-weight:600; } .tch span { color:var(--muted); font-weight:400; }
+  .tcbig { font-size:24px; margin:8px 0 2px; } .tcbig b { color:var(--pri); }
+  .tcd { font-size:12px; } .tcd b { font-weight:600; }
+  .tco { font-size:11px; color:var(--muted); margin-top:8px; padding-top:8px; border-top:1px solid #1f2b40; }
+  .tcn { font-size:10.5px; color:var(--muted); margin:8px 0 10px; }
+  .tcb { background:var(--pri); color:#04263a; font-weight:700; text-align:center; border-radius:10px; padding:12px 0; font-size:13px; }
+  .tcs { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:9px; padding:0 4px; } .tcs span:first-child { color:var(--pri); font-weight:600; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10l3 2-3 2M12 15h5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+    <symbol id="i-tool" viewBox="0 0 24 24"><path d="M10 3h4v6l2 2v3h-8v-3l2-2z"/><path d="M12 14v7"/></symbol>
+    <symbol id="i-zero" viewBox="0 0 24 24"><path d="M12 4v10M8 10l4 4 4-4M5 20h14"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></symbol>
+    <symbol id="i-light" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0"/></symbol>
+    <symbol id="i-newfolder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 24 24"><path d="M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3"/></symbol>
+  </defs>
+</svg>
+
+<header class="page">
+  <h1>Pendant: running a job</h1>
+  <p>Makera Studio's Run Project wizard rebuilt for the phone. <span style="outline:2px dashed #ff8a00;padding:0 6px;border-radius:4px">dashed orange</span> = new. Four steps instead of Studio's five: <b>Set Stock is gone</b> (as you found, it changes nothing; Studio uses it to place the stock in its 3D view). Everything the steps send was read from Makera's app, Studio and the community firmware source (cards on the right). Static mockup with sample numbers.</p>
+</header>
+
+<div class="row">
+  <!-- 1a. from a file -->
+  <div class="shot">
+    <h2>1a. Run from a file</h2>
+    <p class="sub">Run in the file sheet comes alive. It's greyed (with the reason) unless the Z1 is idle and homed.</p>
+    <div class="phone">
+      <div class="sb"><span>17:40</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3>Files</h3><span class="ic"><svg><use href="#i-newfolder"/></svg></span><span class="ic"><svg><use href="#i-up"/></svg></span></div>
+      <div class="crumb">SD › <b>gcodes</b></div>
+      <div class="list">
+        <div class="it"><span class="fi folder"><svg><use href="#i-folder"/></svg></span><div class="tx"><b>Examples</b><span>folder</span></div><span class="ch">›</span></div>
+        <div class="it sel"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op_1_Setup4.cnc</b><span>1.4 MB · today 17:04</span></div></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>nfatest2-bigger.cnc</b><span>194 KB · Nov 14</span></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <h4>can_lid_op_1_Setup4.cnc</h4>
+        <div class="meta">1.4 MB · today 17:04 · /gcodes</div>
+        <div class="acts">
+          <div class="act new run1"><svg><use href="#i-play"/></svg>Run</div>
+          <div class="act"><svg><use href="#i-tool"/></svg>Job info</div>
+          <div class="act"><svg><use href="#i-pen"/></svg>Rename</div>
+          <div class="act bad"><svg><use href="#i-trash"/></svg>Delete</div>
+        </div>
+        <div class="tools"><div class="h"><span>Job info</span><span>read in 0.6 s</span></div>
+          <div class="t"><span class="k" style="width:78px">Stock height</span><span>5.5 mm</span></div>
+          <div class="t"><span class="k" style="width:78px">Zero</span><span>stock top</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1b. from the main screen -->
+  <div class="shot">
+    <h2>1b. Or a Run tile</h2>
+    <p class="sub">A <b>Run job</b> tile you can put in the hotkey grid. It opens Files in "pick a job" mode: tapping a file goes straight to step 1. "Run again" offers the last file.</p>
+    <div class="phone">
+      <div class="sb"><span>17:40</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3 class="new">Pick a job to run</h3></div>
+      <div class="crumb">SD › <b>gcodes</b></div>
+      <div class="banner new">Run again: <b>can_lid_op4.cnc</b> <span style="float:right;color:var(--pri);font-weight:600">Run ›</span></div>
+      <div class="chips"><span class="chip on">Newest</span><span class="chip">Name</span><span class="chip">Size</span></div>
+      <div class="list">
+        <div class="it"><span class="fi folder"><svg><use href="#i-folder"/></svg></span><div class="tx"><b>Examples</b><span>folder</span></div><span class="ch">›</span></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op_1_Setup4.cnc</b><span>1.4 MB · today 17:04</span></div><span class="ch">›</span></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>nfatest2-bigger.cnc</b><span>194 KB · Nov 14</span></div><span class="ch">›</span></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>pendant_status_test.cnc</b><span>9 KB · Nov 14</span></div><span class="ch">›</span></div>
+        <div class="it"><span class="fi"><svg><use href="#i-file"/></svg></span><div class="tx"><b>can_lid_op4.cnc</b><span>1.4 MB · Nov 10</span></div><span class="ch">›</span></div>
+      </div>
+      <div class="foot"><span>Tap a file to set it up</span><span>no edits in this mode</span></div>
+    </div>
+  </div>
+
+  <!-- 2. origin -->
+  <div class="shot">
+    <h2>2. Origin</h2>
+    <p class="sub">Defaults to keeping the origin you already set (you usually probe first). "Same as CAM" fills in the offset Fusion's post writes in the header.</p>
+    <div class="phone">
+      <div class="sb"><span>17:41</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3 style="font-size:15px">Run can_lid_op_1_Setup4</h3></div>
+      <div class="steps"><span class="on">1 Origin</span><span>2 Checks</span><span>3 Assist</span><span>4 Run</span></div>
+      <div class="opts">
+        <div class="opt on"><i class="rd y"></i><div><b>Keep the current origin</b><span>X 19.330 · Y 38.708 from Anchor 1</span></div></div>
+        <div class="opt"><i class="rd"></i><div><b>From Anchor 1</b>
+          <div class="fields"><label>X <em>19.330</em></label><label>Y <em>38.708</em></label></div>
+          <span class="link">Same as CAM (0, −3)</span></div></div>
+        <div class="opt"><i class="rd"></i><div><b>Where the spindle is now</b><span>X/Y only · Z stays</span></div></div>
+        <div class="opt new"><i class="rd" style="visibility:hidden"></i><div><b style="color:var(--pri)">Set it with the 3D probe ›</b><span>Opens the probe wizard; Done brings you back here</span></div></div>
+      </div>
+      <div class="bottom"><span class="btn ghost">Cancel</span><span class="btn">Next</span></div>
+    </div>
+  </div>
+
+  <!-- 2b. probe return -->
+  <div class="shot">
+    <h2>2b. Probe, then back</h2>
+    <p class="sub">The existing probe wizard, unchanged except its last button: when opened from Run it says <b>Back to Run</b> and returns to step 1 with "Keep the current origin" picked and the new numbers shown.</p>
+    <div class="phone">
+      <div class="sb"><span>17:44</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3 style="font-size:15px">Probe · corner</h3></div>
+      <div class="banner new" style="margin-top:4px">Probing for <b>Run can_lid_op_1_Setup4</b></div>
+      <div class="res">
+        <div class="h">Result</div>
+        <div><span>X</span><b>front-left corner</b></div>
+        <div><span>Y</span><b>front-left corner</b></div>
+        <div><span>Z</span><b>stock top</b></div>
+        <div class="ok">✓ Work zero set (G54)</div>
+      </div>
+      <div class="bottom"><span class="btn ghost">Again</span><span class="btn new">Back to Run</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- 3. checks -->
+  <div class="shot">
+    <h2>3. Checks</h2>
+    <p class="sub">Margin scan and leveling need the toolpath's X/Y extents, so the pendant reads the whole file in the background as soon as Run opens (1.4 MB ≈ 10 s; cached by the file's MD5).</p>
+    <div class="phone">
+      <div class="sb"><span>17:45</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3 style="font-size:15px">Run can_lid_op_1_Setup4</h3></div>
+      <div class="steps"><span class="done">1 Origin</span><span class="on">2 Checks</span><span>3 Assist</span><span>4 Run</span></div>
+      <div class="box new"><div class="bh">Toolpath <i>read in 9.8 s</i></div>
+        <div>X 0.000 → 96.200 · Y −3.000 → 60.000</div>
+        <div class="dim">96.2 × 63.0 mm · Z −0.2 → 12 · fits the travel ✓</div></div>
+      <div class="box"><div class="sw"><b>Scan margin first</b><i class="tg on"></i></div>
+        <div class="dim">The probe's laser traces the toolpath's outline so you can check the stock covers it.</div>
+        <span class="link">Scan now</span></div>
+      <div class="box"><div class="sw"><b>Auto leveling</b><i class="tg"></i></div>
+        <div class="dim">Probes a grid over the toolpath; the Z1 adjusts Z while cutting.</div>
+        <div class="fields" style="margin-top:6px"><label>Clearance <em>5</em></label><label>X pts <em>3</em></label><label>Y pts <em>3</em></label></div></div>
+      <div class="banner warn" style="font-size:10.5px">Both use the wired probe. With a cutter in the collet, the Z1 will stop and ask you to swap to the probe, then back.</div>
+      <div class="bottom"><span class="btn ghost">Back</span><span class="btn">Next</span></div>
+    </div>
+  </div>
+
+  <!-- 4. assist -->
+  <div class="shot">
+    <h2>4. Assist</h2>
+    <p class="sub">The four switches Studio has. They're modes the Z1 remembers, so they show their real state (from the status line) and change the moment you flip them.</p>
+    <div class="phone">
+      <div class="sb"><span>17:45</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3 style="font-size:15px">Run can_lid_op_1_Setup4</h3></div>
+      <div class="steps"><span class="done">1 Origin</span><span class="done">2 Checks</span><span class="on">3 Assist</span><span>4 Run</span></div>
+      <div class="box"><div class="sw"><b>Auto vacuum</b><i class="tg on"></i></div><div class="dim">Vacuum on while the spindle runs (80 %).</div></div>
+      <div class="box"><div class="sw"><b>Auto blow</b><i class="tg"></i></div><div class="dim">Air on the cut while the spindle runs.</div></div>
+      <div class="box"><div class="sw"><b>Bed clean</b><i class="tg"></i></div><div class="dim">Cleans the bed after the job.</div></div>
+      <div class="box"><div class="sw"><b>Anti-static</b><i class="tg"></i></div><div class="dim">For plastics and wood dust.</div></div>
+      <div class="box dis"><div class="sw"><b>Time-lapse</b><span class="later">later</span></div><div class="dim">How Studio turns it on isn't known yet.</div></div>
+      <div class="bottom"><span class="btn ghost">Back</span><span class="btn">Next</span></div>
+    </div>
+  </div>
+
+  <!-- 5. review -->
+  <div class="shot">
+    <h2>5. Run</h2>
+    <p class="sub">One page to check before it moves. Start is greyed (with the reason) unless the Z1 is idle, homed and nothing is waiting on it.</p>
+    <div class="phone">
+      <div class="sb"><span>17:46</span><span>Wi-Fi 82%</span></div>
+      <div class="ph"><span class="ic"><svg><use href="#i-x"/></svg></span><h3 style="font-size:15px">Run can_lid_op_1_Setup4</h3></div>
+      <div class="steps"><span class="done">1 Origin</span><span class="done">2 Checks</span><span class="done">3 Assist</span><span class="on">4 Run</span></div>
+      <div class="sum">
+        <div><span>Origin</span><b>19.330, 38.708 from Anchor 1</b></div>
+        <div><span>Scan margin</span><b>on · 96.2 × 63.0</b></div>
+        <div><span>Leveling</span><b>off</b></div>
+        <div><span>Assist</span><b>vacuum</b></div>
+        <div><span>Stock</span><b>5.5 mm · zero on top</b></div>
+      </div>
+      <div class="tools" style="margin:6px 12px 0"><div class="h"><span>Tools</span><span>1</span></div>
+        <div class="tl"><b>T4</b><span>Flat Single Flute Engraving 30°</span><i>0.3 mm</i></div></div>
+      <div class="checks"><span>✓ Idle</span><span>✓ Homed</span><span>✓ T4 in the collet</span></div>
+      <div class="bottom col"><span class="btn big">Start job</span><span class="dim2">Hold · Resume · Reset stay on the main screen</span></div>
+    </div>
+  </div>
+
+  <!-- 6. after start -->
+  <div class="shot">
+    <h2>6. After Start</h2>
+    <p class="sub">Back to the main screen; the job panel you already have takes over. The pre-job steps show up there by name ("Scanning margin", "Leveling").</p>
+    <div class="phone">
+      <div class="sb"><span>17:46</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm small"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 22 ms</span></div><span class="pill run">Run 0%</span>
+        <span class="ic"><svg><use href="#i-folder"/></svg></span><span class="ic"><svg><use href="#i-term"/></svg></span><span class="ic"><svg><use href="#i-gear"/></svg></span></div>
+      <div class="dro"><div><i>X</i>19.330</div><div><i>Y</i>35.708</div><div><i>Z</i>12.000</div><div><i>A</i>−90.000</div></div>
+      <div class="jobp new"><div class="jh"><b>can_lid_op_1_Setup4.cnc</b><span>0%</span></div>
+        <div class="bar"><i style="width:4%"></i></div>
+        <div class="jr"><span>Scanning margin…</span><span>then the job</span></div></div>
+      <div class="tiles" style="margin-top:6px">
+        <div class="tile"><svg><use href="#i-zero"/></svg>Zero Z</div><div class="tile"><svg><use href="#i-light"/></svg>Light</div>
+        <div class="tile"><svg><use href="#i-lock"/></svg>Unlock</div><div class="tile"><svg><use href="#i-home"/></svg>Home</div>
+      </div>
+      <div class="drawerbar"><span>Feed 100%</span><span>Hold · Resume · Reset</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="notes">
+    <div class="card q"><h3>Your calls</h3><ol>
+      <li><b>Entry:</b> both? Run in the file sheet (1a) plus a Run tile that opens Files in pick mode (1b). The tile is just a shortcut; it lands in the same flow.</li>
+      <li><b>Auto Z probe:</b> left out. It probes Z once at the path origin plus an offset and re-zeros Z, which your 3D probe already does. Easy to add back to Checks later.</li>
+      <li><b>Time-lapse:</b> left as "later". Neither the app nor the Wi-Fi board firmware shows how Studio turns it on (the app's own time-lapse page says "coming soon").</li>
+      <li><b>Remember settings:</b> the Checks choices remembered between runs (like Studio), origin always defaulting to "keep"?</li>
+    </ol></div>
+    <div class="card"><h3>What Studio's Set Stock and Set Origin really do</h3><ul>
+      <li><b>Set Stock</b> (Anchor1 / Custom) only places the stock in Studio's 3D view, which is why nothing changes. Dropped.</li>
+      <li><b>Set Origin</b> "Relative to" picks the reference the X/Y offset is measured from: <b>Anchor 1</b> (a fixed point on the bed) or <b>Current Pos</b> (the spindle). Your two screenshots are the same origin both ways: 19.330 from Anchor 1 = −170.360 from where the spindle was. Anchor 2 is greyed in Studio on the Z1 ("not available for current machine").</li>
+      <li><b>Same As CAM</b> = the "X Offset / Y Offset … from anchor 1" lines the Carvera community post writes in every file's header (yours says 0, −3), so it works with plain Fusion output.</li>
+    </ul></div>
+  </div>
+  <div class="notes">
+    <div class="card"><h3>What Start sends (from Makera's app and the firmware source)</h3>
+      <table>
+        <tr><td>Origin</td><td>only if you changed it: G10 to G54 (anchor 1 + offset, or the current position)</td></tr>
+        <tr><td>Checks</td><td><code>buffer M495 X Y C D A B I J H P1</code>: X/Y = toolpath min, C/D = max, A/B = size, I/J = grid points, H = clearance. Leave a letter group out to skip that check. Sent only if a check is on.</td></tr>
+        <tr><td>Start</td><td><code>play /sd/gcodes/&lt;file&gt;</code></td></tr>
+        <tr><td>Assist</td><td>sent when flipped: <code>M331</code>/<code>M332</code> vacuum, <code>.1</code> blow, <code>.2</code> bed clean, <code>.4</code> anti-static. State read from the status line's <code>S:</code> fields 4, 7, 8, 10.</td></tr>
+      </table>
+      <p style="margin:6px 0 0;font-size:12px"><b>How "buffer" works:</b> the Z1 queues the line and runs it at the start of the next <code>play</code>, before the file's first line. So the margin scan and leveling happen inside the job, and Hold / Reset work on them as usual.</p>
+    </div>
+    <div class="card"><h3>Firmware rules the flow has to respect</h3><ul>
+      <li>M495 and play both need the machine homed; M495 is ignored otherwise.</li>
+      <li>With a cutter in, M495 does a manual change to the probe first, then calibrates it, and the job's own M6 swaps back. With the probe in but not calibrated it stops with "Probe not calibrated".</li>
+      <li>The margin scan only traces with the laser (no touching); leveling probes the grid with <code>G32</code> and the firmware applies it live, the file isn't changed.</li>
+      <li>"Fits the travel" is our own check of the toolpath box against the machine's limits (Makera's app does the same before starting).</li>
+    </ul></div>
+  </div>
+  <div class="notes">
+    <div class="card"><h3>Not verified yet</h3><ul>
+      <li>The exact order Studio sends origin / buffer / play in, and whether it adds anything else (e.g. a <code>time</code> sync). Checking needs a capture of Studio starting a job: a no-motion file with all checks off would do. I'll ask before running anything.</li>
+      <li>What <code>P1</code>, <code>O0</code> and <code>R0</code> change on the Z1's own firmware (the app adds them; the community source says P = "go to clearance, then the path origin" after the checks).</li>
+      <li>Where to read Anchor 1's position: the Z1's config has it (−190.69, −194.58 on yours).</li>
+      <li>Download time is from the PC (≈150 KB/s); the phone should be similar.</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- 7. tool change popup -->
+  <div class="shot">
+    <h2>7. Tool change popup</h2>
+    <p class="sub">Pops up on the main screen whenever the Z1 stops for a tool (state <code>Tool</code>), during a job or not. Names come from the job's header; the order from its M6 lines. Buzzes once.</p>
+    <div class="phone">
+      <div class="sb"><span>18:12</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm small"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 22 ms</span></div><span class="pill run" style="background:var(--warn);color:#2a1a00">Tool change</span>
+        <span class="ic"><svg><use href="#i-folder"/></svg></span><span class="ic"><svg><use href="#i-term"/></svg></span><span class="ic"><svg><use href="#i-gear"/></svg></span></div>
+      <div class="dro"><div><i>X</i>143.300</div><div><i>Y</i>112.000</div><div><i>Z</i>53.233</div><div><i>A</i>−90.000</div></div>
+      <div class="scrim"></div>
+      <div class="sheet new tc">
+        <div class="grab"></div>
+        <div class="tch">Tool change <span>2 of 3 · line 18,204</span></div>
+        <div class="tcbig">Put in <b>T1</b></div>
+        <div class="tcd">Flat end mill 1/8" · <b>3.175 mm</b></div>
+        <div class="tco">Take out T4 · Flat Single Flute Engraving 30° · 0.3 mm</div>
+        <div class="tcn">After you continue, the Z1 measures the new tool on the setter, then carries on with the job.</div>
+        <div class="tcb">I've put in T1 · continue</div>
+        <div class="tcs"><span>Hide</span><span>Next: T6 · 6 mm</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7b. reconnect -->
+  <div class="shot">
+    <h2>7b. Phone was off</h2>
+    <p class="sub">Same popup on reconnect: the first status reply already says <code>Tool</code> and which tool, and the pendant asks the Z1 for the playing file again. Nothing is lost while the phone was away.</p>
+    <div class="phone">
+      <div class="sb"><span>18:31</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm small"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 22 ms</span></div><span class="pill run" style="background:var(--warn);color:#2a1a00">Tool change</span>
+        <span class="ic"><svg><use href="#i-folder"/></svg></span><span class="ic"><svg><use href="#i-term"/></svg></span><span class="ic"><svg><use href="#i-gear"/></svg></span></div>
+      <div class="dro"><div><i>X</i>143.300</div><div><i>Y</i>112.000</div><div><i>Z</i>53.233</div><div><i>A</i>−90.000</div></div>
+      <div class="scrim"></div>
+      <div class="sheet tc">
+        <div class="grab"></div>
+        <div class="tch">Tool change <span class="new" style="padding:0 4px">2 of 3 · line 18,204</span></div>
+        <div class="tcbig">Put in <b>T1</b></div>
+        <div class="tcd">Flat end mill 1/8" · <b>3.175 mm</b></div>
+        <div class="tco">Take out T4 · Flat Single Flute Engraving 30° · 0.3 mm</div>
+        <div class="tcn">After you continue, the Z1 measures the new tool on the setter, then carries on with the job.</div>
+        <div class="tcb">I've put in T1 · continue</div>
+        <div class="tcs"><span>Hide</span><span>Next: T6 · 6 mm</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7c. probe swap -->
+  <div class="shot">
+    <h2>7c. Swap to the probe</h2>
+    <p class="sub">The same popup covers the Z1 asking for the probe (the Checks step does this when a cutter is in). Tool 0 or 9999 reads as "the 3D probe".</p>
+    <div class="phone">
+      <div class="sb"><span>17:46</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm small"><b>Makera_Z1P_024816</b><span>192.168.1.48 · 22 ms</span></div><span class="pill run" style="background:var(--warn);color:#2a1a00">Tool change</span>
+        <span class="ic"><svg><use href="#i-folder"/></svg></span><span class="ic"><svg><use href="#i-term"/></svg></span><span class="ic"><svg><use href="#i-gear"/></svg></span></div>
+      <div class="dro"><div><i>X</i>143.300</div><div><i>Y</i>112.000</div><div><i>Z</i>53.233</div><div><i>A</i>−90.000</div></div>
+      <div class="scrim"></div>
+      <div class="sheet tc">
+        <div class="grab"></div>
+        <div class="tch">Before the job <span>margin scan</span></div>
+        <div class="tcbig">Put in <b>the 3D probe</b></div>
+        <div class="tcd">Plug in its cable. The job swaps back to T4 itself.</div>
+        <div class="tco">Take out T4 · Flat Single Flute Engraving 30° · 0.3 mm</div>
+        <div class="tcn">After you continue, the Z1 calibrates the probe on the setter and checks it triggers.</div>
+        <div class="tcb">The probe is in · continue</div>
+        <div class="tcs"><span>Hide</span><span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes" style="width:300px">
+    <div class="card"><h3>How the pendant knows (already in its status parsing)</h3><ul>
+      <li>State <code>Tool</code> = the Z1 is waiting at the change spot (firmware <code>M490.1</code>).</li>
+      <li><code>T:</code> = in the collet, its length offset, <b>wanted</b>. From your 2026-11-15 job: <code>T:4,-7.099,1</code> = T4 in, T1 wanted.</li>
+      <li><code>P:</code> stays through the wait, so the job, its line and progress are known too.</li>
+      <li><b>Continue</b> sends <code>M490.2</code>, the same as Makera's app and a short press of the machine's button. Either one clears the popup on every phone.</li>
+      <li><b>Hide</b> shrinks it to the existing strip in the job panel; tapping the orange pill brings it back.</li>
+    </ul></div>
+    <div class="card q"><h3>Not covered</h3><ul><li>A phone that's off or asleep can't be told. Waking it would need a notification service running in the background; say if you want that later.</li></ul></div>
+  </div>
+</div>
+</body>
+</html>
