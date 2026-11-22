@@ -152,7 +152,7 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 
 ## Requirements
 - An Android phone or tablet on **Android 12 or newer** (developed on a Pixel 10, Android 16), or an
-  **iPhone / iPad on iOS 16 or newer** that you build and install yourself from a Mac (see
+  **iPhone / iPad on iOS 16 or newer** that you install yourself from a Windows PC or a Mac (see
   [iPhone](#iphone); tested on an iPhone 16 with iOS 27 and an iPad Pro 11" with iPadOS 18).
 - A **Makera Z1** (developed on a Z1 Pro) on stock firmware, already set up on your Wi-Fi with the
   Makera app.
@@ -177,10 +177,42 @@ The app isn't on the Play Store, so you install the APK file yourself ("sideload
 > debugging on: `adb install z1-pendant-<version>.apk`.
 
 ## iPhone
-There's no App Store version, so you build the app on a Mac and install it on your iPhone with your
-own (free) Apple ID. It's the same app and the same screens as on Android.
+There's no App Store version, so you install the app yourself with your own (free) Apple ID, either
+[from a Windows PC](#without-a-mac-windows) with no Mac needed, or by [building it on a Mac](#on-a-mac).
+It's the same app and the same screens as on Android, and the same steps work for an iPad.
 
-The same steps install it on an iPad. You need a Mac with **Xcode** (free, Mac App Store) and **Java 21** (e.g. [Temurin](https://adoptium.net)),
+### Without a Mac (Windows)
+Each [release](../../releases/latest) has a ready-built `z1-pendant-<version>.ipa` (the iPhone app,
+not yet signed). [Sideloadly](https://sideloadly.io) signs it with your Apple ID and installs it over USB.
+
+1. On the PC, install **iTunes from [apple.com](https://www.apple.com/itunes/)** (Sideloadly doesn't work
+   with the Microsoft Store version) and **[Sideloadly](https://sideloadly.io)**.
+2. Download `z1-pendant-<version>.ipa` from the [latest release](../../releases/latest) (under **Assets**).
+3. Plug in the iPhone, unlock it, and tap **Trust**.
+4. In Sideloadly: drag the `.ipa` in, pick your iPhone, type your Apple ID, and click **Start**. Enter
+   your password and, if asked, the code Apple sends to your devices. A second (free) Apple ID works
+   too if you'd rather not use your main one.
+   - If it says the bundle ID isn't available, open **Advanced options** and change the **bundle ID**
+     to something only you would use (e.g. add your initials at the end), then **Start** again.
+5. On the iPhone: **Settings → General → VPN & Device Management** → your Apple ID → **Trust**.
+6. The first time, iOS also wants **Developer Mode**: **Settings → Privacy & Security → Developer Mode**
+   → on (the phone restarts, then confirm **Turn On**).
+7. Open **Z1 Pendant** and tap **Allow** when it asks to find devices on your local network.
+
+With a **free Apple ID the app stops opening after 7 days** (Apple's rule, whatever tool installs it;
+a paid Apple Developer account makes it a year). Two ways to deal with it:
+- **Let Sideloadly renew it:** in step 4, open **Advanced options** and tick **Automatic Refresh via
+  Sideloadly Daemon**. It re-signs the app over Wi-Fi (or USB) before the week is up, as long as the PC
+  is on with the Sideloadly daemon running (its icon in the taskbar tray).
+- **Or redo step 4 by hand** each week with the same `.ipa` and Apple ID (and the same bundle ID, if
+  you changed it).
+
+Either way your settings and hotkeys are kept. To update to a new version, run step 4 with the new
+`.ipa`. ([AltStore Classic](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows)
+is another free tool that does the same job.)
+
+### On a Mac
+You need **Xcode** (free, Mac App Store) and **Java 21** (e.g. [Temurin](https://adoptium.net)),
 and a USB cable for the first install.
 
 1. Get the source: `git clone https://github.com/jimmyvegas29/makera-z1-pendant`
@@ -197,7 +229,8 @@ and a USB cable for the first install.
 With a **free Apple ID the app stops opening after 7 days**: plug the phone in and run step 5 again
 (your settings and hotkeys are kept). A paid Apple Developer account makes it a year.
 
-Differences on iPhone: the volume buttons can't jog (iOS doesn't let apps use them), and hotkey
+### Differences on iPhone
+The volume buttons can't jog (iOS doesn't let apps use them), and hotkey
 export/import is Android-only for now. **Scan network** works once you've allowed local network access.
 
 ## Connect to your machine
