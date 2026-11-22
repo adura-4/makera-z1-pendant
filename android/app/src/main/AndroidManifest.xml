@@ -24,5 +24,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Share → Z1 Pendant: reads the shared G-code file and hands it to MainActivity (see ShareActivity). -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:label="Z1 Pendant"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <!-- G-code has no standard type: apps send .nc/.cnc/.gcode as octet-stream or text. -->
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="application/x-gcode" />
+                <data android:mimeType="application/gcode" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

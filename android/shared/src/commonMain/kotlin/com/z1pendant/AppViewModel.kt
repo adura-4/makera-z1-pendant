@@ -242,7 +242,12 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     fun keepMesh() { meshPrompt.value = null; log("· leveling grid kept") }
     fun clearMesh() { meshPrompt.value = null; log("▶ leveling grid cleared (M370)"); link.sendLine("M370") }
 
-    /** After connecting: three statuses in (so a job's |P: is reliably seen), Idle, no job, a grid → ask. */
+    /**
+     * After connecting: three statuses in (so a job's |P: is reliably seen), Idle, no job, a grid → read
+     * the grid itself (`M375.1`) and ask only if it holds values. Right after power-on the Z1 can report
+     * `|O:` with an empty grid (every point "nan", seen 2026-11-22), which corrects nothing. If the grid
+     * can't be read, ask anyway with the status's figure.
+     */
     private suspend fun checkMeshOnConnect() {
         val seen = mutableListOf<MachineStatus>()
         kotlinx.coroutines.withTimeoutOrNull(5_000) {
@@ -250,7 +255,13 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         }
         val st = seen.lastOrNull() ?: return
         if (seen.any { it.job != null } || !st.isIdle) return
-        st.mesh?.let { meshPrompt.value = it; log("· leveling grid active on connect (largest correction ${com.z1pendant.util.Fmt.fixed(it, 3)} mm)") }
+        val reported = st.mesh ?: return
+        val grid = run.readMesh()
+        val largest = if (grid != null) com.z1pendant.run.Mesh.largest(grid) else reported
+        if (largest == null) { log("· machine reports a leveling grid, but it's empty (no points): not asking"); return }
+        if (link.status.value?.job != null) return               // a job started meanwhile
+        meshPrompt.value = largest
+        log("· leveling grid active on connect (largest correction ${com.z1pendant.util.Fmt.fixed(largest, 3)} mm)")
     }
 
     /** Stop box → M5. */

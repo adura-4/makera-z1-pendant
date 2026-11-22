@@ -289,7 +289,11 @@ class MakeraLink(
             }
         } finally {
             xferFrames = null
-            if (!finished) sendRaw(MakeraFrame.build(MakeraFrame.DL_CANCEL))   // free the board's transfer slot
+            // Free the board's transfer slot (it also deletes the half-written file). Also when the upload
+            // was cancelled from the app: this coroutine is then cancelled, so the send must not be.
+            if (!finished) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                sendRaw(MakeraFrame.build(MakeraFrame.DL_CANCEL))
+            }
         }
     }
 

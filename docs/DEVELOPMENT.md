@@ -101,7 +101,10 @@ added once to existing hotkey sets) or a file's sheet.
   rows and the human-readable table). The firmware applies an active grid to every move (jogs too) until
   `M370`, and outside the probed area the stock build uses the nearest grid edge's value, so the pendant
   clears it when a job ends or is cancelled. On connect, a grid with the machine Idle and no job (three
-  statuses without `|P:`) opens a Clear / Keep popup (`AppViewModel.meshPrompt`).
+  statuses without `|P:`) opens a Clear / Keep popup (`AppViewModel.meshPrompt`), but only after `M375.1`
+  shows values: right after power-on the Z1 can report `|O:-1.351` with an empty grid (all 15 × 15 points
+  `nan`, gone again a few seconds later; seen 2026-11-22), which corrects nothing. `Mesh.parse` reads `nan`
+  as NaN; `Mesh.largest` is null for an empty grid. Simulator: `z1sim.py --boot-mesh empty|real`.
 - Tool change popup (`ToolChangePopup`): state `Tool`, the wanted tool from `|T:` field 3, Continue = `M490.2`.
 - Tests: `RunModelTest` (extents, the M495 line against Studio's, origin lines, CAM offset, M6 guard, mesh,
   assist/mesh status fields). The simulator (`python/z1sim.py`) answers config-get, buffer, M495 (scan, Z probe,

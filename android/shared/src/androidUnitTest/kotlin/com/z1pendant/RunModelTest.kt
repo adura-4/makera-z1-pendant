@@ -133,6 +133,21 @@ class RunModelTest {
         assertEquals(listOf(listOf(0.01, 0.02, -0.01), listOf(0.0, 0.05, 0.03)), Mesh.parse(human))
         assertEquals(0.06, Mesh.spread(Mesh.parse(plain)!!), 1e-9)
         assertNull(Mesh.parse("ok\n"))
+        assertEquals(0.05, Mesh.largest(Mesh.parse(plain)!!)!!, 1e-9)
+    }
+
+    /** The Z1 right after power-on (2026-11-22): `|O:` reported, but `M375.1` prints every point as nan. */
+    @Test fun meshEmptyNanGrid() {
+        val ys = (14 downTo 0).map { 50.0 * it / 14 }
+        val text = ys.joinToString("\n") { y -> "%.4f|".format(y) + "        nan".repeat(15) } +
+            "\n-----+" + "----------+".repeat(14) + "-----\n" + (0..14).joinToString(" ") { "%.4f".format(50.0 * it / 14) } + "\nok\n"
+        val g = Mesh.parse(text)!!
+        assertEquals(15, g.size); assertEquals(15, g[0].size)
+        assertTrue(g.flatten().all { it.isNaN() })
+        assertNull(Mesh.largest(g))
+        assertEquals(0.0, Mesh.spread(g), 0.0)
+        // A grid with some empty points still has a largest value (with its sign).
+        assertEquals(-0.08, Mesh.largest(listOf(listOf(Double.NaN, 0.02), listOf(-0.08, Double.NaN)))!!, 1e-9)
     }
 
     @Test fun assistAndMeshFromStatus() {

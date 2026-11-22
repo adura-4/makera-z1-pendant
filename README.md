@@ -38,7 +38,10 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
   - Hold, Resume and Stop stay quiet while idle and light up when they matter: Hold and Stop while
     moving, Resume on hold, Stop in an alarm. During a job, Stop reads **Cancel job**.
 - **Files**: browse the machine's SD card, upload from your phone, rename, delete, and tap a file for
-  its sheet: **Run**, and **Job info** (its tools and header).
+  its sheet: **Run**, and **Job info** (its tools and header). An upload can be cancelled at any point,
+  and the machine then deletes the part it had received. On Android you can also send a file straight
+  from another app (Files, Drive, Gmail): **Share → Z1 Pendant**, and the pendant asks before uploading it.
+  Android's own file picker has no Cancel button; swipe in from the screen edge to back out of it.
 - **Run a job**: the Run tile (or Run in a file's sheet) sets up and starts a job the way Makera Studio does.
   It only opens while the machine is Idle. A map of the bed shows the **cutting area** (the box the cutting
   moves cover), the origin, where the spindle is, the anchor bracket, the Z probe point and the leveling

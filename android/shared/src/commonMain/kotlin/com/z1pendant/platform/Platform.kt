@@ -62,6 +62,13 @@ expect fun utcOffsetSeconds(epochSec: Long): Int
 @Composable
 expect fun rememberFilePicker(onPicked: (name: String, bytes: ByteArray) -> Unit): () -> Unit
 
+/**
+ * Whether that picker has its own Cancel button. iOS's does. Android's (DocumentsUI) has no Cancel, X or
+ * back arrow, and with gesture navigation there's no back button either: only the back swipe gets out
+ * (checked on a Pixel 10, Android 16). The Upload sheet tells Android users how to back out.
+ */
+expect val systemPickerHasCancel: Boolean
+
 /** Platform log (Android: logcat). [level] is 'D', 'I' or 'W'. */
 expect fun platformLog(level: Char, tag: String, msg: String)
 

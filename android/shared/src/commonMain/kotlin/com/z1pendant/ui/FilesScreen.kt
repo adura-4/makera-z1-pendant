@@ -35,10 +35,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SwipeRight
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,10 +74,13 @@ import com.z1pendant.AppViewModel
 import com.z1pendant.files.FilesController
 import com.z1pendant.files.FilesController.InfoState
 import com.z1pendant.files.RemoteFiles
+import com.z1pendant.files.ShareInbox
+import com.z1pendant.link.ConnState
 import com.z1pendant.link.RemoteEntry
 import com.z1pendant.platform.PlatformBackHandler
 import com.z1pendant.platform.epochSeconds
 import com.z1pendant.platform.rememberFilePicker
+import com.z1pendant.platform.systemPickerHasCancel
 import com.z1pendant.platform.utcOffsetSeconds
 
 private val Danger = Color(0xFFF87171)
@@ -112,7 +118,14 @@ fun FilesScreen(vm: AppViewModel, pickForRun: Boolean = false, onRun: (String) -
     var renameFor by remember { mutableStateOf<RemoteEntry?>(null) }
     var deleteAsk by remember { mutableStateOf<List<String>?>(null) }
     var newFolder by remember { mutableStateOf(false) }
-    val pick = rememberFilePicker { name, bytes -> f.upload(name, bytes) }
+    // Upload opens our "Upload to the Z1" sheet first (it has a Cancel; Android's picker doesn't). The sheet
+    // stays open while the phone's picker is up, so backing out of the picker lands on it again.
+    var uploadSheet by remember { mutableStateOf(false) }
+    val pick = rememberFilePicker { name, bytes -> uploadSheet = false; f.upload(name, bytes) }
+    val shared by ShareInbox.file.collectAsState()
+    val conn by vm.link.conn.collectAsState()
+    /** Where an upload lands: "SD card › gcodes › jobs". */
+    val into = "SD card › " + RemoteFiles.crumbs(path).joinToString(" › ") { it.first }
 
     LaunchedEffect(Unit) { f.open() }
     PlatformBackHandler { if (!f.back()) onClose() }
@@ -134,7 +147,7 @@ fun FilesScreen(vm: AppViewModel, pickForRun: Boolean = false, onRun: (String) -
                     IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "Close") }
                     Text(if (pickForRun) "Select File" else "Files", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     IconButton(onClick = { newFolder = true }, enabled = readOnly == null) { Icon(Icons.Filled.CreateNewFolder, "New folder") }
-                    IconButton(onClick = pick, enabled = readOnly == null && upload == null) { Icon(Icons.Filled.FileUpload, "Upload from the phone") }
+                    IconButton(onClick = { uploadSheet = true }, enabled = readOnly == null && upload == null) { Icon(Icons.Filled.FileUpload, "Upload from the phone") }
                 }
             }
 
@@ -165,10 +178,12 @@ fun FilesScreen(vm: AppViewModel, pickForRun: Boolean = false, onRun: (String) -
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(10.dp))
                     .background(MaterialTheme.colorScheme.secondaryContainer).padding(10.dp)) {
                     Text("Uploading ${u.name}", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    LinearProgressIndicator(progress = { if (u.total > 0) u.sent.toFloat() / u.total else 0f },
+                    // Before the first packet (reconnecting, the start handshake): a moving bar and what it waits for.
+                    if (u.note != null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
+                    else LinearProgressIndicator(progress = { if (u.total > 0) u.sent.toFloat() / u.total else 0f },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("${RemoteFiles.sizeLabel(u.sent)} of ${RemoteFiles.sizeLabel(u.total)}", fontSize = 12.sp,
+                        Text(u.note ?: "${RemoteFiles.sizeLabel(u.sent)} of ${RemoteFiles.sizeLabel(u.total)}", fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                         TextButton(onClick = f::cancelUpload) { Text("Cancel") }
                     }
@@ -217,6 +232,73 @@ fun FilesScreen(vm: AppViewModel, pickForRun: Boolean = false, onRun: (String) -
                 onDelete = { sheetFor = null; deleteAsk = listOf(e.name) },
                 onRun = { sheetFor = null; onRun(RemoteFiles.child(path, e.name)) })
         }
+    }
+
+    // ---- "Upload to the Z1": where it goes, the way into the phone's picker, and Cancel ----
+    if (uploadSheet) {
+        val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val muted = MaterialTheme.colorScheme.onSurfaceVariant
+        ModalBottomSheet(onDismissRequest = { uploadSheet = false }, sheetState = state, containerColor = Color(0xFF111A2B)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+                Text("Upload to the Z1", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Row(Modifier.padding(top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Text("  Goes into ", fontSize = 13.sp, color = muted)
+                    Text(into, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.secondaryContainer)
+                    .clickable(onClick = pick).padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Choose a file on this phone…", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Downloads, Drive, anywhere", fontSize = 12.sp, color = muted)
+                    }
+                }
+                if (!systemPickerHasCancel) {
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF162033))
+                        .padding(10.dp), verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Filled.SwipeRight, null, tint = muted, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("The next screen is Android's and has no Cancel button. To back out of it, swipe in from the " +
+                            "left or right edge. You'll come back here.", fontSize = 12.5.sp, color = Color(0xFFCBD5E1))
+                    }
+                }
+                FilledTonalButton(onClick = { uploadSheet = false }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("Cancel") }
+            }
+        }
+    }
+
+    // ---- a file shared from another app: ask before sending it ----
+    shared?.let { s ->
+        val ready = conn == ConnState.Connected && raw != null && readOnly == null && upload == null
+        val wait = when {
+            ready -> null
+            readOnly != null -> readOnly
+            upload != null -> "Another upload is running."
+            conn == ConnState.Disconnected -> "Not connected to a Z1. Connect in Settings first."
+            conn != ConnState.Connected -> "Connecting to the Z1…"
+            else -> "Reading the SD card…"
+        }
+        AlertDialog(onDismissRequest = { ShareInbox.file.value = null },
+            title = { Text("Upload to the Z1?") },
+            text = {
+                Column {
+                    Text(s.name, fontWeight = FontWeight.SemiBold)
+                    Text(RemoteFiles.sizeLabel(s.bytes.size.toLong()), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Text("Goes into $into. Spaces in the name become _.")
+                    wait?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text(it, color = WarnText, fontSize = 13.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { ShareInbox.file.value = null; f.upload(s.name, s.bytes) }, enabled = ready) { Text("Upload") }
+            },
+            dismissButton = { TextButton(onClick = { ShareInbox.file.value = null }) { Text("Cancel") } })
     }
 
     deleteAsk?.let { names ->

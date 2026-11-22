@@ -82,6 +82,9 @@ class Machine(ProbeSim):
         self.buffered = None
         self.assist = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}   # M331[.n] on / M332[.n] off
         self.mesh = None                               # rows of Z corrections (front first)
+        # --boot-mesh empty: like the Z1 right after power-on (2026-11-22): |O: in the status, but M375.1
+        # prints a 15 x 15 grid of "nan" (no values). Cleared by M370 like a real grid.
+        self.ghost_mesh = None
 
     # --- G-code -------------------------------------------------------------------------
     def line(self, text: str) -> list[str]:
@@ -106,8 +109,13 @@ class Machine(ProbeSim):
                 name = ["extend out", "auto blowing", "auto bed cleaning", "extout", "static electricity removal"][idx]
                 return [f"turning {name} mode {'on' if on else 'off'}\r\n", "ok\r\n"]
             if t == "M370":
-                self.mesh = None; return ["ok\r\n"]
+                self.mesh = None; self.ghost_mesh = None; return ["ok\r\n"]
             if t == "M375.1":
+                if not self.mesh and self.ghost_mesh is not None:
+                    ys = [50 * i / 14 for i in range(14, -1, -1)]
+                    rows = "".join(f"{y:.4f}|" + "".join(f"{'nan':>11}" for _ in range(15)) + "\n" for y in ys)
+                    return [rows + "-----+" + "----------+" * 14 + "-----\n"
+                            + " ".join(f"{50 * i / 14:.4f}" for i in range(15)) + "\n", "ok\r\n"]
                 if not self.mesh:
                     return ["No grid\r\n", "ok\r\n"]
                 return ["".join(" ".join(f"{v:.4f}" for v in row) + " \n" for row in self.mesh), "ok\r\n"]
@@ -488,7 +496,8 @@ class Machine(ProbeSim):
                     f"|WPos:{wp[0]:.4f},{wp[1]:.4f},{wp[2]:.4f},{wp[3]:.4f},0.0000"
                     f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},{self.spindle_factor:.1f},"
                     f"{self.assist[0]},29.0,22.8,{self.assist[1]},{self.assist[2]},{self.assist[3]},{self.assist[4]}"
-                    + (f"|O:{max(abs(v) for r in self.mesh for v in r):.3f}" if self.mesh else "") +
+                    + (f"|O:{max(abs(v) for r in self.mesh for v in r):.3f}" if self.mesh
+                       else f"|O:{self.ghost_mesh:.3f}" if self.ghost_mesh is not None else "") +
                     f"|T:{self.tool},{self.tlo:.3f},{self.tool_target}{self.job_field()}|W:0.00>")
 
 
@@ -821,6 +830,9 @@ def main():
     ap.add_argument("--port", type=int, default=P.TCP_PORT)
     ap.add_argument("--latency-ms", type=float, default=0)
     ap.add_argument("--no-broadcast", action="store_true")
+    ap.add_argument("--boot-mesh", choices=["empty", "real"],
+                    help="start with a leveling grid: 'empty' = |O: reported but every point nan (the Z1 after "
+                         "power-on), 'real' = a small grid with values")
     ap.add_argument("--speed", type=float, default=1.0, help="run motion this many times faster (tests)")
     ap.add_argument("--sd", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_sd"),
                     help="folder standing in for the SD card: 'play <name>' plays <sd>/<name>")
@@ -830,6 +842,10 @@ def main():
     m.xfer = Transfers(m)
     m.sd = a.sd
     m.speed = a.speed
+    if a.boot_mesh == "empty":
+        m.ghost_mesh = -1.351
+    elif a.boot_mesh == "real":
+        m.mesh = [[0.01, 0.02, -0.01], [0.0, 0.05, 0.03]]
     threading.Thread(target=m.run, daemon=True).start()
     if not a.no_broadcast:
         threading.Thread(target=broadcaster, args=(a.name, a.port), daemon=True).start()

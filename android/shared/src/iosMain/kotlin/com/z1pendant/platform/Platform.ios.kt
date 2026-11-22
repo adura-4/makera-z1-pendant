@@ -32,6 +32,8 @@ actual fun utcOffsetSeconds(epochSec: Long): Int =
     NSTimeZone.localTimeZone.secondsFromGMTForDate(
         NSDate.dateWithTimeIntervalSince1970(epochSec.toDouble())).toInt()
 
+actual val systemPickerHasCancel: Boolean = true
+
 /** The Files app picker; the chosen file is copied into the app's sandbox, then read. */
 @Composable
 actual fun rememberFilePicker(onPicked: (name: String, bytes: ByteArray) -> Unit): () -> Unit {

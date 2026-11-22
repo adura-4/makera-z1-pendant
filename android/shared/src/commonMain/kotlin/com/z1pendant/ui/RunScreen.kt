@@ -658,16 +658,18 @@ fun MeshSheet(vm: AppViewModel, onClose: () -> Unit) {
             Text("Leveling mesh · this job", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
             val g = grid
             when {
+                g != null && Mesh.largest(g) == null -> Text("The grid is empty: no points have a value, so it corrects nothing.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                 g != null -> {
-                    val all = g.flatten(); val lo = all.min(); val hi = all.max()
+                    val all = g.flatten().filter { it.isFinite() }; val lo = all.min(); val hi = all.max()
                     Text("${g[0].size} × ${g.size} points · spread ${Fmt.fixed(Mesh.spread(g), 3)} mm", fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     // Back row on top, like the bed map.
                     for (row in g.reversed()) Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         for (v in row) {
                             val t = if (hi > lo) ((v - lo) / (hi - lo)).toFloat() else 0.5f
-                            val c = androidx.compose.ui.graphics.lerp(Color(0xFF2563EB), Color(0xFFF97316), t)
-                            Text(Fmt.fixed(v, 3), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.White,
+                            val c = if (v.isFinite()) androidx.compose.ui.graphics.lerp(Color(0xFF2563EB), Color(0xFFF97316), t) else Color(0xFF333B4A)
+                            Text(if (v.isFinite()) Fmt.fixed(v, 3) else "–", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color.White,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 modifier = Modifier.weight(1f).clip(RoundedCornerShape(4.dp)).background(c).padding(vertical = 8.dp))
                         }

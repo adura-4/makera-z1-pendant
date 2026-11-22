@@ -211,7 +211,8 @@ object Mesh {
             val l = raw.trim()
             if (l.isEmpty() || l.contains("---") || l == "ok") continue
             val body = if ('|' in l) { human = true; l.substringAfter('|') } else l
-            val nums = body.trim().split(Regex("\\s+")).map { it.toDoubleOrNull() }
+            // An empty grid prints every point as "nan" (seen on the Z1 2026-11-22).
+            val nums = body.trim().split(Regex("\\s+")).map { if (it.trimStart('-').equals("nan", true)) Double.NaN else it.toDoubleOrNull() }
             if (nums.isEmpty() || nums.any { it == null }) continue
             // The human-readable table ends with the X axis labels (no '|'): skip that line.
             if (human && '|' !in l) continue
@@ -222,8 +223,11 @@ object Mesh {
         return if (human) rows.reversed() else rows
     }
 
-    /** Highest minus lowest point. */
-    fun spread(g: List<List<Double>>) = g.flatten().let { (it.maxOrNull() ?: 0.0) - (it.minOrNull() ?: 0.0) }
+    /** Highest minus lowest point (points without a value are left out). */
+    fun spread(g: List<List<Double>>) = g.flatten().filter { it.isFinite() }.let { (it.maxOrNull() ?: 0.0) - (it.minOrNull() ?: 0.0) }
+
+    /** The point furthest from zero (with its sign), or null if no point has a value (an empty grid). */
+    fun largest(g: List<List<Double>>): Double? = g.flatten().filter { it.isFinite() }.maxByOrNull { kotlin.math.abs(it) }
 }
 
 /** Studio's assist switches: persistent firmware modes, reported in the status `|S:` fields. */

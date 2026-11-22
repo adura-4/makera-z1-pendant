@@ -36,6 +36,8 @@ actual fun rememberFilePicker(onPicked: (name: String, bytes: ByteArray) -> Unit
     return remember(launcher) { { launcher.launch(arrayOf("*/*")) } }
 }
 
+actual val systemPickerHasCancel: Boolean = false
+
 actual fun platformLog(level: Char, tag: String, msg: String) {
     when (level) {
         'D' -> Log.d(tag, msg)

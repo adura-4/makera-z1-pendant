@@ -157,6 +157,41 @@ class FilesSimTest {
         assertTrue(notes.toString(), notes.any { it.startsWith("Deleted 2") })
     }
 
+    @Test fun controllerCancelMidTransferLeavesNothing() = runBlocking {
+        val notes = mutableListOf<String>()
+        val files = FilesController(link, scope, MapPrefs()) { notes += it }
+        files.open()
+        waitFor { files.entries.value != null && files.readOnly.value == null }
+        val big = ByteArray(1_500_000).also { Random(5).nextBytes(it) }
+        files.upload("big.cnc", big)
+        assertNotNull("the strip shows at once", files.upload.value)
+        waitFor { (files.upload.value?.sent ?: 0) > 0 }
+        files.cancelUpload()
+        assertNull("the strip goes at once", files.upload.value)
+        assertTrue(notes.toString(), notes.contains("Upload cancelled"))
+        delay(1500)
+        assertFalse("the board removed the half-written file", File(sd, "big.cnc").exists())
+        files.upload("small.cnc", "G0\n".toByteArray())                       // the transfer slot is free again
+        waitFor { File(sd, "small.cnc").exists() && files.upload.value == null }
+    }
+
+    @Test fun controllerCancelWhileWaitingForTheLink() = runBlocking {
+        val notes = mutableListOf<String>()
+        val files = FilesController(link, scope, MapPrefs()) { notes += it }
+        files.open()
+        waitFor { files.entries.value != null && files.readOnly.value == null }
+        link.disconnect()                                                       // as after the phone's picker
+        files.upload("late.cnc", "G0\n".toByteArray())
+        assertEquals("Waiting for the Z1…", files.upload.value?.note)
+        files.cancelUpload()
+        assertNull(files.upload.value)
+        link.connect(MachineTarget("sim", "127.0.0.1", port))
+        waitFor { link.conn.value == ConnState.Connected }
+        delay(2000)
+        assertFalse("nothing is sent once the link is back", File(sd, "late.cnc").exists())
+        assertTrue(notes.toString(), notes.contains("Upload cancelled"))
+    }
+
     private suspend fun waitFor(ms: Long = 15_000, cond: () -> Boolean) = withTimeout(ms) { while (!cond()) delay(30) }
 
     private class MapPrefs : Prefs {

@@ -46,7 +46,8 @@ class FilesController(
     /** Job info by full path. */
     val jobInfo = MutableStateFlow<Map<String, InfoState>>(emptyMap())
 
-    data class Upload(val name: String, val sent: Long, val total: Long, val startedAt: Long)
+    /** [note]: what it's waiting for before the first packet goes ("Waiting for the Z1…", "Starting…"); null once sending. */
+    data class Upload(val name: String, val sent: Long, val total: Long, val startedAt: Long, val note: String? = null)
     class Pending(val name: String, val bytes: ByteArray)
     sealed interface InfoState {
         data object Loading : InfoState
@@ -188,16 +189,26 @@ class FilesController(
     }
 
     // ---- upload ----
+    /**
+     * The upload in progress, from the moment a file is picked (the reconnect wait, the start handshake,
+     * the busy retries and the transfer): [cancelUpload] cancels it at any of those steps.
+     */
+    private var uploadJob: kotlinx.coroutines.Job? = null
+
     /** A file picked on the phone: upload it to the open folder (asks first if the name is taken). */
     fun upload(name: String, bytes: ByteArray) {
+        if (upload.value != null) { notify("An upload is already running."); return }
         // The phone's picker puts the pendant in the background, where Android throttles its network: the
-        // link often comes back "lost" and reconnects just as the file arrives (seen on a Pixel 10). Wait for it.
+        // link often comes back "lost" and reconnects just as the file arrives (seen on a Pixel 10). Wait for
+        // it, with the upload strip (and its Cancel) already showing.
         if (link.conn.value != ConnState.Connected) {
-            scope.launch {
+            upload.value = Upload(RemoteFiles.cleanName(name).ifEmpty { "file.nc" }, 0, bytes.size.toLong(), nowMs(), "Waiting for the Z1…")
+            uploadJob = scope.launch {
                 val back = kotlinx.coroutines.withTimeoutOrNull(10_000) {
                     link.conn.first { it == ConnState.Connected }
                     while (link.status.value == null) kotlinx.coroutines.delay(50)
                 } != null
+                upload.value = null
                 if (back) { kotlinx.coroutines.delay(300); uploadNow(name, bytes) } else notify("Not connected to the Z1.")
             }
             return
@@ -227,8 +238,8 @@ class FilesController(
     private fun startUpload(name: String, bytes: ByteArray) {
         val dir = path.value
         cancelUploadRequested = false
-        upload.value = Upload(name, 0, bytes.size.toLong(), nowMs())
-        scope.launch {
+        upload.value = Upload(name, 0, bytes.size.toLong(), nowMs(), "Starting…")
+        uploadJob = scope.launch {
             val started = upload.value?.startedAt ?: nowMs()
             val err = link.uploadFile(RemoteFiles.child(dir, name), bytes) { sent, total ->
                 upload.value = Upload(name, sent, total, started)
@@ -244,7 +255,20 @@ class FilesController(
         }
     }
 
-    fun cancelUpload() { cancelUploadRequested = true }
+    /**
+     * Cancel at any step. The link tells the Wi-Fi board to drop the transfer (0xB5), and the board
+     * deletes the half-written file itself, so nothing partial is left on the SD card.
+     */
+    fun cancelUpload() {
+        cancelUploadRequested = true
+        val j = uploadJob ?: return
+        if (upload.value == null) return
+        uploadJob = null
+        j.cancel()
+        upload.value = null
+        notify("Upload cancelled")
+        scope.launch { j.join(); refresh() }
+    }
 
     // ---- job info ----
     /** Read the file's header (the first few KB) for its stock, zero and tools. */

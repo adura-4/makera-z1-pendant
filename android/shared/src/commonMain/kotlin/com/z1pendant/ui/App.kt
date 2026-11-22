@@ -64,6 +64,12 @@ fun App(vm: AppViewModel) {
     // Kept here so returning from the editor/settings doesn't jump the main screen back to the top.
     val mainScroll = rememberScrollState()
     LaunchedEffect(Unit) { vm.snack.collect { snackHost.currentSnackbarData?.dismiss(); snackHost.showSnackbar(it) } }
+    // A file shared from another app: open Files, which asks "Upload to the Z1?". A probe, the Run flow or
+    // the hotkey editor isn't interrupted; the question waits until Files is opened.
+    val shared by com.z1pendant.files.ShareInbox.file.collectAsState()
+    LaunchedEffect(shared, probing, runActive, editorOpen) {
+        if (shared != null && !probing && !runActive && !editorOpen) { settings = false; console = false; files = true }
+    }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         // Full-screen pages live in the activity window (not Dialogs) so dispatchKeyEvent sees
