@@ -212,6 +212,9 @@ Either way your settings and hotkeys are kept. To update to a new version, run s
 is another free tool that does the same job.)
 
 ### On a Mac
+Building with Xcode? **You don't need the `.ipa` file** from the release. Xcode builds the app from
+the source code and installs it itself. The `.ipa` is only for installing without a Mac.
+
 You need **Xcode** (free, Mac App Store) and **Java 21** (e.g. [Temurin](https://adoptium.net)),
 and a USB cable for the first install.
 
