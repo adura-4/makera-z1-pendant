@@ -61,7 +61,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -123,12 +122,12 @@ fun AnchorWizard(vm: AppViewModel, startAtSetup: Boolean = false, onClose: () ->
     val probeSetup by vm.probe.setup.collectAsState()
     val st by vm.link.status.collectAsState()
     val conn by vm.link.conn.collectAsState()
-    val scope = rememberCoroutineScope()
     var inSetup by remember { mutableStateOf(startAtSetup) }
     // Edits are kept here and only saved while valid, so an unsafe offset is never stored.
     var draft by remember { mutableStateOf(setup) }
-    var saving by remember { mutableStateOf(false) }
-    var saved by remember { mutableStateOf(false) }
+    // Owned by the controller: the write must outlive this composition (see AnchorController.saveMeasured).
+    val saving by a.saving.collectAsState()
+    val saved by a.saved.collectAsState()
     val running = state is AnchorState.Running
     val tip = probeSetup.tip
     val s = state
@@ -222,11 +221,11 @@ fun AnchorWizard(vm: AppViewModel, startAtSetup: Boolean = false, onClose: () ->
 
     if (s is AnchorState.Done) {
         if (!saved) ResultDialog(s.result, saving,
-            onSave = { saving = true; scope.launch { val ok = a.save(s.result); saving = false; if (ok) saved = true } },
+            onSave = { a.saveMeasured(s.result) },
             onCancel = ::backToRun)
         else RestartDialog(
-            onRestart = { a.restart(); saved = false; a.reset(); leave() },
-            onClose = { saved = false; a.reset(); leave() })
+            onRestart = { a.restart(); a.clearSaved(); a.reset(); leave() },
+            onClose = { a.clearSaved(); a.reset(); leave() })
     }
 }
 

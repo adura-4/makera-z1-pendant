@@ -101,6 +101,12 @@ class AnchorController(
     val state = MutableStateFlow<AnchorState>(AnchorState.Idle)
     /** Set by a successful run whose top-face drop was off; the UI offers it once the result dialog is gone. */
     val zCorrection = MutableStateFlow<ZCorrection?>(null)
+    /**
+     * The config write's progress, held here rather than in the screen: it writes X then Y, and a
+     * recomposition must not be able to cancel it between the two and leave a mismatched pair.
+     */
+    val saving = MutableStateFlow(false)
+    val saved = MutableStateFlow(false)
 
     private var job: Job? = null
     // Held here, not in the UI, so a retry after the screen is recreated still uses what was chosen.
@@ -179,11 +185,24 @@ class AnchorController(
 
     fun reset() { if (job?.isActive != true) state.value = AnchorState.Idle }
 
+    /** Dismisses the saved state once the restart prompt has been answered. */
+    fun clearSaved() { saved.value = false }
+
+    /** Writes the measured anchor on this controller's scope, so closing the screen cannot halve it. */
+    fun saveMeasured(r: AnchorResult) {
+        if (saving.value || saved.value) return
+        saving.value = true
+        scope.launch {
+            try { if (save(r)) saved.value = true } finally { saving.value = false }
+        }
+    }
+
     // ---- the run ------------------------------------------------------------------------------
     fun start(bracket: Bracket, wasteboard: Boolean) {
         if (job?.isActive == true) return
         lastRun = bracket to wasteboard
         zCorrection.value = null
+        saved.value = false
         stopRequested = false
         job = scope.launch { runRoutine(bracket, wasteboard) }
     }

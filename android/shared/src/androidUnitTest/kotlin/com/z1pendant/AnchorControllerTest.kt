@@ -270,6 +270,19 @@ class AnchorControllerTest {
         assertEquals(-190.620, b.await() ?: Double.NaN, 1e-9)
     }
 
+    @Test fun theConfigWriteOutlivesTheScreenThatStartedIt() = runBlocking {
+        // save() writes X then Y. On the screen's own scope a recreation (a rotation) could cancel
+        // it between the two and leave a mismatched pair, so it runs on the controller's scope.
+        val screen = CoroutineScope(Dispatchers.Default)
+        // join() waits only for saveMeasured to hand the write to the controller's scope, so the
+        // cancel below is deterministic; awaiting the transient saving flag would be a race.
+        screen.launch { anchor.saveMeasured(AnchorResult(-190.620, -193.990, -190.634, -193.971)) }.join()
+        screen.cancel()                                   // the screen goes away mid-write
+        await { anchor.saved.value }
+        assertEquals(-190.634, link.cfg[ANCHOR_X_KEY]!!, 1e-9)
+        assertEquals(-193.971, link.cfg[ANCHOR_Y_KEY]!!, 1e-9)
+    }
+
     @Test fun stopsWhenTheTopTouchIsTooLow() = runBlocking {
         // The check accepts down to -73.500 (approach -66.5, nominal drop 5, allowance 2); this is well past it.
         link.topTouchZ = -78.0
