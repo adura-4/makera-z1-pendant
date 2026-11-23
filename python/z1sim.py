@@ -1,15 +1,4 @@
-"""Changelog
-=========
-
-23/11/2026 04:16:26 AM
-- Config store is mutable; config-set sd <key> <value> replies "has been set to"
-- config-get returns the stored value (anchor1_x/_y), so a set round-trips
-
-23/11/2026 04:31:19 AM
-- config-set no longer replies with a trailing "ok": the real firmware does not send one
-- Noted on the config-get branch that its trailing "ok" is a deliberate divergence
-
-Makera Z1 simulator: speaks the stock wire protocol so the pendant app can be tested with the
+"""Makera Z1 simulator: speaks the stock wire protocol so the pendant app can be tested with the
 machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroing and macros.
 
   python z1sim.py [--name Makera_Z1P_SIM] [--port 2222] [--latency-ms 0] [--no-broadcast]
@@ -44,9 +33,6 @@ from collections import deque
 
 import z1proto as P
 from z1sim_probe import ProbeSim
-
-LAST_MODIFIED = "23/11/2026 04:31:19 AM"
-PREVIOUS_MODIFIED = "23/11/2026 04:16:26 AM"
 
 AXES = "XYZA"
 MAX_RATE = {"X": 3000.0, "Y": 3000.0, "Z": 1000.0, "A": 1800.0}   # mm/min (deg/min for A)
