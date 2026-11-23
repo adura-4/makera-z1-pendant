@@ -18,7 +18,8 @@ For installing and using the app, see the [README](../README.md).
       settings, console. `AppViewModel.kt`: state and actions.
     - `probe/`: the probe wizard's model (`ProbeModel.kt`: setups, Makera's M480 commands, the
       pendant's own touch sequences, which probe is in by its setter height) and controller
-      (`ProbeController.kt`: load/calibrate, runs, undo and set-zero).
+      (`ProbeController.kt`: load/calibrate, runs, undo and set-zero), plus Cal Anchor
+      (`AnchorModel.kt` / `AnchorController.kt`, `MakeraRun.kt`; config in `link/MachineConfig.kt`).
     - `platform/Platform.kt`: what each phone supplies (preferences, hotkeys.json, haptics, clock,
       back button, hotkey file picker); `util/Fmt.kt`: number formatting identical to Java's.
   - `shared/src/androidMain`: SharedPreferences "z1pendant", filesDir/hotkeys.json, vibrator, file pickers.
@@ -316,6 +317,45 @@ not while the screen redraws.
 ## Zero / undo
 `zero` sends `G10 L20 P0 <axis>0`. Pressed again while the axis still reads 0.000 and hasn't moved, it
 sends `G10 L20 P0 <axis><previous value>` instead. The Zero hotkeys (X/Y/Z/A, XY, XYZ, selected) share it.
+
+## Cal Anchor (anchor 1 from the L bracket)
+Calibrating anchor 1 is manual in Makera Studio. `BuiltIn.CAL_ANCHOR` ("Cal Anchor", hidden by
+default, `showOnMain = false`) does it in one press: `ui/AnchorWizard.kt`, state machine in
+`probe/AnchorController.kt`, pure parts in `probe/AnchorModel.kt`, config reads/writes in
+`link/MachineConfig.kt`, echo-following in `probe/MakeraRun.kt`.
+- Sequence: `$H` -> `M6 T9999` -> `config-get sd coordinate.anchor1_x` / `..._y` -> traverse, then
+  `G90 G53 G0 Z<approach>` -> `M480.8` -> restore.
+- The tool change is the firmware's own script: it rises `G53 G0 Z-3.000`, drives to the setter at
+  `G53 G0 X-9.805 Y-12.981`, touches `G38.6 F500` then `F100 P1`, parks `G53 G0 Z-20.000`,
+  "Done ATC". Nothing here sends those lines (real Z1, 2026-11-23).
+- The firmware does the probing too. `fill_InCorner_scripts` (`ATCHandler.cpp:713`): `G38.2 Z` slow,
+  `G10 L20 P0 Z0`, lift `G91 G0 Z<probe_retract_mm>`, `G38.2 Z` again, then `G53 G0 Z<start>` (a full
+  retract), across `G91 G0 X... Y...`, down `G90 G0 Z<-Z_distance>`, and `G38.2 X` / `Y` twice each
+  (the second at half rate). It parks on the corner, so the anchor is read straight from `mpos` with
+  no arithmetic here. Same run: top `[PRB:-194.605,-197.981,-72.565]`, walls at Z -74.366.
+- Work zero: the script sets `G10 L20 P0 Z0` at the bracket top and `G10 L20 P0 X+/-tool_dia/2` at the
+  wall, by design. The run puts X and Y back (`offsets()` carries the tool-length offset on Z, as
+  `undoXY` already assumed) and leaves Z as the probe set it; a restart after calibrating is expected
+  anyway. The feed override (`M220`) is restored too, since `M480.8` forces 100 %.
+- Approach Z = `homedZ + referenceDz + (topHeight(bracket, waste) - referenceTopHeight())`, with
+  `NOMINAL_HOMED_Z = -1.0`. Each run asks the bracket (thin 5 mm / thick 15 mm) and whether the 6 mm
+  MDF wasteboard is fitted; the answers show while it runs, survive a retry, and are dropped on leaving.
+- Guards: only the first touch is range-checked (`topTouchOk`, overtravel allowance, default 2 mm) --
+  the wall touches are legitimately deeper; notch zones are refused; pre-position X/Y outside -3..-13
+  warns without blocking; only the 3D probe is accepted (the laser cannot side-probe; the rod can, but
+  needs a conductive workpiece this does not set up). The backstop is the firmware's
+  `halt_on_probe_during_motion` (`ZProbe.cpp:166`, default true; checked in `read_probe` at 1 kHz,
+  `:87`), which halts on X/Y motion or downward Z while the probe reads triggered and the active tool
+  is 9999 or 0 (`:207`); it is reported here as a halt.
+- Writing back: `config-set sd coordinate.anchor1_x <v>` at 3 dp, falling back to 2 dp. The firmware
+  overwrites the line in place and refuses when `setting.length() + value.length() + 3 > free_space`
+  (`FileConfigSource.cpp:327`); its error print is commented out, so the refusal is silent and the
+  value is read back and compared rather than trusting the echo. A restart is then offered (`reset`,
+  "Rebooting machine in 3 seconds...", `SimpleShell.cpp:1298`), since the anchor is only read at boot.
+- Simulator: `z1sim.py` answers `config-get` / `config-set` for the anchor keys, so the whole flow
+  runs against it. Tests: `AnchorControllerTest`, `AnchorModelTest`, `AnchorScreenModelTest`,
+  `AnchorTileTest`, `MachineConfigTest`, `MakeraRunTest` (148).
+- Unverified: iOS -- all in `commonMain`, no platform APIs, but only built and run for Android.
 
 ## Typed moves
 The Move box sends `G90 G0 <axis><value>` (Go to) or `G53 G0 <axis><machine end position>` (Move by,
