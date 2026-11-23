@@ -41,8 +41,11 @@ private fun parse(re: Regex, line: String): Pair<String, Double>? {
 
 /** Reads and writes the machine's config.txt values over the link. Main thread only, like the link's callbacks. */
 class MachineConfig(private val link: MachineLink, scope: CoroutineScope) {
-    private val getWait = HashMap<String, CompletableDeferred<Double>>()
-    private val setWait = HashMap<String, CompletableDeferred<SetResult>>()
+    // A list per key, not one waiter: two callers may ask for the same key at once (the Run flow
+    // reads the anchor when a file loads, the anchor routine reads it in its pre-flight), and a
+    // single slot would drop the earlier caller, leaving it to time out on a reply that did arrive.
+    private val getWait = HashMap<String, MutableList<CompletableDeferred<Double>>>()
+    private val setWait = HashMap<String, MutableList<CompletableDeferred<SetResult>>>()
     private val anchorState = MutableStateFlow<Pair<Double, Double>?>(null)
 
     /** Anchor 1 in machine X/Y once read; null after a disconnect or [invalidateAnchor]. */
@@ -51,9 +54,9 @@ class MachineConfig(private val link: MachineLink, scope: CoroutineScope) {
     init {
         scope.launch {
             link.messages.collect { m ->
-                parseGetReply(m)?.let { (k, v) -> getWait[k]?.complete(v) }
-                parseSetReply(m)?.let { (k, _) -> setWait[k]?.complete(SetResult.Acknowledged) }
-                parseNoSpaceReply(m)?.let { k -> setWait[k]?.complete(SetResult.NoSpace) }
+                parseGetReply(m)?.let { (k, v) -> getWait[k]?.forEach { it.complete(v) } }
+                parseSetReply(m)?.let { (k, _) -> setWait[k]?.forEach { it.complete(SetResult.Acknowledged) } }
+                parseNoSpaceReply(m)?.let { k -> setWait[k]?.forEach { it.complete(SetResult.NoSpace) } }
             }
         }
         scope.launch { link.conn.collect { if (it != ConnState.Connected) anchorState.value = null } }
@@ -84,14 +87,16 @@ class MachineConfig(private val link: MachineLink, scope: CoroutineScope) {
 
     fun invalidateAnchor() { anchorState.value = null }
 
-    private suspend fun <T : Any> ask(wait: HashMap<String, CompletableDeferred<T>>, key: String, cmd: String): T? {
+    private suspend fun <T : Any> ask(
+        wait: HashMap<String, MutableList<CompletableDeferred<T>>>, key: String, cmd: String,
+    ): T? {
         val d = CompletableDeferred<T>()
-        wait[key] = d
+        wait.getOrPut(key) { mutableListOf() }.add(d)
         try {
             link.sendLine(cmd)
             return withTimeoutOrNull(4000) { d.await() }
         } finally {
-            wait.remove(key, d)   // two-argument form: never drops a newer caller's entry
+            wait[key]?.let { l -> l.remove(d); if (l.isEmpty()) wait.remove(key) }
         }
     }
 }

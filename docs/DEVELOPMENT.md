@@ -349,9 +349,11 @@ default, `showOnMain = false`) does it in one press: `ui/AnchorWizard.kt`, state
   is 9999 or 0 (`:207`); it is reported here as a halt.
 - Writing back: `config-set sd coordinate.anchor1_x <v>` at 3 dp, falling back to 2 dp. The firmware
   overwrites the line in place and refuses when `setting.length() + value.length() + 3 > free_space`
-  (`FileConfigSource.cpp:327`); its error print is commented out, so the refusal is silent and the
-  value is read back and compared rather than trusting the echo. A restart is then offered (`reset`,
-  "Rebooting machine in 3 seconds...", `SimpleShell.cpp:1298`), since the anchor is only read at boot.
+  (`FileConfigSource.cpp:327`) and says so (`Configurator.cpp:84`: "not enough space to overwrite
+  existing key/value"), which is what the 2 dp retry keys off. The value is still read back and
+  compared afterwards: an echo proves the line arrived, not that the file changed. A restart is then
+  offered (`reset`, "Rebooting machine in 3 seconds...", `SimpleShell.cpp:1298`), since the anchor is
+  only read at boot.
 - Simulator: `z1sim.py` answers `config-get` / `config-set` for the anchor keys, so the whole flow
   runs against it. Tests: `AnchorControllerTest`, `AnchorModelTest`, `AnchorScreenModelTest`,
   `AnchorTileTest`, `MachineConfigTest`, `MakeraRunTest` (148).

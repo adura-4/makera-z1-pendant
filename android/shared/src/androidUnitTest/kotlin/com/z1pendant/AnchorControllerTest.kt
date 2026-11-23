@@ -28,6 +28,7 @@ import io.mockk.unmockkStatic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -254,6 +255,19 @@ class AnchorControllerTest {
         val fresh = anchor.state.value as AnchorState.Asking
         assertEquals(AnchorSetup().defaultBracket, fresh.bracket)
         assertEquals(AnchorSetup().defaultWasteboard, fresh.wasteboard)
+    }
+
+    @Test fun twoReadersOfOneKeyBothGetTheAnswer() = runBlocking {
+        // One MachineConfig is shared by the Run flow and this routine, so the same key can be in
+        // flight twice; a single waiter slot dropped the earlier caller and left it to time out.
+        // cfg is cleared so nothing answers automatically and both callers are waiting at once.
+        link.cfg.clear()
+        val a = async { config.get(ANCHOR_X_KEY) }
+        val b = async { config.get(ANCHOR_X_KEY) }
+        await { link.gets >= 2 }
+        link.messages.emit("sd: $ANCHOR_X_KEY is set to -190.620")
+        assertEquals("the first reader must not be dropped", -190.620, a.await() ?: Double.NaN, 1e-9)
+        assertEquals(-190.620, b.await() ?: Double.NaN, 1e-9)
     }
 
     @Test fun stopsWhenTheTopTouchIsTooLow() = runBlocking {

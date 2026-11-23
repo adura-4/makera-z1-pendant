@@ -56,8 +56,8 @@ sealed class AnchorState {
     data class Asking(val bracket: Bracket, val wasteboard: Boolean,
                       val topHeight: Double, val approachZ: Double) : AnchorState()
     /** [bracket] / [wasteboard] are the run's own answers, shown back while it works. */
-    data class Running(val step: AnchorStep, val done: Set<AnchorStep> = emptySet(),
-                       val bracket: Bracket = Bracket.THIN, val wasteboard: Boolean = true) : AnchorState()
+    data class Running(val step: AnchorStep, val done: Set<AnchorStep>,
+                       val bracket: Bracket, val wasteboard: Boolean) : AnchorState()
     data class Done(val result: AnchorResult) : AnchorState()
     /**
      * [changed] is what the machine is left holding, so a half-finished run is never silent.
@@ -149,7 +149,6 @@ class AnchorController(
     }
 
     // ---- the per-run questions ----------------------------------------------------------------
-    /** Open the per-run page, pre-selected from the stored defaults. */
     /**
      * The questions, answered as this session last answered them: a retry after a failure must not
      * silently revert to the defaults, because a wrong bracket or wasteboard moves the approach Z.
@@ -313,7 +312,10 @@ class AnchorController(
 
             // 6 — it parks on the corner with the tip radius already compensated, so mpos IS the anchor.
             val parked = requireIdle(MOVE_TIMEOUT, "probing")
-            val result = AnchorResult(anchor.first, anchor.second, parked.mpos[0], parked.mpos[1])
+            val px = parked.mpos.getOrNull(0); val py = parked.mpos.getOrNull(1)
+            if (px == null || py == null) throw ProbeStop(
+                "The machine didn't report a position after probing, so the corner wasn't read.")
+            val result = AnchorResult(anchor.first, anchor.second, px, py)
             // The head must have left the pre-position and found a corner near the stored anchor.
             measurementProblem(result, target, s.preX != 0.0 || s.preY != 0.0)?.let { throw ProbeStop(it) }
             done += AnchorStep.PROBING
