@@ -85,6 +85,16 @@ class Machine(ProbeSim):
         # --boot-mesh empty: like the Z1 right after power-on (2026-11-22): |O: in the status, but M375.1
         # prints a 15 x 15 grid of "nan" (no values). Cleared by M370 like a real grid.
         self.ghost_mesh = None
+        # Temperatures (|S: fields 5 and 6). --heat N: the spindle warms N °C/min while it turns and cools
+        # 6 °C/min toward 29 °C when stopped; the box follows at a tenth. Over spindle_max it halts like the
+        # Z1 (2026-11-22): "ERROR: Spindle overheated, max - 75.0, current - 75.1", Alarm, |H:9; cleared above
+        # the limit it halts again.
+        self.spindle_temp = 29.0
+        self.box_temp = 22.8
+        self.heat = 0.0
+        self.spindle_max = 75.0
+        self.temp_at = time.monotonic()
+        self.halt_code = None
 
     # --- G-code -------------------------------------------------------------------------
     def line(self, text: str) -> list[str]:
@@ -97,7 +107,7 @@ class Machine(ProbeSim):
             if t.startswith("CONFIG-GET"):
                 key = text.split()[-1]
                 v = {"coordinate.anchor1_x": "-190.69", "coordinate.anchor1_y": "-194.58",
-                     "wifi.machine_name": self.name}.get(key)
+                     "wifi.machine_name": self.name, "temperature_control.spindle.max_temp": f"{self.spindle_max:.1f}"}.get(key)
                 return [f"sd: {key} is set to {v}\r\n" if v else f"sd: {key} is not in config\r\n", "ok\r\n"]
             if t.startswith("BUFFER"):
                 self.buffered = text.strip()[6:].strip()
@@ -123,8 +133,12 @@ class Machine(ProbeSim):
                 return self.m495(t)
             if t in ("$X", "M999"):
                 if self.state == "Alarm":
-                    self.state = "Idle"
+                    self.state = "Idle"; self.halt_code = None
                 return ["ok\r\n"]
+            if t == "SIMDRIVERFAULT":                # test hook: the spindle driver's fault line (halt 41)
+                self.queue.clear(); self.cur = None; self.spindle_on = False
+                self.state = "Alarm"; self.halt_code = 41
+                return ["ERROR: Spindle alarm triggered -  power off/on required\r\n", "ok\r\n"]
             if self.state == "Alarm":
                 return ["error:Alarm lock\r\n"]
             if t == "$H":
@@ -350,6 +364,7 @@ class Machine(ProbeSim):
                 time.sleep(3.0)
                 with self.lock:
                     self.tool = self.tool_target; self.tool_wait = False
+                    self.msgs.append("Done ATC\r\n")
                 j["paused"] += time.time() - t0
                 continue
             if re.fullmatch(r"M0*(2|30)", code):
@@ -486,18 +501,36 @@ class Machine(ProbeSim):
         d = goal - self.spindle_cur
         self.spindle_cur = goal if abs(d) <= step else self.spindle_cur + math.copysign(step, d)
 
+    def _temps(self):
+        """The heat model (see __init__); halts over the limit."""
+        now = time.monotonic()
+        dt = (now - self.temp_at) * self.speed / 60.0; self.temp_at = now
+        if self.heat <= 0:
+            return
+        if self.spindle_on and self.spindle_cur > 0:
+            self.spindle_temp += self.heat * dt; self.box_temp += self.heat / 10 * dt
+        else:
+            self.spindle_temp = max(29.0, self.spindle_temp - 6 * dt); self.box_temp = max(22.8, self.box_temp - 0.6 * dt)
+        if self.spindle_temp > self.spindle_max and self.state != "Alarm":
+            self.msgs.append(f"ERROR: Spindle overheated, max - {self.spindle_max:.1f}, current - {self.spindle_temp:.1f}\r\n")
+            self.msgs.append("Aborted by halt\r\n")
+            self.queue.clear(); self.cur = None; self.spindle_on = False
+            self.state = "Alarm"; self.halt_code = 9
+
     def status(self) -> str:
         with self.lock:
             self._spin()
+            self._temps()
             mp = self.mpos
             wp = [mp[i] - self.wco[i] for i in range(4)]
             f = self.cur[1] if self.cur and self.cur[0] != "dwell" and self.cur[1] else 0.0
             return (f"<{self.state}|MPos:{mp[0]:.4f},{mp[1]:.4f},{mp[2]:.4f},{mp[3]:.4f},0.0000"
                     f"|WPos:{wp[0]:.4f},{wp[1]:.4f},{wp[2]:.4f},{wp[3]:.4f},0.0000"
                     f"|F:{f:.1f},{self.feed:.1f},{self.fro:.1f}|S:{self.spindle_cur:.1f},{self.spindle_target:.1f},{self.spindle_factor:.1f},"
-                    f"{self.assist[0]},29.0,22.8,{self.assist[1]},{self.assist[2]},{self.assist[3]},{self.assist[4]}"
+                    f"{self.assist[0]},{self.spindle_temp:.1f},{self.box_temp:.1f},{self.assist[1]},{self.assist[2]},{self.assist[3]},{self.assist[4]}"
                     + (f"|O:{max(abs(v) for r in self.mesh for v in r):.3f}" if self.mesh
                        else f"|O:{self.ghost_mesh:.3f}" if self.ghost_mesh is not None else "") +
+                    (f"|H:{self.halt_code}" if self.state == "Alarm" and self.halt_code else "") +
                     f"|T:{self.tool},{self.tlo:.3f},{self.tool_target}{self.job_field()}|W:0.00>")
 
 
@@ -830,6 +863,10 @@ def main():
     ap.add_argument("--port", type=int, default=P.TCP_PORT)
     ap.add_argument("--latency-ms", type=float, default=0)
     ap.add_argument("--no-broadcast", action="store_true")
+    ap.add_argument("--heat", type=float, default=0.0,
+                    help="spindle warms this many °C/min while turning (cools 6 °C/min when off); halts over --spindle-max")
+    ap.add_argument("--spindle-max", type=float, default=75.0, help="spindle temperature limit, °C (config-get answers it)")
+    ap.add_argument("--spindle-temp", type=float, default=29.0, help="spindle temperature at start, °C")
     ap.add_argument("--boot-mesh", choices=["empty", "real"],
                     help="start with a leveling grid: 'empty' = |O: reported but every point nan (the Z1 after "
                          "power-on), 'real' = a small grid with values")
@@ -842,6 +879,7 @@ def main():
     m.xfer = Transfers(m)
     m.sd = a.sd
     m.speed = a.speed
+    m.heat = a.heat; m.spindle_max = a.spindle_max; m.spindle_temp = a.spindle_temp
     if a.boot_mesh == "empty":
         m.ghost_mesh = -1.351
     elif a.boot_mesh == "real":

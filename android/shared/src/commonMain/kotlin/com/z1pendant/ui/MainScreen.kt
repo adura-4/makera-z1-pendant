@@ -366,9 +366,13 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
         val needsControls = connected && (machineMoving || job != null || s.equals("Tool", true) ||
             s.equals("Hold", true) || s.equals("Pause", true) || s.equals("Alarm", true))
         var autoOpened by remember { mutableStateOf(false) }
+        // A job ran: once it's over (and nothing else needs the controls) the drawer closes all the
+        // way, however it got open (the job start opens it itself, and you may have dragged it).
+        var hadJob by remember { mutableStateOf(false) }
+        LaunchedEffect(job != null) { if (job != null) hadJob = true }
         LaunchedEffect(needsControls) {
             if (needsControls && !vm.controlsOpen.value) { vm.controlsOpen.value = true; autoOpened = true }
-            if (!needsControls && autoOpened) { vm.controlsOpen.value = false; autoOpened = false }
+            if (!needsControls && (autoOpened || hadJob)) { vm.controlsOpen.value = false; autoOpened = false; hadJob = false }
         }
         ControlsDrawer(open, feed = st?.feedOverride, connected = connected,
             onOpen = { o -> if (o != open) { vm.controlsOpen.value = o; autoOpened = false; vm.haptics.press() } },
@@ -377,7 +381,8 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             jobActive = job != null, details = jobDetails,
             onDetails = { d -> if (d != jobDetails) { jobDetails = d; if (d) vm.controlsOpen.value = true; vm.haptics.press() } },
             jobLine = { job?.let { j -> JobLine(j) { jobDetails = true; vm.haptics.press() } } },
-            jobPanel = { job?.let { j -> JobDetails(j, st, jobTools, onMesh = { vm.run.meshShow.value = true }) { jobDetails = false; vm.haptics.press() } } },
+            jobPanel = { job?.let { j -> JobDetails(j, st, jobTools, onMesh = { vm.run.meshShow.value = true },
+                banner = { TempBanner(vm) }, temps = { TempCard(vm) }) { jobDetails = false; vm.haptics.press() } } },
             alarm = { if (connected && st?.isAlarm == true) AlarmStrip(vm, st) },
             modifier = if (jobDetails) Modifier.weight(1f) else Modifier)
         }

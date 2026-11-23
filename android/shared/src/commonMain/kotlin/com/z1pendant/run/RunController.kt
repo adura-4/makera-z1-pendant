@@ -186,7 +186,8 @@ class RunController(
 
     private val configWait = HashMap<String, CompletableDeferred<Double>>()
 
-    private suspend fun readConfig(key: String): Double? {
+    /** A number from the SD config (`config-get sd <key>`), or null if it isn't there (4 s timeout). */
+    suspend fun readConfig(key: String): Double? {
         val d = CompletableDeferred<Double>()
         configWait[key] = d                 // main thread only, like onMessage
         link.sendLine("config-get sd $key")

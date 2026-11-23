@@ -97,7 +97,8 @@ private fun Cell(title: String, value: String, small: String? = null, valueColor
  * and the tool list (from the job file's header, when the file could be read).
  */
 @Composable
-fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onMesh: () -> Unit = {}, onClose: () -> Unit) {
+fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onMesh: () -> Unit = {},
+               banner: @Composable () -> Unit = {}, temps: @Composable () -> Unit = {}, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val p = job.progress
     val toolChange = st?.state.equals("Tool", true)
@@ -108,6 +109,7 @@ fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onMesh: () ->
             Text(job.file?.name ?: "Job", fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Icon(Icons.Filled.ExpandMore, "Back", Modifier.size(22.dp), tint = cs.primary)
         }
+        banner()                                                   // a temperature close to its limit
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("${job.percent}%", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, fontSize = 34.sp)
             Text("line ${Fmt.thousands(p.line.toInt())}" + (tools?.lines?.let { " of ${Fmt.thousands(it)}" } ?: ""),
@@ -145,6 +147,7 @@ fun JobDetails(job: JobView, st: MachineStatus?, tools: JobTools?, onMesh: () ->
             Cell("State", st?.state ?: "—", valueColor = Color(0xFF60A5FA), modifier = Modifier.weight(1f))
         }
         ToolList(tools, st, p.line, p.elapsedS, p.percent, job.pace)
+        temps()                                                    // spindle and box temperature graph
     }
 }
 

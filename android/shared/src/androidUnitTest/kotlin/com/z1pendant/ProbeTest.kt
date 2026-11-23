@@ -1,6 +1,5 @@
 package com.z1pendant
 
-import com.z1pendant.probe.CenterAxes
 import com.z1pendant.probe.Corner
 import com.z1pendant.probe.ProbeIo
 import com.z1pendant.probe.ProbeKind
@@ -10,6 +9,7 @@ import com.z1pendant.probe.ProbeStop
 import com.z1pendant.probe.Touch
 import com.z1pendant.probe.parsePrb
 import com.z1pendant.probe.stepAfterTouches
+import com.z1pendant.probe.stepLabels
 import com.z1pendant.probe.touchesInStep
 import com.z1pendant.probe.widthsFromTouches
 import kotlinx.coroutines.runBlocking
@@ -77,18 +77,77 @@ class ProbeTest {
         }
     }
 
-    private fun run(w: World, s: ProbeSetup, start: Touch, set: Boolean = false) = runBlocking {
+    private fun run(w: World, s: ProbeSetup, start: Touch, set: Boolean = false, zeroZ: Double? = null) = runBlocking {
         w.x = start.x; w.y = start.y; w.z = start.z
-        ProbeSequences(w, s, start, set).run()
+        ProbeSequences(w, s, start, set, zeroZ).run()
     }
 
     @Test fun makeraCommands() {
         assertEquals("M480.4 X20.000 Y20.000 Z2.000 D2.000", ProbeSetup(ProbeKind.OUTSIDE, Corner.FRONT_LEFT).makeraCommand())
         assertEquals("M480.1 X20.000 Y30.000 Z1.500 D2.000", ProbeSetup(ProbeKind.OUTSIDE, Corner.BACK_LEFT, y = 30.0, depth = 1.5).makeraCommand())
         assertEquals("M480.6 X20.000 Y20.000 Z2.000 D3.175", ProbeSetup(ProbeKind.INSIDE, Corner.BACK_RIGHT, tip = 3.175).makeraCommand())
-        assertEquals("M480.9 X20.000 Y0.000 Z2.000 D2.000", ProbeSetup(ProbeKind.HOLE, axes = CenterAxes.X).makeraCommand())
-        assertEquals("M480.10 X0.000 Y20.000 Z2.000 D2.000", ProbeSetup(ProbeKind.BLOCK, axes = CenterAxes.Y).makeraCommand())
+        assertEquals("M480.9 X20.000 Y0.000 Z2.000 D2.000", ProbeSetup(ProbeKind.HOLE, axisY = false).makeraCommand())
+        assertEquals("M480.10 X0.000 Y20.000 Z2.000 D2.000", ProbeSetup(ProbeKind.BLOCK, axisX = false).makeraCommand())
         assertNull(ProbeSetup(ProbeKind.TOP).makeraCommand())
+        // Makera has no routine for these: the pendant runs them itself.
+        assertNull(ProbeSetup(ProbeKind.OUTSIDE, axisY = false).makeraCommand())
+        assertNull(ProbeSetup(ProbeKind.INSIDE, axisZ = false).makeraCommand())
+        assertNull(ProbeSetup(ProbeKind.BLOCK, axisZ = false).makeraCommand())
+        // A hole has no Z, so its Z toggle doesn't matter.
+        assertEquals("M480.9 X20.000 Y20.000 Z2.000 D2.000", ProbeSetup(ProbeKind.HOLE, axisZ = false).makeraCommand())
+    }
+
+    @Test fun axisToggles() {
+        val s = ProbeSetup(ProbeKind.OUTSIDE)
+        assertEquals("X Y Z", s.axesText())
+        val xOnly = s.toggle('Y').toggle('Z')
+        assertEquals("X", xOnly.axesText())
+        assertEquals("the last axis can't be turned off", xOnly, xOnly.toggle('X'))
+        assertEquals(listOf("Touch the X side", "Move over the edge"), xOnly.stepLabels())
+        assertEquals(listOf("Touch the top"), s.toggle('X').toggle('Y').stepLabels())
+        // Z only, then Hole center (no Z there): everything back on rather than nothing to do.
+        val hole = s.toggle('X').toggle('Y').copy(kind = ProbeKind.HOLE).normalized()
+        assertTrue(hole.doX && hole.doY && !hole.doZ)
+        assertEquals("Outside corner · front-left · X", xOnly.title())
+    }
+
+    @Test fun outsideCornerXOnlyWithoutZ() {
+        // Z off: no top touch. Z0 is on the top (machine −60) and the probe is parked way up at −20:
+        // it goes down to 2 mm below Z0, not 2 mm below where it was parked.
+        val w = World(0.0, 50.0, 0.0, 40.0, top = -60.0)
+        val m = run(w, ProbeSetup(ProbeKind.OUTSIDE, Corner.FRONT_LEFT, axisY = false, axisZ = false), Touch(5.0, 5.0, -20.0), zeroZ = -60.0)
+        assertEquals(0.0, m.edgeX!!, eps); assertNull(m.edgeY); assertNull(m.top)
+        assertTrue("never touches Z", w.lines.none { it.startsWith("G38.2 Z") })
+        assertTrue("never touches Y", w.lines.none { it.startsWith("G38.2 Y") })
+        assertTrue(w.lines.contains("G53 G1 Z-62.000 F300"))
+        assertEquals("over the X edge, Y and Z where it started", listOf(0.0, 5.0, -20.0), listOf(w.x, w.y, w.z))
+        // No Z0 to go by: it refuses rather than guessing.
+        val e = runCatching { run(World(0.0, 50.0, 0.0, 40.0, top = -60.0), ProbeSetup(ProbeKind.OUTSIDE, axisZ = false), Touch(5.0, 5.0, -20.0)) }.exceptionOrNull()
+        assertTrue(e is ProbeStop)
+        // Parked at or below Z0 with Z off: it won't start (it would sweep into the part).
+        assertTrue(ProbeSetup(ProbeKind.OUTSIDE, axisZ = false).startProblem(0.3) != null)
+        assertNull(ProbeSetup(ProbeKind.OUTSIDE, axisZ = false).startProblem(40.0))
+        assertNull("Z on touches the top itself", ProbeSetup(ProbeKind.OUTSIDE).startProblem(-5.0))
+    }
+
+    @Test fun cornerXAndZWithoutY() {
+        val w = World(0.0, 50.0, 0.0, 40.0, top = -60.0)
+        val m = run(w, ProbeSetup(ProbeKind.OUTSIDE, Corner.BACK_RIGHT, axisY = false), Touch(45.0, 35.0, -55.0))
+        assertEquals(50.0, m.edgeX!!, eps); assertNull(m.edgeY); assertEquals(-60.0, m.top!!, eps)
+        assertEquals(listOf(50.0, 35.0, -55.0), listOf(w.x, w.y, w.z))
+    }
+
+    @Test fun insideCornerYOnly() {
+        val w = World(0.0, 40.0, 0.0, 30.0, top = -60.0, pocket = true)
+        val m = run(w, ProbeSetup(ProbeKind.INSIDE, Corner.BACK_LEFT, x = 10.0, y = 10.0, axisX = false), Touch(-5.0, 35.0, -55.0))
+        assertNull(m.edgeX); assertEquals(30.0, m.edgeY!!, eps); assertEquals(-60.0, m.top!!, eps)
+    }
+
+    @Test fun blockCenterWithoutZ() {
+        val w = World(0.0, 50.0, 0.0, 40.0, top = -60.0)
+        val m = run(w, ProbeSetup(ProbeKind.BLOCK, x = 35.0, y = 30.0, axisZ = false), Touch(24.0, 21.0, -40.0), zeroZ = -60.0)
+        assertEquals(25.0, m.centerX!!, eps); assertEquals(20.0, m.centerY!!, eps); assertNull(m.top)
+        assertTrue(w.lines.none { it.startsWith("G38.2 Z") })
     }
 
     @Test fun outsideCornerFrontLeftAndBackRight() {
@@ -119,7 +178,7 @@ class ProbeTest {
         assertNull("a hole has no Z", m.top)
 
         val w2 = World(0.0, 40.0, 0.0, 30.0, top = -60.0, pocket = true)
-        val m2 = run(w2, ProbeSetup(ProbeKind.HOLE, axes = CenterAxes.X), Touch(18.0, 14.0, -62.0))
+        val m2 = run(w2, ProbeSetup(ProbeKind.HOLE, axisY = false), Touch(18.0, 14.0, -62.0))
         assertEquals(20.0, m2.centerX!!, eps); assertNull(m2.centerY)
         assertTrue(w2.lines.none { it.contains(" Y") && it.startsWith("G38") })
     }
@@ -158,7 +217,7 @@ class ProbeTest {
         assertNull(parsePrb("ok"))
         // A run on the real machine, 2026-11-15, hole center X only: fast/slow on X−, fast/slow on X+.
         val t = listOf(-177.686, -177.683, -144.903, -144.908).map { Touch(it, -164.497, -56.0) }
-        val (wx, wy) = widthsFromTouches(ProbeKind.HOLE, ProbeSetup(ProbeKind.HOLE, axes = CenterAxes.X), t)
+        val (wx, wy) = widthsFromTouches(ProbeKind.HOLE, ProbeSetup(ProbeKind.HOLE, axisY = false), t)
         assertEquals(34.775, wx!!, 1e-9); assertNull(wy)
     }
 
@@ -188,7 +247,7 @@ class ProbeTest {
 
     @Test fun touchesWithinAStepPickTheSide() {
         // Block center, X and Y: top (2 touches), X sides (4: left fast/slow, right fast/slow), Y sides (4), center.
-        val s = ProbeSetup(kind = ProbeKind.BLOCK, axes = CenterAxes.XY)
+        val s = ProbeSetup(kind = ProbeKind.BLOCK, axisX = true, axisY = true)
         fun at(n: Int) = s.stepAfterTouches(n).let { it to s.touchesInStep(it, n) }
         assertEquals(0 to 0, at(0))
         assertEquals(1 to 0, at(2))      // X sides started: the left side

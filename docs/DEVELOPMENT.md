@@ -293,6 +293,26 @@ not while the screen redraws.
 - The Wi-Fi board takes about 3 clients at once; more get `0x91` "maximum number of client connections".
 - Bare `S` lines don't change the spindle speed on the stock firmware; only `S… M3` does.
 
+## Temperatures
+- `|S:` fields 5 and 6 = spindle and electronics-box ("power cabinet") thermistors, °C (P1.31 / P1.30 on
+  the motion board; `S:0.0,10000.0,100.0,0,36.3,25.0,…`). `MachineStatus.spindleTemp` / `boxTemp`.
+- Limits: `config-get sd temperature_control.spindle.max_temp` (Jimmy's SD config: 75) and
+  `…power.max_temp` (not in the SD config: "is not in config"), read once per connection after the
+  mesh check. Missing → the built-in config's 70 / 60 (`TempLimits.DEFAULT`, LPC dump 2026-11-08).
+- Halts (community Kernel.h `HALT_REASON`, `|H:` while halted): 9 spindle overheated ("ERROR: Spindle
+  overheated, max - 75.0, current - 75.1", seen 2026-11-22), 14 power cabinet overheated, 41 spindle
+  alarm = the MUGOR driver's fault line P0.19 ("ERROR: Spindle alarm triggered -  power off/on
+  required"). The firmware re-checks the thermistors once a second when not halted, so clearing an
+  overheat above the limit halts again: the alarm sheet holds Clear alarm until it's under.
+- `TempTrace`: a sample per 2 s while a job runs (and through an Alarm after it, to show the cooling),
+  halved past 1,200 samples. Tool marks: "Done ATC" arms one; the next status with a real tool number
+  (not −1, not state Tool) places it at the "Done ATC" time; same tool again → no mark. A job with no
+  tool change gets its first mark when the spindle starts.
+- Warning within 5 °C of a limit (1 °C hysteresis): `tempWarn`, banner in the job panel, one `thud`.
+- Simulator: `z1sim.py --heat N --spindle-temp T --spindle-max M` (warms N °C/min while the spindle
+  turns, halts like the Z1). The sim runs M3/M5 when it reads them, not in step with the moves.
+  Tests: `TempTraceTest`, `TempSimTest`.
+
 ## Zero / undo
 `zero` sends `G10 L20 P0 <axis>0`. Pressed again while the axis still reads 0.000 and hasn't moved, it
 sends `G10 L20 P0 <axis><previous value>` instead. The Zero hotkeys (X/Y/Z/A, XY, XYZ, selected) share it.

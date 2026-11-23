@@ -19,6 +19,8 @@ import com.z1pendant.platform.PLog
 import com.z1pendant.platform.Platform
 import com.z1pendant.platform.nowMs
 import com.z1pendant.platform.wallClockHms
+import com.z1pendant.temp.boxTemp
+import com.z1pendant.temp.spindleTemp
 import com.z1pendant.util.Fmt
 import kotlin.concurrent.Volatile
 import kotlinx.coroutines.Dispatchers
@@ -177,6 +179,49 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
      */
     val jobStarted = MutableStateFlow(false)
 
+    // ---- temperatures ----
+    private val tempTrace = com.z1pendant.temp.TempTrace()
+    /** The spindle and box temperatures over the current (or last) job, for the job panel's graph. */
+    val temps = MutableStateFlow<com.z1pendant.temp.TempView?>(null)
+    /** The Z1's limits (it halts above them): the SD config's, else the built-in config's. */
+    val tempLimits = MutableStateFlow(com.z1pendant.temp.TempLimits.DEFAULT)
+    /** During a job, the reading that's within 5 °C of its limit (banner, buzz, pulsing line). */
+    val tempWarn = MutableStateFlow<com.z1pendant.temp.TempWarn?>(null)
+    /** The last status before the machine went into Alarm: the temperatures and spindle at that moment. */
+    val beforeAlarm = MutableStateFlow<MachineStatus?>(null)
+    /** Why it halted, from the Z1's own ERROR line (9 spindle overheated, 14 box overheated, 41 spindle driver). */
+    val haltFromMessage = MutableStateFlow<Int?>(null)
+    /** Where in the temperature trace the machine went into Alarm (seconds), for the alarm sheet's graph. */
+    val alarmAtS = MutableStateFlow<Double?>(null)
+    /** The temperature in the Z1's "… overheated, max - 75.0, current - 75.1" line. */
+    val haltTemp = MutableStateFlow<Double?>(null)
+    private val overheatRe = Regex("""current\s*-\s*([-\d.]+)""")
+
+    /** Once per status: record the job's temperatures, and warn near a limit. Runs after [trackJob]. */
+    private fun trackTemps(st: MachineStatus?) {
+        if (st == null) return
+        val now = nowMs()
+        // The trace keeps running after the job only through an Alarm (the overheat sheet shows it cooling).
+        if (tempTrace.active && job.value == null && !st.isAlarm) tempTrace.stop()
+        if (tempTrace.onStatus(now, st)) temps.value = tempTrace.view()
+        val w = if (job.value != null) com.z1pendant.temp.TempTrace.warn(st.spindleTemp, st.boxTemp, tempLimits.value, tempWarn.value) else null
+        if (w != null && tempWarn.value != w) {
+            haptics.thud()
+            log("· ${if (w == com.z1pendant.temp.TempWarn.SPINDLE) "spindle ${st.spindleTemp}" else "box ${st.boxTemp}"} °C: close to the Z1's limit")
+        }
+        tempWarn.value = w
+    }
+
+    /** The limits from the SD config; the built-in values where the SD config has none. */
+    private suspend fun readTempLimits() {
+        val d = com.z1pendant.temp.TempLimits.DEFAULT
+        val s = run.readConfig("temperature_control.spindle.max_temp")
+        val b = run.readConfig("temperature_control.power.max_temp")
+        tempLimits.value = com.z1pendant.temp.TempLimits(s ?: d.spindle, b ?: d.box)
+        log("· temperature limits: spindle ${tempLimits.value.spindle} °C" + (if (s == null) " (built-in)" else "") +
+            ", box ${tempLimits.value.box} °C" + (if (b == null) " (built-in)" else ""))
+    }
+
     /** Link lost: forget the job (it may end, or another may start, before we're back). */
     private fun forgetJob() {
         if (job.value != null) watchedBeforeDrop = true
@@ -201,6 +246,8 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         if (job.value == null) {                                   // a job started (or we joined one): which file?
             link.queryJobFile(); jobPace.reset()
             if (!rejoined) jobStarted.value = true                 // the drawer opens expanded once (MainScreen)
+            // A new job's temperatures start over; back into the same one after a dropped link, they carry on.
+            if (!rejoined || temps.value == null) { tempTrace.reset(nowMs()); temps.value = tempTrace.view() } else tempTrace.resume()
         }
         val f = link.jobFile.value
         val tools = jobTools.value?.takeIf { f != null && f.md5 == toolsFor }
@@ -345,17 +392,30 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             link.messages.collect { m ->
                 log("← $m")
                 if (m.trimStart().startsWith("ALARM", ignoreCase = true)) lastAlarm.value = m.trim().substringAfter(':').trim().ifEmpty { null }
+                // The Z1's own words for a halt (seen 2026-11-22), in case the status has no |H: code.
+                when {
+                    "Spindle overheated" in m -> { haltFromMessage.value = 9; haltTemp.value = overheatRe.find(m)?.groupValues?.get(1)?.toDoubleOrNull() }
+                    "Power cabinet overheated" in m -> { haltFromMessage.value = 14; haltTemp.value = overheatRe.find(m)?.groupValues?.get(1)?.toDoubleOrNull() }
+                    "Spindle alarm triggered" in m -> haltFromMessage.value = 41
+                }
+                if (m.startsWith("Done ATC")) tempTrace.onToolChangeDone(nowMs())
             }
         }
         // The alarm sheet opens by itself when the machine goes into Alarm (or is in it when the app
         // connects) while the main screen is up, except after our own Stop, which clears it anyway.
         viewModelScope.launch {
             var was = false
+            var prev: MachineStatus? = null
             link.status.collect { st ->
                 val alarm = st?.isAlarm == true
+                if (alarm && !was) {
+                    beforeAlarm.value = prev
+                    alarmAtS.value = if (temps.value != null) tempTrace.secondsAt(nowMs()) else null
+                }
                 if (alarm && !was && !stopping && onMainScreen) alarmSheet.value = true
-                if (!alarm && was) { lastAlarm.value = null; alarmSheet.value = false }
+                if (!alarm && was) { lastAlarm.value = null; alarmSheet.value = false; haltFromMessage.value = null }
                 was = alarm
+                if (st != null) prev = st
             }
         }
         viewModelScope.launch { link.sent.collect { m -> log("→ $m") } }
@@ -363,6 +423,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         viewModelScope.launch {
             link.status.collect { st ->
                 trackJob(st)
+                trackTemps(st)
                 ownMotionActive.value = ownMotion.isOwn(st?.state, link.conn.value == ConnState.Connected, nowMs(),
                     hotkeyRunning = runner.running.value != null, lastJogAt = jog.lastJogAt)
             }
@@ -378,7 +439,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
                 prev = c
                 if (c != ConnState.Connected) jog.cancelPending()
                 if (c != ConnState.Connected && c != ConnState.Stalled) { forgetJob(); meshPrompt.value = null }
-                if (c == ConnState.Connected) { if (!resumed) launch { checkMeshOnConnect() }; lookUpName() }
+                if (c == ConnState.Connected) { if (!resumed) launch { checkMeshOnConnect(); readTempLimits() }; lookUpName() }
             }
         }
         target.value?.let { if (prefs.getBoolean("autoConnect", true)) link.connect(it) }
@@ -973,12 +1034,22 @@ data class JobView(val progress: com.z1pendant.link.JobProgress, val file: com.z
                    val pace: Double = 1.0,
                    val feedOverride: Double? = null) {
     /**
-     * Percent done. With the file's line count: the line being cut ÷ total lines. The firmware's own
-     * percent is of the file *read*, and it reads ahead (planner queue + the Wi-Fi board's buffer), so
-     * near the end it says 100 while the last moves still run; it's the fallback until the file is in.
+     * Percent done, once the file is in: the estimated time up to the line being cut ÷ the whole
+     * job's estimate (by lines if there's no estimate). 0 while the Z1 says line 0 (it hasn't cut
+     * anything: the first tool change), 100 once nothing estimated is left (the park at the end).
+     * The firmware's own percent is of the file's *bytes read*, and it reads ahead (planner queue +
+     * the Wi-Fi board's buffer): a short file with a long comment header starts at 44 %, and near the
+     * end it says 100 while the last moves still run. It's only the fallback until the file is in.
      */
-    val percent: Int get() = totalLines?.takeIf { it > 0 && progress.line > 0 }
-        ?.let { (progress.line * 100 / it).toInt().coerceIn(0, 99) } ?: progress.percent
+    val percent: Int get() {
+        if (progress.line <= 0) return 0
+        val n = totalLines?.takeIf { it > 0 } ?: return progress.percent
+        time?.takeIf { it.total > 0.5 }?.let { t ->
+            val left = t.total - t.at(progress.line)
+            return if (left < 0.05) 100 else (100 * t.at(progress.line) / t.total).toInt().coerceIn(0, 99)
+        }
+        return (progress.line * 100 / n).toInt().coerceIn(0, 99)
+    }
 
     /**
      * Time left. With the file read: the estimated time of the lines still to run (feed moves at the

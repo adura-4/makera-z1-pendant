@@ -133,7 +133,8 @@ class ProbeController(
         if (toolChanged && checkAs == null) lastSetterZ?.let { lengthCheck.value = ProbeLength.check(s.tool, it, learned()) }
         prefs.edit {
             putString("probe.kind", s.kind.name); putString("probe.corner", s.corner.name)
-            putString("probe.axes", s.axes.name); putString("probe.tool", s.tool.name)
+            putBoolean("probe.axisX", s.axisX); putBoolean("probe.axisY", s.axisY); putBoolean("probe.axisZ", s.axisZ)
+            putString("probe.tool", s.tool.name)
             putFloat("probe.x", s.x.toFloat()); putFloat("probe.y", s.y.toFloat())
             putFloat("probe.depth", s.depth.toFloat()); putFloat("probe.tip", s.tip.toFloat())
         }
@@ -146,11 +147,14 @@ class ProbeController(
         return ProbeSetup(
             kind = if (tool.topOnly) ProbeKind.TOP else e("probe.kind", ProbeKind.entries.toTypedArray(), d.kind),
             corner = e("probe.corner", Corner.entries.toTypedArray(), d.corner),
-            axes = e("probe.axes", CenterAxes.entries.toTypedArray(), d.axes),
+            // Before the per-axis toggles (0.1.10) a center had X and Y / X only / Y only.
+            axisX = prefs.getBoolean("probe.axisX", prefs.getString("probe.axes", null) != "Y"),
+            axisY = prefs.getBoolean("probe.axisY", prefs.getString("probe.axes", null) != "X"),
+            axisZ = prefs.getBoolean("probe.axisZ", true),
             tool = tool,
             x = prefs.getFloat("probe.x", d.x.toFloat()).toDouble(), y = prefs.getFloat("probe.y", d.y.toFloat()).toDouble(),
             depth = prefs.getFloat("probe.depth", d.depth.toFloat()).toDouble(), tip = prefs.getFloat("probe.tip", d.tip.toFloat()).toDouble(),
-        )
+        ).normalized()
     }
 
     // ---- probe in the spindle, calibrated ---------------------------------------------------
@@ -289,6 +293,7 @@ class ProbeController(
             run.value = RunState.Failed("The machine isn't ready (${st?.state ?: "not connected"}).", null, "Nothing changed."); return
         }
         val s = setup.value; val m = mode.value
+        s.startProblem(st.wpos.getOrNull(2))?.let { run.value = RunState.Failed(it, null, "Nothing changed."); return }
         val before = offsets(st)
         val start = Touch(st.mpos[0], st.mpos[1], st.mpos[2])
         while (runLines.tryReceive().isSuccess) { /* drop old lines */ }
@@ -296,7 +301,7 @@ class ProbeController(
         setJogEnabled(false)
         runJob = scope.launch {
             try {
-                val result = if (m == ProbeMode.SET_ZERO && s.kind != ProbeKind.TOP) runMakera(s, before)
+                val result = if (m == ProbeMode.SET_ZERO && s.makeraCommand() != null) runMakera(s, before)
                     else runOwn(s, m, start, before)
                 run.value = RunState.Done(result)
             } catch (e: ProbeStop) {
@@ -353,7 +358,7 @@ class ProbeController(
         val after = freshOffsets()
         // The axes Makera's routine writes (even when the new zero lands where the old one was).
         val changed = buildSet {
-            if (s.doX) add('X'); if (s.doY) add('Y'); if (s.kind.hasTop) add('Z')
+            if (s.doX) add('X'); if (s.doY) add('Y'); if (s.doZ) add('Z')
         }
         val (wx, wy) = widthsFromTouches(s.kind, s, touches)
         // The new zero, in the old zero's work coordinates: machine position of the new 0 = new offset.
@@ -364,13 +369,30 @@ class ProbeController(
             widthX = wx, widthY = wy, zeroSet = changed, machine = Measured(), before = before)
     }
 
-    /** The pendant's own touches (Measure only, and Top only in both modes). */
+    /**
+     * The pendant's own touches: Measure only, and Set work zero for what Makera has no routine for
+     * (Top only, a corner without all three axes, a block center without Z). Z0 is written at the
+     * top touch (like Makera's routines); X0 / Y0 once it's over the point found.
+     */
     private suspend fun runOwn(s: ProbeSetup, m: ProbeMode, start: Touch, before: List<Double>): ProbeResult {
         val io = LinkIo(s.stepLabels(), m == ProbeMode.SET_ZERO)
         io.step(s.stepLabels().first())
-        val meas = ProbeSequences(io, s, start, setZero = m == ProbeMode.SET_ZERO).run()
-        idleStatus()                              // the last move (to the corner / center) is still running
-        val set = if (m == ProbeMode.SET_ZERO && meas.top != null) setOf('Z') else emptySet()
+        val meas = ProbeSequences(io, s, start, setZero = m == ProbeMode.SET_ZERO, zeroZ = before.getOrNull(2)).run()
+        val st = idleStatus()                     // the last move (to the corner / center) is still running
+        val set = mutableSetOf<Char>()
+        if (m == ProbeMode.SET_ZERO) {
+            if (meas.top != null) set += 'Z'
+            val v = buildMap {
+                if (st != null) {
+                    meas.zeroX?.let { put('X', st.mpos[0] - it) }
+                    meas.zeroY?.let { put('Y', st.mpos[1] - it) }
+                }
+            }
+            if (v.isNotEmpty()) {
+                v.keys.forEach { set += it }
+                link.dialect.setWorkPosition(v).forEach { io.send(it) }
+            }
+        }
         return ProbeResult(m, s,
             zeroX = meas.zeroX?.let { it - before[0] }, zeroY = meas.zeroY?.let { it - before[1] },
             top = meas.top?.let { it - before[2] }, widthX = meas.widthX, widthY = meas.widthY,

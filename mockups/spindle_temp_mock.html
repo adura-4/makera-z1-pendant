@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spindle Temperature</title>
+<style>
+  :root { --bg:#0B1120; --tile:#1E293B; --tile2:#162033; --line:#2A3850; --muted:#94A3B8; --pri:#38BDF8; --txt:#E2E8F0;
+          --ok:#22C55E; --warn:#F59E0B; --hot:#F97316; --bad:#F87171; --page:#E9EBEE; --ptext:#1f2937; --pmuted:#6b7280; --card:#fff; --cardline:#d8dbe0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--page); color:var(--ptext); font:13px/1.4 "Segoe UI", Roboto, system-ui, sans-serif; }
+  header.page { padding:18px 24px 4px; }
+  header.page h1 { margin:0 0 4px; font-size:20px; }
+  header.page p { margin:0; color:var(--pmuted); max-width:1250px; }
+  .row { display:flex; flex-wrap:wrap; gap:22px; padding:14px 24px; align-items:flex-start; }
+  .shot h2 { font-size:14px; margin:0 0 2px; }
+  .shot .sub { color:var(--pmuted); font-size:12px; margin:0 0 8px; width:300px; min-height:84px; }
+  .phone { width:300px; height:620px; background:var(--bg); color:var(--txt); border-radius:28px; border:6px solid #111827; position:relative; overflow:hidden; font-family:Roboto, "Segoe UI", sans-serif; box-shadow:0 8px 24px rgba(0,0,0,.25); }
+  .sb { height:20px; font-size:10px; color:var(--muted); display:flex; justify-content:space-between; padding:3px 16px 0; }
+  .new { outline:2px dashed #ff8a00; outline-offset:2px; border-radius:6px; }
+  .top { display:flex; align-items:center; height:34px; padding:0 8px; margin:3px 0 6px; }
+  .top .nm { flex:1; min-width:0; } .top .nm b { display:block; font-size:9.8px; line-height:12.6px; }
+  .top .nm span.l { display:block; font-size:7.7px; line-height:10.5px; color:var(--muted); white-space:nowrap; }
+  .top .nm .h { color:var(--hot); }
+  .pill { border-radius:14px; padding:4px 10px; font-size:9.8px; font-weight:700; margin-right:2px; }
+  .pill.idle { background:#15803D; } .pill.run { background:#2563EB; } .pill.alarm { background:#B91C1C; }
+  .ico { width:34px; height:34px; display:grid; place-items:center; } .ico::after { content:''; width:15px; height:13px; border-radius:2px; background:#cbd5e1; opacity:.85; }
+  .ro { margin:0 8px; background:#0F172A; border-radius:10px; padding:4px 8px; }
+  .ro .ax { display:flex; align-items:center; height:30px; }
+  .ro .ax b { width:18px; color:var(--muted); font-size:14px; }
+  .ro .ax .v { flex:1; text-align:right; font:600 19px/1 "Consolas", monospace; padding-right:8px; }
+  .ro .ax .bt { border:1px solid #475569; border-radius:12px; font-size:9px; color:var(--pri); padding:2px 8px; margin-left:4px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; padding:0 8px; }
+  .t { background:var(--tile); border-radius:10px; height:54px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:10px; color:#cbd5e1; gap:2px; }
+  .t .g { width:16px; height:16px; border-radius:50%; border:2px solid #94a3b8; opacity:.7; }
+  .t.dim { color:#64748b; }
+  .t .tmp { font:600 10px/1 Roboto, sans-serif; color:var(--muted); }
+  .foot { position:absolute; bottom:10px; left:12px; right:12px; display:flex; justify-content:space-between; font-size:10px; color:var(--muted); }
+  .panel { margin:0 8px; background:#111A2B; border-radius:14px; padding:8px 10px; height:calc(100% - 60px); position:relative; }
+  .panel .grab { width:30px; height:3px; border-radius:2px; background:#3b4b66; margin:0 auto 6px; }
+  .fn { font-size:12px; display:flex; gap:6px; align-items:center; margin-bottom:2px; }
+  .big { font:600 26px/1 Roboto, sans-serif; } .big small { font-size:10.5px; color:var(--muted); font-weight:400; margin-left:4px; }
+  .bar { height:5px; border-radius:3px; background:#1e293b; margin:6px 0 8px; } .bar i { display:block; height:100%; width:41%; background:var(--pri); border-radius:3px; }
+  .tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; }
+  .tl { background:var(--tile); border-radius:8px; padding:5px 7px; } .tl span { font-size:9px; color:var(--muted); display:block; }
+  .tl b { font:600 13px/1.3 "Consolas", monospace; } .tl b small { font-size:9px; color:var(--muted); font-weight:400; }
+  .temp { background:var(--tile); border-radius:10px; padding:7px 8px 4px; margin-top:6px; }
+  .temp .hd { display:flex; align-items:baseline; gap:6px; font-size:9.5px; color:var(--muted); }
+  .temp .hd b { font:600 17px/1 Roboto, sans-serif; color:var(--txt); }
+  .temp .hd .lim { margin-left:auto; }
+  .temp svg { width:100%; height:92px; display:block; }
+  .temp .lg { display:flex; gap:10px; font-size:8.5px; color:var(--muted); padding:0 2px 2px; }
+  .temp .lg i { display:inline-block; width:10px; height:2px; vertical-align:2px; margin-right:3px; }
+  .temp .ft { display:flex; justify-content:space-between; font-size:8.5px; color:#64748b; padding:0 1px 2px; }
+  .warm b { color:var(--warn) !important; } .hotv .hd > b { color:var(--hot); }
+  @keyframes pulse { 0%,100% { opacity:.15; stroke-width:3; } 50% { opacity:.75; stroke-width:9; } }
+  .pulse { animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes dotpulse { 0%,100% { r:3; } 50% { r:5.5; } }
+  .dotpulse { animation:dotpulse 1.2s ease-in-out infinite; }
+  .banner { background:#7C2D12; color:#FED7AA; border-radius:10px; padding:7px 9px; font-size:10.5px; display:flex; gap:7px; align-items:flex-start; margin:4px 0 6px; }
+  .banner b { color:#fff; }
+  .sliders { position:absolute; left:10px; right:10px; bottom:50px; font-size:10px; }
+  .sl { display:flex; align-items:center; gap:6px; margin:6px 0; } .sl span { width:40px; } .sl .tr { flex:1; height:12px; border-radius:6px; background:#1e293b; position:relative; }
+  .sl .tr i { position:absolute; left:0; top:0; bottom:0; width:55%; background:var(--pri); border-radius:6px; }
+  .btns { position:absolute; left:10px; right:10px; bottom:10px; display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .btns div { border-radius:16px; height:32px; display:grid; place-items:center; font-size:11px; font-weight:600; }
+  .scrim { position:absolute; inset:0; background:rgba(2,6,15,.55); }
+  .sheet { position:absolute; left:0; right:0; bottom:0; background:#111a2b; border-radius:16px 16px 0 0; padding:8px 14px 14px; border-top:1px solid var(--line); }
+  .sheet .grab { width:36px; height:4px; border-radius:3px; background:#3b4b66; margin:0 auto 10px; }
+  .sheet h4 { margin:0 0 4px; font-size:15px; display:flex; gap:7px; align-items:center; }
+  .sheet p { margin:0 0 8px; font-size:11px; color:#cbd5e1; }
+  .sheet .btn { background:#DC2626; color:#fff; border-radius:18px; text-align:center; padding:9px; font-weight:600; font-size:12px; margin-top:8px; }
+  .sheet .btn.off { background:#3f1d1d; color:#fca5a5; }
+  .sheet .lnk { color:var(--pri); font-size:11px; margin-top:8px; }
+  .tri { width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent; border-bottom:14px solid #F87171; }
+  .notes { display:flex; flex-wrap:wrap; gap:14px; padding:4px 24px 24px; }
+  .note { background:var(--card); border:1px solid var(--cardline); border-radius:8px; padding:10px 14px; width:400px; font-size:12px; }
+  .note h3 { margin:0 0 6px; font-size:13px; } .note ul, .note ol { margin:0; padding-left:18px; } .note li { margin:2px 0; }
+  .note.ask { background:#FFF7E6; border-color:#F5C26B; }
+  code { font-family:Consolas, monospace; font-size:11.5px; background:#eef0f3; padding:0 3px; border-radius:3px; }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Pendant: spindle temperature</h1>
+  <p>The Z1 already sends the spindle temperature in every status (<code>|S:</code> 5th number) and the electronics box's (6th number). Shown only while a job runs: a graph in the job panel, a warning before the Z1's own limit, and alarm sheets that say which part stopped and why. Nothing changes in the top bar or while idle. Numbers from today's overheat (36 °C at the start, 75.1 °C about 2½ min into the cut). <span class="new">&nbsp;dashed orange&nbsp;</span> = new.</p>
+</header>
+
+
+<div class="row">
+  <!-- 2. Job, normal -->
+  <div class="shot">
+    <h2>1. During a job</h2>
+    <p class="sub">The job panel gets a <b>Temperature</b> card graphing <b>both</b> since the job started: spindle in blue (its 75 °C limit dashed red), box in violet (its 60 °C limit dotted). Each has its own scale, with tick numbers in its colour. Limits are read from the machine. <b>Tool marks</b> along the bottom: the job's first tool at the start, then a dot and a faint line where each next tool started, so you can see what each tool did to the temperature.</p>
+    <div class="phone">
+      <div class="sb"><span>13:38</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm"><b>Makera_Z1P</b><span class="l">192.168.1.48 · 27 ms</span></div><span class="pill run">Run 41%</span><span class="ico"></span><span class="ico"></span><span class="ico"></span></div>
+      <div class="panel">
+        <div class="grab"></div>
+        <div class="fn">▤ stock_nut_Setup4.cnc</div>
+        <div class="big">41%<small>line 3,120 of 7,604</small></div>
+        <div class="bar"><i></i></div>
+        <div class="tiles">
+          <div class="tl"><span>Elapsed</span><b>2m 04s</b></div><div class="tl"><span>Left (est.)</span><b>3m 01s</b></div><div class="tl"><span>Done at</span><b>1:41</b></div>
+          <div class="tl"><span>Feed</span><b>800<small>/800</small></b></div><div class="tl"><span>Spindle</span><b>18,000<small>/18k</small></b></div><div class="tl"><span>State</span><b style="color:var(--pri)">Run</b></div>
+        </div>
+        <div class="temp new">
+          <div class="hd"><span style="color:#38BDF8">Spindle</span><b style="color:#38BDF8">58 °C</b><span>↑ 11 °C/min</span><span class="lim" style="color:#A78BFA">Box <b style="font-size:13px;color:#A78BFA">29 °C</b></span></div>
+          <svg viewBox="0 0 260 82" preserveAspectRatio="none">
+            
+            <line x1="24" y1="62" x2="236" y2="62" stroke="#334155" stroke-width=".8"/>
+            <circle cx="24" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="22" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="start">T8</text>
+            <line x1="87.6" y1="4" x2="87.6" y2="62" stroke="#64748b" stroke-width=".7" stroke-dasharray="2 2" opacity=".7"/>
+            <circle cx="87.6" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="87.6" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="middle">T1</text>
+            <text x="20" y="11" fill="#38BDF8" font-size="7" text-anchor="end">75</text>
+            <text x="20" y="26" fill="#38BDF8" font-size="7" text-anchor="end">60</text>
+            <text x="20" y="45" fill="#38BDF8" font-size="7" text-anchor="end">40</text>
+            <text x="20" y="64" fill="#38BDF8" font-size="7" text-anchor="end">20</text>
+            <text x="240" y="13" fill="#A78BFA" font-size="7">60</text>
+            <text x="240" y="32" fill="#A78BFA" font-size="7">45</text>
+            <text x="240" y="51" fill="#A78BFA" font-size="7">30</text>
+            <text x="240" y="64" fill="#A78BFA" font-size="7">20</text>
+            <line x1="24" y1="8.8" x2="236" y2="8.8" stroke="#F87171" stroke-dasharray="4 3" stroke-width="1"/>
+            <line x1="24" y1="10.4" x2="236" y2="10.4" stroke="#A78BFA" stroke-dasharray="1 3" stroke-width="1" opacity=".8"/>
+            <polyline fill="none" stroke="#A78BFA" stroke-width="1.6" points="24.0,55.6 34.6,55.2 45.2,54.5 55.8,53.8 66.4,53.0 77.0,52.3 87.6,51.7 98.2,51.3 108.8,50.9 119.4,50.7 130.0,50.4"/>
+            <polyline fill="none" stroke="#38BDF8" stroke-width="2" points="24.0,46.5 34.6,46.0 45.2,45.6 55.8,43.6 66.4,40.7 77.0,37.8 87.6,34.9 98.2,32.0 108.8,29.1 119.4,27.2 130.0,25.3"/>
+            <circle cx="130.0" cy="50.4" r="2.5" fill="#A78BFA"/>
+            <circle cx="130.0" cy="25.3" r="3" fill="#38BDF8"/>
+            
+          </svg>
+          <div class="ft"><span>job start</span><span>1 min</span><span>now</span></div>
+        </div>
+        <div class="sliders"><div class="sl"><span>Feed</span><div class="tr"><i></i></div><span style="text-align:right">100%</span></div><div class="sl"><span>Spindle</span><div class="tr"><i style="width:80%"></i></div><span style="text-align:right">100%</span></div></div>
+        <div class="btns"><div style="background:#D97706">Hold</div><div style="background:#1e293b;color:#22C55E">Resume</div><div style="background:#DC2626">Cancel job</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Hot -->
+  <div class="shot">
+    <h2>2. Getting close</h2>
+    <p class="sub">At <b>5 °C under the limit</b> (70 °C here): a banner, one buzz, and <b>the spindle line pulses</b> (orange, glowing in and out about once a second; the rest of the graph stays as is). Box's line does the same near its 60 °C. The pendant doesn't stop anything itself; you can Hold or turn the spindle/feed down. Gone again when it drops back under.</p>
+    <div class="phone">
+      <div class="sb"><span>13:39</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm"><b>Makera_Z1P</b><span class="l">192.168.1.48 · 27 ms</span></div><span class="pill run">Run 55%</span><span class="ico"></span><span class="ico"></span><span class="ico"></span></div>
+      <div class="panel">
+        <div class="grab"></div>
+        <div class="fn">▤ stock_nut_Setup4.cnc</div>
+        <div class="banner new"><span>🌡</span><span><b>Spindle 71 °C.</b> The Z1 stops the job at 75 °C. Hold to let it cool, or slow it down.</span></div>
+        <div class="big">55%<small>line 4,190 of 7,604</small></div>
+        <div class="bar"><i style="width:55%"></i></div>
+        <div class="tiles">
+          <div class="tl"><span>Elapsed</span><b>2m 41s</b></div><div class="tl"><span>Left (est.)</span><b>2m 12s</b></div><div class="tl"><span>Done at</span><b>1:41</b></div>
+        </div>
+        <div class="temp hotv new">
+          <div class="hd"><span style="color:#F97316">Spindle</span><b>71 °C</b><span>↑ 14 °C/min</span><span class="lim" style="color:#A78BFA">Box <b style="font-size:13px;color:#A78BFA !important">30 °C</b></span></div>
+          <svg viewBox="0 0 260 82" preserveAspectRatio="none">
+            
+            <line x1="24" y1="62" x2="236" y2="62" stroke="#334155" stroke-width=".8"/>
+            <circle cx="24" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="22" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="start">T8</text>
+            <line x1="87.6" y1="4" x2="87.6" y2="62" stroke="#64748b" stroke-width=".7" stroke-dasharray="2 2" opacity=".7"/>
+            <circle cx="87.6" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="87.6" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="middle">T1</text>
+            <line x1="151.2" y1="4" x2="151.2" y2="62" stroke="#64748b" stroke-width=".7" stroke-dasharray="2 2" opacity=".7"/>
+            <circle cx="151.2" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="151.2" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="middle">T10</text>
+            <text x="20" y="11" fill="#38BDF8" font-size="7" text-anchor="end">75</text>
+            <text x="20" y="26" fill="#38BDF8" font-size="7" text-anchor="end">60</text>
+            <text x="20" y="45" fill="#38BDF8" font-size="7" text-anchor="end">40</text>
+            <text x="20" y="64" fill="#38BDF8" font-size="7" text-anchor="end">20</text>
+            <text x="240" y="13" fill="#A78BFA" font-size="7">60</text>
+            <text x="240" y="32" fill="#A78BFA" font-size="7">45</text>
+            <text x="240" y="51" fill="#A78BFA" font-size="7">30</text>
+            <text x="240" y="64" fill="#A78BFA" font-size="7">20</text>
+            <line x1="24" y1="8.8" x2="236" y2="8.8" stroke="#F87171" stroke-dasharray="4 3" stroke-width="1"/>
+            <line x1="24" y1="10.4" x2="236" y2="10.4" stroke="#A78BFA" stroke-dasharray="1 3" stroke-width="1" opacity=".8"/>
+            <polyline fill="none" stroke="#A78BFA" stroke-width="1.6" points="24.0,55.6 34.6,55.2 45.2,54.5 55.8,53.8 66.4,53.0 77.0,52.3 87.6,51.7 98.2,51.3 108.8,50.9 119.4,50.7 130.0,50.4 140.6,50.0 151.2,49.8 161.8,49.5 172.4,49.2 183.0,49.1"/>
+            <polyline class="pulse" fill="none" stroke="#F97316" stroke-linecap="round" stroke-linejoin="round" opacity=".5" stroke-width="7" points="24.0,46.5 34.6,46.0 45.2,45.6 55.8,43.6 66.4,40.7 77.0,37.8 87.6,34.9 98.2,32.0 108.8,29.1 119.4,27.2 130.0,25.3 140.6,22.4 151.2,19.5 161.8,16.6 172.4,14.6 183.0,12.7"/>
+            <polyline fill="none" stroke="#F97316" stroke-width="2" points="24.0,46.5 34.6,46.0 45.2,45.6 55.8,43.6 66.4,40.7 77.0,37.8 87.6,34.9 98.2,32.0 108.8,29.1 119.4,27.2 130.0,25.3 140.6,22.4 151.2,19.5 161.8,16.6 172.4,14.6 183.0,12.7"/>
+            <circle cx="183.0" cy="49.1" r="2.5" fill="#A78BFA"/>
+            <circle class="dotpulse" cx="183.0" cy="12.7" r="4.5" fill="#F97316"/>
+            
+          </svg>
+          <div class="ft"><span>job start</span><span>1 min</span><span>now</span></div>
+        </div>
+        <div class="sliders"><div class="sl"><span>Feed</span><div class="tr"><i></i></div><span style="text-align:right">100%</span></div><div class="sl"><span>Spindle</span><div class="tr"><i style="width:80%"></i></div><span style="text-align:right">100%</span></div></div>
+        <div class="btns"><div style="background:#D97706">Hold</div><div style="background:#1e293b;color:#22C55E">Resume</div><div style="background:#DC2626">Cancel job</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Overheat alarm -->
+  <div class="shot">
+    <h2>3. The Z1 stops it: overheated</h2>
+    <p class="sub">The alarm sheet names the cause and shows the run-up. <b>Clear alarm</b> waits until the spindle is back under the limit (the Z1 checks once a second and would stop again); the live reading counts down.</p>
+    <div class="phone">
+      <div class="sb"><span>13:39</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm"><b>Makera_Z1P</b><span class="l">192.168.1.48 · 27 ms</span></div><span class="pill alarm">Alarm</span><span class="ico"></span><span class="ico"></span><span class="ico"></span></div>
+      <div class="ro" style="opacity:.5">
+        <div class="ax"><b>X</b><span class="v">12.418</span></div><div class="ax"><b>Y</b><span class="v">-8.902</span></div>
+        <div class="ax"><b>Z</b><span class="v">-1.200</span></div><div class="ax"><b>A</b><span class="v">-90.000</span></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet new">
+        <div class="grab"></div>
+        <h4><span class="tri"></span>Spindle overheated</h4>
+        <p>The spindle reached <b>75.1 °C</b>; the Z1 stops at 75 °C. The job stopped at line 4,630. This is the spindle's own temperature sensor, not the driver board.</p>
+        <div class="temp hotv" style="margin:0">
+          <div class="hd"><span style="color:#F97316">Spindle now</span><b>73 °C</b><span>↓ cooling</span><span class="lim" style="color:#A78BFA">Box <b style="font-size:13px;color:#A78BFA !important">31 °C</b></span></div>
+          <svg viewBox="0 0 260 82" preserveAspectRatio="none">
+            
+            <line x1="24" y1="62" x2="236" y2="62" stroke="#334155" stroke-width=".8"/>
+            <circle cx="24" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="22" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="start">T8</text>
+            <line x1="87.6" y1="4" x2="87.6" y2="62" stroke="#64748b" stroke-width=".7" stroke-dasharray="2 2" opacity=".7"/>
+            <circle cx="87.6" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="87.6" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="middle">T1</text>
+            <line x1="151.2" y1="4" x2="151.2" y2="62" stroke="#64748b" stroke-width=".7" stroke-dasharray="2 2" opacity=".7"/>
+            <circle cx="151.2" cy="62" r="2.2" fill="#E2E8F0"/>
+            <text x="151.2" y="75" fill="#E2E8F0" font-size="8" font-weight="600" text-anchor="middle">T10</text>
+            <text x="20" y="11" fill="#38BDF8" font-size="7" text-anchor="end">75</text>
+            <text x="20" y="26" fill="#38BDF8" font-size="7" text-anchor="end">60</text>
+            <text x="20" y="45" fill="#38BDF8" font-size="7" text-anchor="end">40</text>
+            <text x="20" y="64" fill="#38BDF8" font-size="7" text-anchor="end">20</text>
+            <text x="240" y="13" fill="#A78BFA" font-size="7">60</text>
+            <text x="240" y="32" fill="#A78BFA" font-size="7">45</text>
+            <text x="240" y="51" fill="#A78BFA" font-size="7">30</text>
+            <text x="240" y="64" fill="#A78BFA" font-size="7">20</text>
+            <line x1="24" y1="8.8" x2="236" y2="8.8" stroke="#F87171" stroke-dasharray="4 3" stroke-width="1"/>
+            <line x1="24" y1="10.4" x2="236" y2="10.4" stroke="#A78BFA" stroke-dasharray="1 3" stroke-width="1" opacity=".8"/>
+            <polyline fill="none" stroke="#A78BFA" stroke-width="1.6" points="24.0,55.6 34.6,55.2 45.2,54.5 55.8,53.8 66.4,53.0 77.0,52.3 87.6,51.7 98.2,51.3 108.8,50.9 119.4,50.7 130.0,50.4 140.6,50.0 151.2,49.8 161.8,49.5 172.4,49.2 183.0,49.1 193.6,48.7 204.2,48.3 214.8,48.1 225.4,47.8 236.0,47.8"/>
+            <polyline fill="none" stroke="#F97316" stroke-width="2" points="24.0,46.5 34.6,46.0 45.2,45.6 55.8,43.6 66.4,40.7 77.0,37.8 87.6,34.9 98.2,32.0 108.8,29.1 119.4,27.2 130.0,25.3 140.6,22.4 151.2,19.5 161.8,16.6 172.4,14.6 183.0,12.7 193.6,10.8 204.2,8.7 214.8,9.3 225.4,10.2 236.0,10.8"/>
+            <circle cx="236.0" cy="47.8" r="2.5" fill="#A78BFA"/>
+            <circle cx="236.0" cy="10.8" r="3" fill="#F97316"/>
+            <line x1="204.2" y1="2" x2="204.2" y2="62" stroke="#F87171" stroke-width=".8" opacity=".7"/><circle cx="204.2" cy="8.7" r="3" fill="#F87171"/>
+          </svg>
+          <div class="ft"><span>job start</span><span>halt 13:39:18</span><span>now</span></div>
+        </div>
+        <div class="btn off">Clear alarm — under 75 °C first (73 °C)</div>
+        <div class="lnk">Close</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Driver alarm -->
+  <div class="shot">
+    <h2>4. The driver board stops it</h2>
+    <p class="sub">"Spindle alarm triggered" is the driver board's own fault line, a different part. The sheet says so, what it can mean, and the temperatures at that moment, so you can tell the two apart later.</p>
+    <div class="phone">
+      <div class="sb"><span>14:07</span><span>Wi-Fi 82%</span></div>
+      <div class="top"><div class="nm"><b>Makera_Z1P</b><span class="l">192.168.1.48 · 27 ms</span></div><span class="pill alarm">Alarm</span><span class="ico"></span><span class="ico"></span><span class="ico"></span></div>
+      <div class="ro" style="opacity:.5">
+        <div class="ax"><b>X</b><span class="v">4.112</span></div><div class="ax"><b>Y</b><span class="v">17.650</span></div>
+        <div class="ax"><b>Z</b><span class="v">-2.400</span></div><div class="ax"><b>A</b><span class="v">-90.000</span></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet new">
+        <div class="grab"></div>
+        <h4><span class="tri"></span>Spindle driver fault</h4>
+        <p>The spindle's driver board signalled a fault and the Z1 stopped. It only sends "fault", not why: usually overload or a stall, otherwise its supply voltage or its own heat.</p>
+        <p style="color:var(--muted)">At the time: spindle 52 °C, box 31 °C, 18,000 rpm set, 17,200 measured.</p>
+        <p><b>The Z1 needs a power off/on</b> to clear this one; Clear alarm won't.</p>
+        <div class="btn" style="background:#1e293b;color:#cbd5e1">Clear alarm anyway</div>
+        <div class="lnk">Close</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <div class="note">
+    <h3>Where the numbers come from (checked)</h3>
+    <ul>
+      <li>Spindle temperature: <code>|S:</code> 5th number, from the thermistor on the motion board's TEMP-SPD connector (P1.31). Box: 6th number (P1.30).</li>
+      <li>The limit: <code>config-get sd temperature_control.spindle.max_temp</code> (your SD config says 75; the firmware default is 70). Box limit 60.</li>
+      <li>"Spindle overheated, max …, current …" and "Spindle alarm triggered – power off/on required" are the two messages from today; the pendant would match them to pick sheet 3 or 4.</li>
+      <li>There's no temperature from the driver board itself; the Z1 never gets one.</li>
+    </ul>
+  </div>
+  <div class="note">
+    <h3>Not shown (on purpose)</h3>
+    <ul>
+      <li>No automatic Hold or slow-down by the pendant: it warns, you decide.</li>
+      <li>No separate history screen: the graph covers the current job, and the last job's graph stays in Job details until the next one starts.</li>
+    </ul>
+  </div>
+  <div class="note ask">
+    <h3>Defaults I picked (say if you want them different)</h3>
+    <ol>
+      <li>Warning at limit − 5 °C (70 °C on yours), one buzz; amber from limit − 15 °C (60 °C).</li>
+      
+      <li>Nothing in the top bar and nothing while idle; the temperatures appear with the job panel.</li>
+      <li>Own scale per line (spindle 20–80 °C, box 20–65 °C) so both limits sit near the top; no legend, the colours say which is which.</li>
+      <li>Tool marks show the tool number only (T8, T1…); the tool names are in the tools card just above. A mark goes where the tool change finished ("Done ATC"), so the spindle-off time of the change sits just before it.</li>
+      <li>Clear alarm after an overheat waits for under-the-limit (greyed with the live reading).</li>
+      <li>The ↑ °C/min rate shown next to the reading.</li>
+    </ol>
+  </div>
+</div>
+</body>
+</html>

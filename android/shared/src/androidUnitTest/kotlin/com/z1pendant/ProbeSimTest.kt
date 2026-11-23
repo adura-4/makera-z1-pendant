@@ -8,7 +8,6 @@ import com.z1pendant.platform.Platform
 import com.z1pendant.platform.Prefs
 import com.z1pendant.platform.PrefsEditor
 import com.z1pendant.platform.TextFile
-import com.z1pendant.probe.CenterAxes
 import com.z1pendant.probe.Corner
 import com.z1pendant.probe.ProbeKind
 import com.z1pendant.probe.ProbeMode
@@ -139,10 +138,21 @@ class ProbeSimTest {
         assertEquals(before[1], offsets(link)[1], 1e-3)
         p.reset()
 
+        // Set work zero, X only with Z off (Makera has no routine for it). Z0 is on the top from the
+        // run above; parked 25 mm over it, the pendant touches the X side 2 mm below Z0 and writes X0 only.
+        idleAt(link, -145.0, -145.0, -45.0)
+        val b1 = offsets(link)
+        p.update(ProbeSetup(ProbeKind.OUTSIDE, Corner.FRONT_LEFT, axisY = false, axisZ = false))
+        val r1b = (runAndWait(vm) as RunState.Done).result
+        assertEquals(setOf('X'), r1b.zeroSet)
+        withTimeout(5_000) { while (kotlin.math.abs(offsets(link)[0] + 150.0) > 1e-3) delay(30) }
+        assertEquals("Y untouched", b1[1], offsets(link)[1], 1e-3); assertEquals("Z untouched", b1[2], offsets(link)[2], 1e-3)
+        p.reset()
+
         // Measure only, hole center (the pocket): nothing changes; then Set X Y.
         idleAt(link, -103.0, -136.0, -73.0)
         val b2 = offsets(link)
-        p.update(ProbeSetup(ProbeKind.HOLE, axes = CenterAxes.XY))
+        p.update(ProbeSetup(ProbeKind.HOLE, axisX = true, axisY = true))
         p.mode.value = ProbeMode.MEASURE
         val r2 = (runAndWait(vm) as RunState.Done).result
         assertEquals(-104.5, r2.machine.centerX!!, 1e-3); assertEquals(-135.0, r2.machine.centerY!!, 1e-3)

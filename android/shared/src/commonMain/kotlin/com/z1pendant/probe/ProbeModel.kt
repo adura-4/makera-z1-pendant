@@ -16,7 +16,7 @@ enum class ProbeKind(val label: String) {
     OUTSIDE("Outside corner"), INSIDE("Inside corner"), HOLE("Hole center"), BLOCK("Block center"), TOP("Top only");
     val hasCorner get() = this == OUTSIDE || this == INSIDE
     val hasCenterAxes get() = this == HOLE || this == BLOCK
-    /** Sets / measures Z (the top surface). A hole starts inside the hole, so it has no Z. */
+    /** Can touch Z (the top surface). A hole starts inside the hole, so it has no Z. */
     val hasTop get() = this != HOLE
 }
 
@@ -26,8 +26,6 @@ enum class Corner(val label: String) {
     val left get() = this == BACK_LEFT || this == FRONT_LEFT
     val back get() = this == BACK_LEFT || this == BACK_RIGHT
 }
-
-enum class CenterAxes(val label: String) { XY("X and Y"), X("X only"), Y("Y only") }
 
 /** [noun] = the name inside a sentence ("Load the 3D probe", "the laser probe"). */
 enum class ProbeTool(val label: String, val noun: String) {
@@ -85,42 +83,76 @@ enum class ProbeMode { SET_ZERO, MEASURE }
 data class ProbeSetup(
     val kind: ProbeKind = ProbeKind.OUTSIDE,
     val corner: Corner = Corner.FRONT_LEFT,
-    val axes: CenterAxes = CenterAxes.XY,
+    /** Which axes to probe, each a toggle (Top only is always just Z; a hole has no Z). */
+    val axisX: Boolean = true,
+    val axisY: Boolean = true,
+    val axisZ: Boolean = true,
     val tool: ProbeTool = ProbeTool.PROBE_3D,
     /** "X / Y start offset": how far it moves out (corner, block) or searches (hole, inside corner). */
     val x: Double = 20.0,
     val y: Double = 20.0,
-    /** "Side depth": how far below the top the ball goes before touching the sides. */
+    /** "Side depth": how far below the top the ball goes before touching the sides (with Z off, below the work Z0). */
     val depth: Double = 2.0,
     /** Ball (tip) diameter. */
     val tip: Double = 2.0,
 ) {
     /** Pick a probe; the laser probe can only do Top only. */
-    fun withTool(t: ProbeTool) = copy(tool = t, kind = if (t.topOnly) ProbeKind.TOP else kind)
+    fun withTool(t: ProbeTool) = copy(tool = t, kind = if (t.topOnly) ProbeKind.TOP else kind).normalized()
 
-    val doX get() = !kind.hasCenterAxes || axes != CenterAxes.Y
-    val doY get() = !kind.hasCenterAxes || axes != CenterAxes.X
+    val doX get() = kind != ProbeKind.TOP && axisX
+    val doY get() = kind != ProbeKind.TOP && axisY
+    val doZ get() = kind == ProbeKind.TOP || (kind.hasTop && axisZ)
+    /** Touches the sides (not just the top). */
+    val doSides get() = doX || doY
+    /** At least one axis to probe. */
+    val anyAxis get() = doX || doY || doZ
+    /** Toggle [axis]; turning off the last one does nothing. */
+    fun toggle(axis: Char): ProbeSetup {
+        val n = when (axis) { 'X' -> copy(axisX = !axisX); 'Y' -> copy(axisY = !axisY); else -> copy(axisZ = !axisZ) }
+        return if (n.anyAxis) n else this
+    }
+    /** Nothing left to probe (e.g. Z only, then Hole center, which has no Z): all axes back on. */
+    fun normalized() = if (anyAxis) this else copy(axisX = true, axisY = true, axisZ = true)
+    /**
+     * Z off but touching sides: no top touch to measure the side depth from, so the work Z0 stands in
+     * for the top (set it first, e.g. with Top only).
+     */
+    val depthFromZero get() = !doZ && doSides && kind != ProbeKind.HOLE
 
-    fun title(): String = when {
-        kind.hasCorner -> "${kind.label} · ${corner.label}"
-        kind.hasCenterAxes && axes != CenterAxes.XY -> "${kind.label} · ${axes.label}"
-        else -> kind.label
+    /**
+     * Why it can't start from work Z [wposZ] (null = fine). With Z off it moves out over the part at
+     * the start height, taking Z0 as the top: start below that and it would hit the part.
+     */
+    fun startProblem(wposZ: Double?): String? =
+        if (depthFromZero && wposZ != null && wposZ < 1.0)
+            "Z is off, so it takes your Z0 as the top. The ball is ${if (wposZ < 0) "below" else "at"} Z0 (Z ${Fmt.fixed(wposZ, 3)}): raise it above the top first."
+        else null
+
+    /** The probed axes, as "X Y Z". */
+    fun axesText() = listOfNotNull("X".takeIf { doX }, "Y".takeIf { doY }, "Z".takeIf { doZ }).joinToString(" ")
+
+    fun title(): String {
+        val all = doX && doY && (doZ || !kind.hasTop)
+        val ax = if (kind != ProbeKind.TOP && !all) " · ${axesText()}" else ""
+        return if (kind.hasCorner) "${kind.label} · ${corner.label}$ax" else kind.label + ax
     }
 
     /**
      * Makera's command for this setup, as Makera Studio sends it (`M480.%n X Y Z D`, all positive,
-     * 3 decimals; a center on one axis sends 0 for the other). Null for Top only, which has none.
+     * 3 decimals; a center on one axis sends 0 for the other). Null when Makera has no routine for
+     * these axes (its corners always touch X, Y and the top, its block center always the top; Top
+     * only has none): those run the pendant's own touches.
      */
     fun makeraCommand(): String? {
         val n = when (kind) {
-            ProbeKind.OUTSIDE -> cornerIndex()
-            ProbeKind.INSIDE -> cornerIndex() + 4
-            ProbeKind.HOLE -> 9
-            ProbeKind.BLOCK -> 10
-            ProbeKind.TOP -> return null
-        }
-        val xv = if (kind.hasCenterAxes && axes == CenterAxes.Y) 0.0 else abs(x)
-        val yv = if (kind.hasCenterAxes && axes == CenterAxes.X) 0.0 else abs(y)
+            ProbeKind.OUTSIDE -> cornerIndex().takeIf { doX && doY && doZ }
+            ProbeKind.INSIDE -> (cornerIndex() + 4).takeIf { doX && doY && doZ }
+            ProbeKind.HOLE -> 9.takeIf { doSides }
+            ProbeKind.BLOCK -> 10.takeIf { doZ && doSides }
+            ProbeKind.TOP -> null
+        } ?: return null
+        val xv = if (doX) abs(x) else 0.0
+        val yv = if (doY) abs(y) else 0.0
         return "M480.$n X${f3(xv)} Y${f3(yv)} Z${f3(abs(depth))} D${f3(abs(tip))}"
     }
 
@@ -139,7 +171,7 @@ object Steps {
     const val X_WALL = "Touch the X wall"; const val Y_WALL = "Touch the Y wall"
     const val X_WALLS = "Touch the X walls"; const val Y_WALLS = "Touch the Y walls"
     const val X_SIDES = "Touch the X sides"; const val Y_SIDES = "Touch the Y sides"
-    const val CORNER = "Move over the corner"; const val CENTER = "Move to the center"
+    const val CORNER = "Move over the corner"; const val EDGE = "Move over the edge"; const val CENTER = "Move to the center"
 
     /** Touches each step makes (fast + slow per side), to follow Makera's routine by its [PRB:] reports. */
     fun touches(label: String) = when (label) {
@@ -151,11 +183,19 @@ object Steps {
 
 /** The steps this setup's run goes through, in order. */
 fun ProbeSetup.stepLabels(): List<String> = when (kind) {
-    ProbeKind.OUTSIDE -> listOf(Steps.TOP, Steps.X_SIDE, Steps.Y_SIDE, Steps.CORNER)
-    ProbeKind.INSIDE -> listOf(Steps.TOP, Steps.X_WALL, Steps.Y_WALL, Steps.CORNER)
-    ProbeKind.HOLE -> listOfNotNull(Steps.X_WALLS.takeIf { doX }, Steps.Y_WALLS.takeIf { doY }, Steps.CENTER)
-    ProbeKind.BLOCK -> listOfNotNull(Steps.TOP, Steps.X_SIDES.takeIf { doX }, Steps.Y_SIDES.takeIf { doY }, Steps.CENTER)
+    ProbeKind.OUTSIDE -> listOfNotNull(Steps.TOP.takeIf { doZ }, Steps.X_SIDE.takeIf { doX }, Steps.Y_SIDE.takeIf { doY }, finishLabel())
+    ProbeKind.INSIDE -> listOfNotNull(Steps.TOP.takeIf { doZ }, Steps.X_WALL.takeIf { doX }, Steps.Y_WALL.takeIf { doY }, finishLabel())
+    ProbeKind.HOLE -> listOfNotNull(Steps.X_WALLS.takeIf { doX }, Steps.Y_WALLS.takeIf { doY }, finishLabel())
+    ProbeKind.BLOCK -> listOfNotNull(Steps.TOP.takeIf { doZ }, Steps.X_SIDES.takeIf { doX }, Steps.Y_SIDES.takeIf { doY }, finishLabel())
     ProbeKind.TOP -> listOf(Steps.TOP)
+}
+
+/** The last step, moving over the point found: none when only the top was touched. */
+fun ProbeSetup.finishLabel(): String? = when {
+    !doSides -> null
+    kind == ProbeKind.HOLE || kind == ProbeKind.BLOCK -> Steps.CENTER
+    doX && doY -> Steps.CORNER
+    else -> Steps.EDGE
 }
 
 /** The step a run is on after [n] touches (Makera's routine reports each touch). */
@@ -225,16 +265,21 @@ object ProbeFeeds {
  * relative, as on the Z1 (`G38.2 X20` = search up to 20 mm in +X). [setZero] only matters for Top
  * only, the one kind without a Makera routine: it writes Z0 at the touch like Makera's routines do.
  */
-class ProbeSequences(private val io: ProbeIo, private val s: ProbeSetup, private val start: Touch, private val setZero: Boolean) {
+class ProbeSequences(private val io: ProbeIo, private val s: ProbeSetup, private val start: Touch, private val setZero: Boolean,
+                     /** Machine Z of the work Z0 (machine − work), the top's stand-in when Z is off. */
+                     private val zeroZ: Double? = null) {
     private val r = s.tip / 2
 
-    suspend fun run(): Measured = when (s.kind) {
-        ProbeKind.OUTSIDE -> outsideCorner()
-        ProbeKind.INSIDE -> insideCorner()
-        ProbeKind.HOLE -> hole()
-        ProbeKind.BLOCK -> block()
-        ProbeKind.TOP -> Measured(top = top())
+    suspend fun run(): Measured = when {
+        !s.doSides -> Measured(top = top())
+        s.kind == ProbeKind.OUTSIDE -> outsideCorner()
+        s.kind == ProbeKind.INSIDE -> insideCorner()
+        s.kind == ProbeKind.HOLE -> hole()
+        else -> block()
     }
+
+    /** The top when Z is on; null when it's off. */
+    private suspend fun topIfOn(): Double? = if (s.doZ) top() else null
 
     /** Down onto the top twice (fast, then slow from 1 mm up); returns the top's machine Z. */
     private suspend fun top(): Double {
@@ -259,26 +304,42 @@ class ProbeSequences(private val io: ProbeIo, private val s: ProbeSetup, private
         return t2.on(axis)
     }
 
-    private suspend fun plunge(topZ: Double) = io.send("G53 G1 Z${f3(topZ - s.depth)} F${f0(ProbeFeeds.PLUNGE)}")
+    /** Down to touching height: [depth] below the top it touched, or with Z off below the work Z0. */
+    private suspend fun plunge(topZ: Double?) {
+        val ref = topZ ?: zeroZ ?: throw ProbeStop("Z is off and there's no Z0 to measure the side depth from.")
+        io.send("G53 G1 Z${f3(ref - s.depth)} F${f0(ProbeFeeds.PLUNGE)}")
+    }
+
+    /** Over the point found, at the start height (an axis not probed stays put). */
+    private suspend fun finish(x: Double?, y: Double?) {
+        io.step(s.finishLabel() ?: return)
+        val parts = listOfNotNull(x?.let { "X${f3(it)}" }, y?.let { "Y${f3(it)}" })
+        if (parts.isNotEmpty()) io.send("G53 G0 " + parts.joinToString(" "))
+    }
 
     /** Starts over the part near the corner: top, then out past each side, down, and back in. */
     private suspend fun outsideCorner(): Measured {
         val dx = if (s.corner.left) 1 else -1          // direction the probe moves to reach the X side
         val dy = if (s.corner.back) -1 else 1
-        val topZ = top()
-        io.step(Steps.X_SIDE)
-        io.send("G53 G0 X${f3(start.x - dx * s.x)}")
-        plunge(topZ)
-        val ex = side('X', dx, s.x) + dx * r
-        io.send("G53 G0 Z${f3(start.z)}")
-        io.send("G53 G0 X${f3(start.x)}")
-        io.step(Steps.Y_SIDE)
-        io.send("G53 G0 Y${f3(start.y - dy * s.y)}")
-        plunge(topZ)
-        val ey = side('Y', dy, s.y) + dy * r
-        io.send("G53 G0 Z${f3(start.z)}")
-        io.step(Steps.CORNER)
-        io.send("G53 G0 X${f3(ex)} Y${f3(ey)}")
+        val topZ = topIfOn()
+        var ex: Double? = null; var ey: Double? = null
+        if (s.doX) {
+            io.step(Steps.X_SIDE)
+            io.send("G53 G0 X${f3(start.x - dx * s.x)}")
+            plunge(topZ)
+            ex = side('X', dx, s.x) + dx * r
+            io.send("G53 G0 Z${f3(start.z)}")
+            io.send("G53 G0 X${f3(start.x)}")
+        }
+        if (s.doY) {
+            io.step(Steps.Y_SIDE)
+            io.send("G53 G0 Y${f3(start.y - dy * s.y)}")
+            plunge(topZ)
+            ey = side('Y', dy, s.y) + dy * r
+            io.send("G53 G0 Z${f3(start.z)}")
+            if (ex == null) io.send("G53 G0 Y${f3(start.y)}")
+        }
+        finish(ex, ey)
         return Measured(edgeX = ex, edgeY = ey, top = topZ)
     }
 
@@ -286,20 +347,25 @@ class ProbeSequences(private val io: ProbeIo, private val s: ProbeSetup, private
     private suspend fun insideCorner(): Measured {
         val px = if (s.corner.left) -1 else 1          // direction to the X wall
         val py = if (s.corner.back) 1 else -1
-        val topZ = top()
-        io.step(Steps.X_WALL)
+        val topZ = topIfOn()
+        io.step(if (s.doX) Steps.X_WALL else Steps.Y_WALL)
         val inX = start.x - px * s.x
         val inY = start.y - py * s.y
         io.send("G53 G0 X${f3(inX)} Y${f3(inY)}")
         plunge(topZ)
-        val ex = side('X', px, s.x) + px * r
-        io.send("G53 G0 X${f3(inX)}")
-        io.step(Steps.Y_WALL)
-        val ey = side('Y', py, s.y) + py * r
-        io.send("G53 G0 Y${f3(inY)}")
+        var ex: Double? = null; var ey: Double? = null
+        if (s.doX) {
+            ex = side('X', px, s.x) + px * r
+            io.send("G53 G0 X${f3(inX)}")
+        }
+        if (s.doY) {
+            io.step(Steps.Y_WALL)
+            ey = side('Y', py, s.y) + py * r
+            io.send("G53 G0 Y${f3(inY)}")
+        }
         io.send("G53 G0 Z${f3(start.z)}")
-        io.step(Steps.CORNER)
-        io.send("G53 G0 X${f3(ex)} Y${f3(ey)}")
+        // On the axis not probed, stay over the pocket (where it went in).
+        finish(ex ?: inX, ey ?: inY)
         return Measured(edgeX = ex, edgeY = ey, top = topZ)
     }
 
@@ -326,7 +392,7 @@ class ProbeSequences(private val io: ProbeIo, private val s: ProbeSetup, private
 
     /** Starts over the block, roughly centered: top, then down outside each side and in. */
     private suspend fun block(): Measured {
-        val topZ = top()
+        val topZ = topIfOn()
         var cx: Double? = null; var cy: Double? = null; var wx: Double? = null; var wy: Double? = null
         if (s.doX) {
             io.step(Steps.X_SIDES)
@@ -369,9 +435,9 @@ fun widthsFromTouches(kind: ProbeKind, setup: ProbeSetup, touches: List<Touch>):
         return if (kind == ProbeKind.HOLE) d + setup.tip else d - setup.tip
     }
     if (kind != ProbeKind.HOLE && kind != ProbeKind.BLOCK) return null to null
-    return when (setup.axes) {
-        CenterAxes.XY -> pair(0, 'X') to pair(1, 'Y')
-        CenterAxes.X -> pair(0, 'X') to null
-        CenterAxes.Y -> null to pair(0, 'Y')
+    return when {
+        setup.doX && setup.doY -> pair(0, 'X') to pair(1, 'Y')
+        setup.doX -> pair(0, 'X') to null
+        else -> null to pair(0, 'Y')
     }
 }

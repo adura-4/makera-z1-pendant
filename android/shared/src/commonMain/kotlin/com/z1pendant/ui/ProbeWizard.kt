@@ -78,7 +78,6 @@ import com.z1pendant.AppViewModel
 import com.z1pendant.link.ConnState
 import com.z1pendant.link.MachineStatus
 import com.z1pendant.platform.PlatformBackHandler
-import com.z1pendant.probe.CenterAxes
 import com.z1pendant.probe.Corner
 import com.z1pendant.probe.PROBE_TOOL
 import com.z1pendant.probe.ProbeKind
@@ -178,7 +177,7 @@ fun ProbeWizard(vm: AppViewModel, doneLabel: String = "Done", requireZero: Boole
                 2, 3 -> Button(onClick = { step++ }, enabled = probeReady, modifier = Modifier.weight(1f).height(48.dp)) { Text("Next", fontSize = 16.sp) }
                 4 -> {
                     val mode by p.mode.collectAsState()
-                    val ready = probeReady && status?.isIdle == true && settingsValid(setup)
+                    val ready = probeReady && status?.isIdle == true && settingsValid(setup) && setup.startProblem(status?.wpos?.getOrNull(2)) == null
                     Button(onClick = { askRun = true }, enabled = ready, modifier = Modifier.weight(1f).height(48.dp)) {
                         Icon(Icons.Filled.PlayArrow, null); Spacer(Modifier.width(4.dp))
                         Text(if (mode == ProbeMode.MEASURE) "Measure" else "Run probe", fontSize = 16.sp)
@@ -192,22 +191,30 @@ fun ProbeWizard(vm: AppViewModel, doneLabel: String = "Done", requireZero: Boole
         val mode = p.mode.value
         AlertDialog(onDismissRequest = { askRun = false },
             title = { Text("Start probing?") },
-            text = { Text(if (mode == ProbeMode.MEASURE) "The machine starts moving right away. Your work zero won't change."
-                else "The machine starts moving right away, and this sets your work zero (${zeroAxesText(setup)}).") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(if (mode == ProbeMode.MEASURE) "The machine starts moving right away. Your work zero won't change."
+                        else "The machine starts moving right away, and this sets your work zero (${zeroAxesText(setup)}).")
+                    // Z off: the side depth counts from the work Z0, not from where the probe is parked.
+                    if (setup.depthFromZero) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Amber.copy(alpha = 0.14f)).padding(10.dp),
+                        verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Filled.Warning, null, tint = Amber, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
+                        Text("Z is off: it goes down from your Z origin, not from where the probe is now. It touches the sides at " +
+                            "Z −${mmText(setup.depth)} (${mmText(setup.depth)} mm below Z0). Make sure Z0 is on the top of the part.",
+                            fontSize = 13.5.sp, lineHeight = 18.sp, color = Amber)
+                    }
+                }
+            },
             confirmButton = { TextButton(onClick = { askRun = false; vm.haptics.press(); p.start() }) { Text("Start") } },
             dismissButton = { TextButton(onClick = { askRun = false }) { Text("Cancel") } })
     }
     if (info) InfoSheet(step, setup.tool) { info = false }
 }
 
-private fun zeroAxesText(s: ProbeSetup) = when (s.kind) {
-    ProbeKind.TOP -> "Z"
-    ProbeKind.HOLE -> listOfNotNull("X".takeIf { s.doX }, "Y".takeIf { s.doY }).joinToString(" ")
-    ProbeKind.BLOCK -> listOfNotNull("X".takeIf { s.doX }, "Y".takeIf { s.doY }, "Z").joinToString(" ")
-    else -> "X Y Z"
-}
+private fun zeroAxesText(s: ProbeSetup) = s.axesText()
 
-private fun settingsValid(s: ProbeSetup) = s.x in 0.5..200.0 && s.y in 0.5..200.0 && s.depth in 0.0..30.0 && s.tip in 0.2..12.0
+private fun settingsValid(s: ProbeSetup) = s.x in 0.5..200.0 && s.y in 0.5..200.0 && s.depth in 0.0..30.0 &&
+    s.tip in 0.2..12.0
 
 // ---- step 1: what ------------------------------------------------------------------------------
 @Composable
@@ -242,7 +249,7 @@ private fun StepWhat(s: ProbeSetup, onChange: (ProbeSetup) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             row.forEach { k ->
                 val sel = s.kind == k
-                Tile(sel, { onChange(s.copy(kind = k)) }, Modifier.weight(1f), enabled = !s.tool.topOnly || k == ProbeKind.TOP) {
+                Tile(sel, { onChange(s.copy(kind = k).normalized()) }, Modifier.weight(1f), enabled = !s.tool.topOnly || k == ProbeKind.TOP) {
                     if (k == ProbeKind.HOLE || k == ProbeKind.BLOCK) Row { ProbeKindArt(k, 60.dp); ProbeKindArt(k, 60.dp, square = true) }
                     else ProbeKindArt(k, 64.dp)
                     Text(k.label, fontSize = 14.sp, color = if (sel) MaterialTheme.colorScheme.primary else Color.Unspecified)
@@ -264,16 +271,19 @@ private fun StepWhat(s: ProbeSetup, onChange: (ProbeSetup) -> Unit) {
             }
         }
     }
-    if (s.kind.hasCenterAxes) {
-        Label("Axis")
+    if (s.kind != ProbeKind.TOP) {
+        Label("Axes to probe")
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CenterAxes.entries.forEach { a ->
-                val sel = s.axes == a
-                Tile(sel, { onChange(s.copy(axes = a)) }, Modifier.weight(1f)) {
-                    Text(a.label, fontSize = 14.sp, color = if (sel) MaterialTheme.colorScheme.primary else Color.Unspecified)
+            // A hole starts inside the hole, so there's no top to touch.
+            listOfNotNull('X', 'Y', 'Z'.takeIf { s.kind.hasTop }).forEach { a ->
+                val on = when (a) { 'X' -> s.doX; 'Y' -> s.doY; else -> s.doZ }
+                Tile(on, { onChange(s.toggle(a)) }, Modifier.weight(1f)) {
+                    Text((if (on) "✓ " else "") + a, fontSize = 17.sp, fontWeight = FontWeight.Medium,
+                        color = if (on) MaterialTheme.colorScheme.primary else Muted)
                 }
             }
         }
+        if (s.depthFromZero) Text("Z off: it doesn't touch the top. It takes your current Z0 as the top, so set Z first (Top only does that).", fontSize = 12.sp, color = Muted)
     }
 }
 
@@ -283,26 +293,27 @@ private fun StepSettings(s: ProbeSetup, onChange: (ProbeSetup) -> Unit) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         ProbeKindArt(s.kind, 96.dp, square = false)
     }
-    if (s.kind == ProbeKind.TOP) {
-        Text("Top only touches straight down, so there's nothing to set.", fontSize = 14.sp, color = Muted)
+    if (!s.doSides) {
+        Text("Only the top: it touches straight down, so there's nothing to set.", fontSize = 14.sp, color = Muted)
         return
     }
     Text("Distances are from where the probe is now.", fontSize = 12.5.sp, color = Muted)
-    if (s.doX) NumField(FieldArt.X, s.tool, "X start offset", s.x, 0) { onChange(s.copy(x = it)) }
-    if (s.doY) NumField(FieldArt.Y, s.tool, "Y start offset", s.y, 0) { onChange(s.copy(y = it)) }
-    if (s.kind != ProbeKind.HOLE) NumField(FieldArt.DEPTH, s.tool, "Side depth", s.depth, 3) { onChange(s.copy(depth = it)) }
+    if (s.doX) NumField(FieldArt.X, s.tool, "X start offset", s.x, 0, s.kind) { onChange(s.copy(x = it)) }
+    if (s.doY) NumField(FieldArt.Y, s.tool, "Y start offset", s.y, 0, s.kind) { onChange(s.copy(y = it)) }
+    if (s.kind != ProbeKind.HOLE) NumField(FieldArt.DEPTH, s.tool, if (s.doZ) "Side depth" else "Side depth below Z0", s.depth, 3) { onChange(s.copy(depth = it)) }
     NumField(FieldArt.TIP, s.tool, "Tip diameter", s.tip, 3) { onChange(s.copy(tip = it)) }
 }
 
 /** A setting with its drawing in a tile; [decimals] = how it's shown once you leave the box (0 = as typed). */
 @Composable
-private fun NumField(art: FieldArt, tool: ProbeTool, label: String, value: Double, decimals: Int, onValue: (Double) -> Unit) {
+private fun NumField(art: FieldArt, tool: ProbeTool, label: String, value: Double, decimals: Int,
+                     kind: ProbeKind = ProbeKind.OUTSIDE, onValue: (Double) -> Unit) {
     fun show(v: Double) = if (decimals > 0) Fmt.fixed(v, decimals) else mmText(v)
     var text by remember { mutableStateOf(show(value)) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.size(width = 98.dp, height = 78.dp).clip(RoundedCornerShape(10.dp)).background(TileBg)
             .border(1.dp, Color(0xFF334155), RoundedCornerShape(10.dp)).padding(5.dp)) {
-            FieldArtImage(art, Modifier.fillMaxSize(), tool)
+            FieldArtImage(art, Modifier.fillMaxSize(), tool, kind)
         }
         Text(label, fontSize = 15.sp, modifier = Modifier.weight(1f))
         // A compact rounded box like the mock-up (Material's text field is tall and square-cornered):
@@ -527,12 +538,24 @@ private fun MiniReadout(st: MachineStatus?, connected: Boolean, selected: Char?,
     }
 }
 
-private fun hint(s: ProbeSetup): String = when (s.kind) {
-    ProbeKind.OUTSIDE -> "Jog the ball about 5 mm above the part, about 5 mm in from the ${s.corner.label} corner."
-    ProbeKind.INSIDE -> "Jog the ball about 5 mm above the top, over the part just outside the pocket's ${s.corner.label} corner."
-    ProbeKind.HOLE -> "Jog the ball into the hole, roughly centered, at least 2 mm below its edge."
-    ProbeKind.BLOCK -> "Jog the ball about 5 mm above the block, roughly over its center."
-    ProbeKind.TOP -> "Jog the ball about 5 mm above where you want Z0."
+private fun hint(s: ProbeSetup): String {
+    // With Z off the work Z0 stands in for the top: any height above it is fine.
+    val above = if (s.depthFromZero) "anywhere" else "about 5 mm"
+    val noZ = if (s.depthFromZero) " It touches the sides at Z −${mmText(s.depth)} (${mmText(s.depth)} mm below your Z0)." else ""
+    val near = if (s.doX && s.doY) "corner" else "${sideName(s)} side"
+    return when (s.kind) {
+        ProbeKind.OUTSIDE -> "Jog the ball $above above the part, about 5 mm in from the ${s.corner.label} $near."
+        ProbeKind.INSIDE -> "Jog the ball $above above the top, over the part just outside the pocket's ${s.corner.label} corner."
+        ProbeKind.HOLE -> "Jog the ball into the hole, roughly centered, at least 2 mm below its edge."
+        ProbeKind.BLOCK -> "Jog the ball $above above the block, roughly over its center."
+        ProbeKind.TOP -> "Jog the ball about 5 mm above where you want Z0."
+    } + noZ
+}
+
+/** The part's side an X-only / Y-only corner probe touches, seen from the front. */
+private fun sideName(s: ProbeSetup): String = when {
+    s.doX -> if (s.corner.left) "left" else "right"
+    else -> if (s.corner.back) "back" else "front"
 }
 
 @Composable
@@ -604,17 +627,19 @@ private fun ModeAndStatus(vm: AppViewModel) {
         st?.tool != PROBE_TOOL || !ok || !cal -> Text("The probe isn't loaded and calibrated: go back to Check the probe.", fontSize = 12.sp, color = Amber)
         p.lengthCheck.value?.ok == false -> Text("The probe in the spindle doesn't look like the ${p.setup.value.tool.noun}: go back to Check the probe.", fontSize = 12.sp, color = Amber)
         st?.isIdle != true -> Text("Waiting for the machine to be Idle (${st?.state}).", fontSize = 12.sp, color = Muted)
+        p.setup.value.startProblem(st?.wpos?.getOrNull(2)) != null ->
+            Text(p.setup.value.startProblem(st?.wpos?.getOrNull(2))!!, fontSize = 12.sp, color = Amber)
     }
 }
 
 /** A distance as typed: 20 rather than 20.0, 12.5 stays 12.5. */
 private fun mmText(v: Double) = if (v % 1.0 == 0.0) v.toLong().toString() else Fmt.trimmed4(v)
 
-private fun summary(s: ProbeSetup): String = when (s.kind) {
-    ProbeKind.TOP -> "straight down"
-    ProbeKind.HOLE -> listOfNotNull("X ${mmText(s.x)}".takeIf { s.doX }, "Y ${mmText(s.y)}".takeIf { s.doY }, "tip ${Fmt.fixed(s.tip, 3)} mm").joinToString(" · ")
+private fun summary(s: ProbeSetup): String = when {
+    !s.doSides -> "straight down"
+    s.kind == ProbeKind.HOLE -> listOfNotNull("X ${mmText(s.x)}".takeIf { s.doX }, "Y ${mmText(s.y)}".takeIf { s.doY }, "tip ${Fmt.fixed(s.tip, 3)} mm").joinToString(" · ")
     else -> listOfNotNull("X ${mmText(s.x)}".takeIf { s.doX }, "Y ${mmText(s.y)}".takeIf { s.doY },
-        "depth ${Fmt.fixed(s.depth, 3)}", "tip ${Fmt.fixed(s.tip, 3)} mm").joinToString(" · ")
+        if (s.doZ) "depth ${Fmt.fixed(s.depth, 3)}" else "depth ${Fmt.fixed(s.depth, 3)} below Z0", "tip ${Fmt.fixed(s.tip, 3)} mm").joinToString(" · ")
 }
 
 // ---- step 5: result --------------------------------------------------------------------------
@@ -724,9 +749,9 @@ private fun ResultView(vm: AppViewModel, r: ProbeResult, st: MachineStatus?, con
     } else {
         Label("From your current zero")
         Cells(listOfNotNull(
-            ((if (center) "Center X" else "Corner X") to r.zeroX).takeIf { s.kind != ProbeKind.TOP && s.doX },
-            ((if (center) "Center Y" else "Corner Y") to r.zeroY).takeIf { s.kind != ProbeKind.TOP && s.doY },
-            ("Top Z" to r.top).takeIf { s.kind.hasTop }))
+            ((if (center) "Center X" else if (s.doY) "Corner X" else "Edge X") to r.zeroX).takeIf { s.doX },
+            ((if (center) "Center Y" else if (s.doX) "Corner Y" else "Edge Y") to r.zeroY).takeIf { s.doY },
+            ("Top Z" to r.top).takeIf { s.doZ }))
     }
     if (center) {
         Label("Measured from the touches")
@@ -781,7 +806,7 @@ private fun ResultView(vm: AppViewModel, r: ProbeResult, st: MachineStatus?, con
 /** Beside a finished step: what it set (Makera / Top only) or that it was found (Measure only). */
 private fun doneNote(label: String, setMode: Boolean): String? {
     val s = com.z1pendant.probe.Steps
-    if (label == s.CORNER || label == s.CENTER) return null
+    if (label == s.CORNER || label == s.EDGE || label == s.CENTER) return null
     if (!setMode) return "found"
     return when (label) {
         s.TOP -> "Z0 set"
@@ -794,7 +819,7 @@ private fun whereText(r: ProbeResult): String {
     val s = r.setup; val z = r.zeroSet
     val xy = listOf('X', 'Y').filter { it in z }.joinToString(" ") { "${it}0" }
     val place = when (s.kind) {
-        ProbeKind.OUTSIDE, ProbeKind.INSIDE -> "at the ${s.corner.label} corner"
+        ProbeKind.OUTSIDE, ProbeKind.INSIDE -> if (s.doX && s.doY) "at the ${s.corner.label} corner" else "on the ${sideName(s)} side"
         ProbeKind.HOLE -> "at the center of the hole"
         ProbeKind.BLOCK -> "at the center of the block"
         ProbeKind.TOP -> ""
@@ -814,8 +839,10 @@ private fun InfoSheet(step: Int, tool: ProbeTool, onClose: () -> Unit) {
                 4 -> {
                     InfoItem(FieldArt.X, tool, "X and Y start offset", "You park the probe over the part. It moves out this far, goes down, then comes back in until it touches the edge. Make it more than the distance from where you parked to the edge, plus a few mm. For a hole it's how far it searches each way; for an inside corner, how far it moves into the pocket.")
                     InfoItem(FieldArt.DEPTH, tool, "Side depth", "How far below the top surface the ball goes before it touches the sides. Decimals are fine (1.5). Go deeper if the edge is rounded or chamfered.")
+                    InfoItem(FieldArt.DEPTH, tool, "Side depth with Z off", "With Z off it doesn't touch the top, so it measures the side depth from your current Z0 instead. Set Z on the top first (Top only); park the ball anywhere above it.")
                     InfoItem(FieldArt.TIP, tool, "Tip diameter", "The ball's size. It touches with the side of the ball, so half of this is added to find the real edge. Measure it with calipers if you can.")
-                    InfoText("Set work zero", "Makera's own probing routine (M480). It touches and writes the new work zero itself, exactly as Makera Studio does.")
+                    InfoText("Axes to probe", "Turn on only the axes you want. Each one that's on is touched and set; the others are left alone.")
+                    InfoText("Set work zero", "When the axes match one of Makera's routines (a corner with X, Y and Z, a hole, a block center with Z), it runs Makera's own routine (M480), exactly as Makera Studio does. Anything else, the pendant makes the touches itself and writes only the axes that are on.")
                     InfoText("Measure only", "The pendant makes the same touches itself and doesn't change anything. The next screen shows what it found, and you can set any of the axes as work zero from there.")
                 }
                 else -> {

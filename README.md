@@ -74,6 +74,10 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
     then follows how fast the machine is really going and your feed override. Times read like
     **13m 22s**, or **1h 05m** past an hour.
   - When the job ends, feed and spindle overrides go back to 100 % so they don't carry into the next job.
+  - **Temperatures**: a graph of the spindle (blue) and the electronics box (violet) since the job
+    started, each with the Z1's own limit (dashed / dotted) and the tool numbers along the bottom where
+    each tool started, so you can see what each tool did to the heat. Within 5 °C of a limit, the line
+    pulses, a banner says the Z1 will stop the job there, and the phone buzzes once.
 - **Cancel job**: during a job the red button reads **Cancel job**. It sends the same halt as Makera
   Studio's Stop (it doesn't reset the machine), clears the alarm that follows, and takes you back to the
   main screen.
@@ -83,6 +87,10 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 - **Alarms**: if the machine goes into Alarm (e-stop, probe fail, soft limit…), a sheet says why and has
   **Clear alarm**. Tap the red Alarm status to open it again; the drawer shows the same strip. If a job
   was left open (after an e-stop), clearing the alarm ends it.
+  - **Spindle overheated**: the sheet shows the job's temperature graph with the halt and the cooling
+    since. Clear alarm waits until the spindle is back under the limit (above it, the Z1 would stop again).
+  - **Spindle driver fault** (the driver board's own fault line, not the temperature): the sheet shows
+    the temperatures and spindle speed just before it, and says the Z1 needs a power off/on.
 - **Tablets** (iPad, Android tablets): a bigger readout, and the dial / jog pad resize around your
   hotkeys. Turn the tablet sideways for a side-by-side layout with everything on screen at once:
   readout, hotkeys and the stop buttons on the left, steps and a big dial or jog pad on the right.
@@ -100,7 +108,12 @@ tap a jog pad, run your own hotkeys, and see live positions, all over Wi-Fi with
 - Works alongside Makera Studio: both can be connected at the same time.
 - **Probing**: outside corner, inside corner, hole center, block center (round or square) and Top only,
   with the 3D probe, the probe rod (metal parts) or the laser probe (Top only).
-  - **Set work zero** runs Makera's own probing routine (`M480`), the same one Makera Studio uses.
+  - **Axes to probe**: X, Y and Z are toggles; only the axes that are on are touched and set (a hole
+    has no Z). With Z off it doesn't touch the top: it takes your current Z0 as the top and touches
+    the sides that far below it, so set Z first (Top only does that). It won't start below Z0.
+  - **Set work zero** runs Makera's own probing routine (`M480`), the same one Makera Studio uses,
+    when the axes match one of Makera's (a corner with X, Y and Z, a hole, a block center with Z).
+    Anything else, the pendant makes the touches itself and writes only the axes that are on.
     **Measure only** makes the same touches itself, changes nothing, and shows what it found; then
     set any of the axes as work zero, or leave it. Set work zero has an undo for X and Y.
   - Every time you open probing, the probe is calibrated on the tool setter first. It has to trigger
@@ -313,7 +326,7 @@ went quiet, the app drops the connection at once instead, so that command can't 
      the one you picked; **Use the … instead** appears only if the probe that's in can do what you
      picked (all three can do Top only).
 3. **Move the probe into place** with the dial or jog pad. The hint says where to park it.
-4. **Settings**: start offsets (how far it moves out from where it's parked), side depth and tip
+4. **Settings**: start offsets (how far it moves out from where it's parked), side depth (below Z0 with Z off) and tip
    diameter, then **Set work zero** or **Measure only**. It asks once before it moves.
 5. **Probing**: the touches as they happen. **Stop** halts the machine at once (then Unlock).
    **Result**: the new zero, or what was measured. **Probe again** keeps the calibration; a run

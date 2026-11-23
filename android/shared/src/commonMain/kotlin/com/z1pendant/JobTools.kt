@@ -66,7 +66,8 @@ object JobFileParser {
             changes += ToolChange(t, n)
             current = t
         }
-        return JobTools(changes, desc, n.toInt(), runCatching { JobTimeEstimator.estimate(text) }.getOrNull())
+        // A file ending in a newline has no line after it (the split's last, empty piece isn't one).
+        return JobTools(changes, desc, (if (text.endsWith('\n')) n - 1 else n).toInt(), runCatching { JobTimeEstimator.estimate(text) }.getOrNull())
     }
 
     /** "Spiral O Metal 3.175*12mm  Makera    D=3.175 SD=… - ZMIN=-5.45 - flat end mill" → "Spiral O Metal 3.175*12mm Makera · flat end mill". */

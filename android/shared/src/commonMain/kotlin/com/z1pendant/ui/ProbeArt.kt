@@ -20,11 +20,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.z1pendant.probe.Corner
 import com.z1pendant.probe.ProbeKind
 import com.z1pendant.probe.ProbeTool
+import com.z1pendant.probe.finishLabel
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -214,9 +216,59 @@ private fun DrawScope.arrowHeads(x1: Float, y1: Float, x2: Float, y2: Float, c: 
 
 enum class FieldArt { X, Y, DEPTH, TIP }
 
-/** The little drawing on each B2 field (outside corner, front-left; top view for X/Y, side view for depth/tip). */
+/**
+ * The X / Y field picture for an inside corner, hole or block center, drawn for X in a 60 × 40 box
+ * (top view); Y is the same turned a quarter so the move points toward the front. Outside corner
+ * has its own (below).
+ *  - Inside corner: parked on the part beside the pocket, it moves this far into the pocket.
+ *  - Hole: from the middle, it searches this far out to each wall.
+ *  - Block: from over the middle, it steps this far out past each side.
+ */
+private fun DrawScope.offsetArt(kind: ProbeKind, isY: Boolean) {
+    val box = if (isY) Offset(40f, 60f) else Offset(60f, 40f)
+    fit(0f, 0f, box.x, box.y) {
+        val draw: DrawScope.() -> Unit = {
+            when (kind) {
+                ProbeKind.INSIDE -> {
+                    drawRoundRect(FILL, Offset(0f, 2f), Size(60f, 36f), CornerRadius(1.5f))
+                    drawRect(DARK, Offset(20f, 2f), Size(40f, 26f)); drawRect(ST, Offset(20f, 2f), Size(40f, 26f), style = Stroke(1.2f))
+                    drawLine(BL, Offset(10f, 15f), Offset(32f, 15f), 1.5f, pathEffect = dash)
+                    drawCircle(BL, 3.6f, Offset(34f, 15f), style = Stroke(1.2f, pathEffect = dot))
+                    probeTop(10f, 15f)
+                }
+                ProbeKind.HOLE -> {
+                    drawRoundRect(FILL, Offset(0f, 2f), Size(60f, 36f), CornerRadius(1.5f))
+                    drawCircle(DARK, 16f, Offset(30f, 20f)); drawCircle(ST, 16f, Offset(30f, 20f), style = Stroke(1.2f))
+                    drawLine(BL, Offset(16f, 20f), Offset(44f, 20f), 1.5f, pathEffect = dash)
+                    arrowHeads(16f, 20f, 44f, 20f, BL, true)
+                    probeTop(30f, 20f)
+                }
+                else -> {                                                   // block
+                    drawRoundRect(FILL, Offset(19f, 9f), Size(22f, 22f), CornerRadius(1f)); drawRoundRect(ST, Offset(19f, 9f), Size(22f, 22f), CornerRadius(1f), style = Stroke(1.2f))
+                    drawLine(BL, Offset(8f, 20f), Offset(52f, 20f), 1.5f, pathEffect = dash)
+                    drawCircle(BL, 3.6f, Offset(6f, 20f), style = Stroke(1.2f, pathEffect = dot))
+                    drawCircle(BL, 3.6f, Offset(54f, 20f), style = Stroke(1.2f, pathEffect = dot))
+                    probeTop(30f, 20f)
+                }
+            }
+        }
+        // Y: turned a quarter counter-clockwise about (30, 30), which maps the 60 × 40 X box onto 40 × 60.
+        if (isY) rotate(-90f, pivot = Offset(30f, 30f)) { draw() } else draw()
+    }
+}
+
+/** The little drawing on each B2 field (top view for X/Y, drawn for [kind]; side view for depth/tip). */
 @Composable
-fun FieldArtImage(which: FieldArt, modifier: Modifier, tool: ProbeTool = ProbeTool.PROBE_3D) = Canvas(modifier) {
+fun FieldArtImage(which: FieldArt, modifier: Modifier, tool: ProbeTool = ProbeTool.PROBE_3D, kind: ProbeKind = ProbeKind.OUTSIDE) = Canvas(modifier) {
+    when {
+        (which == FieldArt.X || which == FieldArt.Y) && kind != ProbeKind.OUTSIDE && kind != ProbeKind.TOP ->
+            offsetArt(kind, which == FieldArt.Y)
+        else -> fieldArt(which, tool)
+    }
+}
+
+/** Outside corner (front-left) for X / Y, and the side views for depth and tip. */
+private fun DrawScope.fieldArt(which: FieldArt, tool: ProbeTool) {
     when (which) {
         FieldArt.X -> fit(0f, 3f, 60f, 37f) {
             drawRoundRect(FILL, Offset(26f, 4f), Size(32f, 34f), CornerRadius(1f)); drawRoundRect(ST, Offset(26f, 4f), Size(32f, 34f), CornerRadius(1f), style = Stroke(1.2f))
@@ -350,6 +402,8 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
         if (isNow(label)) ball(at)
     }
     fun DrawScope.topMark(at: Offset) = touch(col(S.TOP), at, isNow(S.TOP))
+    /** Where it ends up (corner, edge or center); nothing when only the top is touched. */
+    fun DrawScope.finish(at: Offset) { setup.finishLabel()?.let { target(at, it) } }
     /** A two-sided step: [first] side, then [second]; the first is ticked once the ball has moved on. */
     fun DrawScope.twoSides(label: String, first: Offset, second: Offset, firstEdge: Offset, secondEdge: Offset) {
         val c = col(label); val now = isNow(label); val onSecond = now && stepTouch >= 2
@@ -370,21 +424,21 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
                     drawRoundRect(ST, Offset(44f, 12f), Size(70f, 56f), CornerRadius(1.5f), style = Stroke(0.8f))
                     val s = Offset(58f, 54f); start(s)
                     val xc = col(S.X_SIDE); val yc = col(S.Y_SIDE)
-                    path(xc, listOf(s, Offset(16f, 54f), Offset(41.2f, 54f))); touch(xc, Offset(41.2f, 54f), isNow(S.X_SIDE), Offset(44f, 54f))
-                    path(yc, listOf(s, Offset(58f, 88f), Offset(58f, 70.8f))); touch(yc, Offset(58f, 70.8f), isNow(S.Y_SIDE), Offset(58f, 68f))
-                    topMark(s)
-                    target(Offset(44f, 68f), S.CORNER)
+                    if (setup.doX) { path(xc, listOf(s, Offset(16f, 54f), Offset(41.2f, 54f))); touch(xc, Offset(41.2f, 54f), isNow(S.X_SIDE), Offset(44f, 54f)) }
+                    if (setup.doY) { path(yc, listOf(s, Offset(58f, 88f), Offset(58f, 70.8f))); touch(yc, Offset(58f, 70.8f), isNow(S.Y_SIDE), Offset(58f, 68f)) }
+                    if (setup.doZ) topMark(s)
+                    finish(Offset(if (setup.doX) 44f else 58f, if (setup.doY) 68f else 54f))
                 }
                 ProbeKind.INSIDE -> {
                     drawRoundRect(FILL, Offset(4f, 4f), Size(112f, 87f), CornerRadius(2f))
                     drawRect(DARK, Offset(40f, 8f), Size(72f, 52f)); drawRect(ST, Offset(40f, 8f), Size(72f, 52f), style = Stroke(0.8f))
                     val s = Offset(30f, 70f); start(s); val p = Offset(54f, 46f)
                     val xc = col(S.X_WALL); val yc = col(S.Y_WALL)
-                    drawLine(xc, s, p, 0.9f, pathEffect = dashed)
-                    path(xc, listOf(p, Offset(42.8f, 46f))); touch(xc, Offset(42.8f, 46f), isNow(S.X_WALL), Offset(40f, 46f))
-                    path(yc, listOf(p, Offset(54f, 57.2f))); touch(yc, Offset(54f, 57.2f), isNow(S.Y_WALL), Offset(54f, 60f))
-                    topMark(s)
-                    target(Offset(40f, 60f), S.CORNER)
+                    drawLine(if (setup.doX) xc else yc, s, p, 0.9f, pathEffect = dashed)
+                    if (setup.doX) { path(xc, listOf(p, Offset(42.8f, 46f))); touch(xc, Offset(42.8f, 46f), isNow(S.X_WALL), Offset(40f, 46f)) }
+                    if (setup.doY) { path(yc, listOf(p, Offset(54f, 57.2f))); touch(yc, Offset(54f, 57.2f), isNow(S.Y_WALL), Offset(54f, 60f)) }
+                    if (setup.doZ) topMark(s)
+                    finish(Offset(if (setup.doX) 40f else 54f, if (setup.doY) 60f else 46f))
                 }
                 ProbeKind.HOLE -> {
                     drawRoundRect(FILL, Offset(4f, 4f), Size(112f, 87f), CornerRadius(2f))
@@ -398,7 +452,7 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
                         val back = Offset(60f, 20.3f); val front = Offset(60f, 74.7f)
                         drawLine(yc, back, front, 0.9f); twoSides(S.Y_WALLS, first = front, second = back, firstEdge = Offset(60f, 77.5f), secondEdge = Offset(60f, 17.5f))
                     }
-                    target(cc, S.CENTER)
+                    finish(cc)
                 }
                 ProbeKind.BLOCK -> {
                     drawRoundRect(FILL, Offset(34f, 21.5f), Size(52f, 52f), CornerRadius(1.5f))
@@ -413,8 +467,8 @@ fun ProbeRunArt(setup: com.z1pendant.probe.ProbeSetup, labels: List<String>, ind
                         drawLine(yc, Offset(60f, 2f), Offset(60f, 18.7f), 0.9f); drawLine(yc, Offset(60f, 93f), Offset(60f, 76.3f), 0.9f)
                         twoSides(S.Y_SIDES, first = Offset(60f, 76.3f), second = Offset(60f, 18.7f), firstEdge = Offset(60f, 73.5f), secondEdge = Offset(60f, 21.5f))      // front, then back
                     }
-                    topMark(cc)
-                    target(cc, S.CENTER)
+                    if (setup.doZ) topMark(cc)
+                    finish(cc)
                 }
                 ProbeKind.TOP -> {                                     // side view
                     drawRoundRect(FILL, Offset(20f, 52f), Size(80f, 34f), CornerRadius(1.5f))
