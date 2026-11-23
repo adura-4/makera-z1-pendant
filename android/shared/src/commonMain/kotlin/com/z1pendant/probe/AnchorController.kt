@@ -47,6 +47,23 @@ private const val PARK_TOLERANCE = 0.5
 
 /** Set once any calibration has completed; picks the tighter first-run Pre-position Z threshold. */
 private const val CALIBRATED_KEY = "anchor.calibrated"
+/**
+ * Dwell after the descent and before M480.8, to stop the machine occasionally making a full Z
+ * retraction in the middle of probing.
+ *
+ * Makera's inside-corner script is built when the line is parsed (`ATCHandler.cpp:713`, called
+ * from the gcode handler) and bakes in the machine Z it reads at that moment as the height it
+ * returns to between the top face and the wall touches. Waiting for an Idle status is not enough:
+ * the status can arrive while the descent is still settling, and the script then captures the
+ * height from before the descent and lifts all the way back up to it. Seen intermittently on a
+ * real Z1, and gone with the dwell in place.
+ *
+ * It is a G4 the machine runs in its own motion queue, not a pause on the phone: a host-side wait
+ * is not ordered against the firmware's parse, and had no effect at all. Sent as G4 S, never P:
+ * P is decimal seconds in grbl mode but milliseconds in reprap mode (`Robot.cpp:541`), while S is
+ * seconds in both.
+ */
+const val SETTLE_S = 1
 
 enum class AnchorStep { HOME, PROBE, READ, MOVE, PROBING, RESTORE }
 
@@ -96,6 +113,8 @@ class AnchorController(
     private val setJogEnabled: (Boolean) -> Unit = {},
     /** The machine's X/Y travel as x0, x1, y0, y1. The one seam for reading it from the machine later. */
     private val travel: () -> List<Double> = { listOf(BED_X0, BED_X1, BED_Y0, BED_Y1) },
+    /** Settle before the probe, in seconds; zero in tests, which have no machine to ring. */
+    private val settleS: Int = SETTLE_S,
 ) {
     val setup = MutableStateFlow(loadSetup())
     val state = MutableStateFlow<AnchorState>(AnchorState.Idle)
@@ -303,6 +322,7 @@ class AnchorController(
             traverseTo(target.first, target.second)
             // Absolute, derived from the live homed Z.
             val st = sendConfirmed("G90 G53 G0 Z${f3(approach)}", "lowering to the bracket")
+            if (settleS > 0) sendConfirmed("G4 S$settleS", "settling")
             done += AnchorStep.MOVE
 
             // 5 — Makera's own inside-corner probe.

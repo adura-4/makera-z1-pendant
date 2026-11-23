@@ -328,6 +328,12 @@ default, `showOnMain = false`) does it in one press: `ui/AnchorWizard.kt`, state
 - The tool change is the firmware's own script: it rises `G53 G0 Z-3.000`, drives to the setter at
   `G53 G0 X-9.805 Y-12.981`, touches `G38.6 F500` then `F100 P1`, parks `G53 G0 Z-20.000`,
   "Done ATC". Nothing here sends those lines (real Z1, 2026-11-23).
+- A `G4 S1` dwell sits between the descent and `M480.8`. The script is built when the line is
+  parsed, so it bakes in the Z it reads then; a status can say Idle while the descent is still
+  settling, and it would capture the pre-descent height and retract all the way back to it mid
+  probe (seen intermittently on a real Z1). It has to be a dwell the machine queues: a wait in the
+  app is not ordered against the firmware's parse and changed nothing. `G4 S`, not `P`: `P` is
+  seconds in grbl mode and milliseconds in reprap mode (`Robot.cpp:541`).
 - The firmware does the probing too. `fill_InCorner_scripts` (`ATCHandler.cpp:713`): `G38.2 Z` slow,
   `G10 L20 P0 Z0`, lift `G91 G0 Z<probe_retract_mm>`, `G38.2 Z` again, then `G53 G0 Z<start>` (a full
   retract), across `G91 G0 X... Y...`, down `G90 G0 Z<-Z_distance>`, and `G38.2 X` / `Y` twice each

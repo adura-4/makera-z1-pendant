@@ -283,6 +283,16 @@ class AnchorControllerTest {
         assertEquals(-193.971, link.cfg[ANCHOR_Y_KEY]!!, 1e-9)
     }
 
+    @Test fun theMachineDwellsAfterTheDescentAndBeforeTheProbe() = runBlocking {
+        // A G4 the machine runs in its own queue, not a pause on the phone: M480.8 reads the
+        // machine Z when it is parsed, and a rapid stop is still settling when Idle first appears.
+        runToEnd()
+        val dwell = link.lines.indexOfFirst { it.startsWith("G4 S") }
+        val probe = link.lines.indexOfFirst { it.startsWith("M480.") }
+        assertTrue("a dwell must be sent: ${link.lines}", dwell >= 0)
+        assertTrue("the dwell must come before the probe: ${link.lines}", dwell < probe)
+    }
+
     @Test fun stopsWhenTheTopTouchIsTooLow() = runBlocking {
         // The check accepts down to -73.500 (approach -66.5, nominal drop 5, allowance 2); this is well past it.
         link.topTouchZ = -78.0
