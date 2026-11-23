@@ -49,6 +49,7 @@ fun App(vm: AppViewModel) {
     var console by remember { mutableStateOf(false) }
     var files by remember { mutableStateOf(false) }
     var probing by remember { mutableStateOf(false) }
+    val anchorOpen by vm.anchorOpen.collectAsState()
     /** The probe wizard was opened from the Run flow's Custom origin: it goes back there. */
     var probeFromRun by remember { mutableStateOf(false) }
     val runActive by vm.run.active.collectAsState()
@@ -74,7 +75,7 @@ fun App(vm: AppViewModel) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         // Full-screen pages live in the activity window (not Dialogs) so dispatchKeyEvent sees
         // every button press, which the "press any button to bind" flow relies on.
-        vm.onMainScreen = !(editorOpen || settings || console || probing || files || runActive || runPick)
+        vm.onMainScreen = !(editorOpen || settings || console || probing || anchorOpen || files || runActive || runPick)
         // Windows 600 dp or wider (iPad, Android tablet) get the wide layout; see LocalWide.
         androidx.compose.runtime.CompositionLocalProvider(LocalWide provides (maxWidth >= 600.dp),
             LocalLandscape provides (maxWidth >= 840.dp && maxWidth > maxHeight)) {
@@ -86,6 +87,7 @@ fun App(vm: AppViewModel) {
                     probing = false
                     if (probeFromRun) { probeFromRun = false; vm.run.probeReturned(zeroSet) }
                 }
+                anchorOpen -> AnchorWizard(vm, startAtSetup = vm.anchorSetupFirst.value) { vm.anchorOpen.value = false }
                 runActive -> RunScreen(vm, onProbe = { probeFromRun = true; probing = true })
                 files || runPick -> FilesScreen(vm, pickForRun = runPick && !files,
                     onRun = { p -> files = false; vm.runPick.value = false; vm.run.open(p) }) { files = false; vm.runPick.value = false }

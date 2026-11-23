@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -253,7 +252,12 @@ fun MainScreen(vm: AppViewModel, onSettings: () -> Unit, onConsole: () -> Unit, 
             HotkeyGrid(shown, cols = cols, arranging = editMode,
                 toggleOf = { if (isSpindle(it)) (if (connected) vm.spindleRunning(st) else null) else toggleState(it, outputs, connected) },
                 liveOf = { if (isSpindle(it) && connected && vm.spindleRunning(st)) Fmt.thousands((st?.spindleRpm ?: 0.0).roundToInt()) else null },
-                onTap = { h -> if (editMode) onEdit(h) else vm.requestRun(h) },
+                onTap = { h ->
+                    when {
+                        editMode -> onEdit(h)
+                        else -> vm.requestRun(h)
+                    }
+                },
                 onLong = { h -> vm.haptics.majorTick(); onEdit(h) },
                 onMove = { id, to -> vm.moveInArrangement(id, to) },
                 onLift = { vm.haptics.majorTick() })

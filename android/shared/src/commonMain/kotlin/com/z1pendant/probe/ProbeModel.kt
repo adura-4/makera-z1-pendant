@@ -247,7 +247,7 @@ interface ProbeIo {
     fun step(text: String) {}
 }
 
-class ProbeStop(message: String) : Exception(message)
+class ProbeStop(message: String, val wrongProbe: Boolean = false) : Exception(message)
 
 /** Probe feeds and distances, as Makera's routines use them (Z1 config: atc.probe.*). */
 object ProbeFeeds {

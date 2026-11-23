@@ -1,4 +1,15 @@
-"""Makera Z1 simulator: speaks the stock wire protocol so the pendant app can be tested with the
+"""Changelog
+=========
+
+23/11/2026 04:16:26 AM
+- Config store is mutable; config-set sd <key> <value> replies "has been set to"
+- config-get returns the stored value (anchor1_x/_y), so a set round-trips
+
+23/11/2026 04:31:19 AM
+- config-set no longer replies with a trailing "ok": the real firmware does not send one
+- Noted on the config-get branch that its trailing "ok" is a deliberate divergence
+
+Makera Z1 simulator: speaks the stock wire protocol so the pendant app can be tested with the
 machine off. Not a faithful Smoothieware: just enough G-code for jogging, zeroing and macros.
 
   python z1sim.py [--name Makera_Z1P_SIM] [--port 2222] [--latency-ms 0] [--no-broadcast]
@@ -33,6 +44,9 @@ from collections import deque
 
 import z1proto as P
 from z1sim_probe import ProbeSim
+
+LAST_MODIFIED = "23/11/2026 04:31:19 AM"
+PREVIOUS_MODIFIED = "23/11/2026 04:16:26 AM"
 
 AXES = "XYZA"
 MAX_RATE = {"X": 3000.0, "Y": 3000.0, "Z": 1000.0, "A": 1800.0}   # mm/min (deg/min for A)
@@ -95,6 +109,7 @@ class Machine(ProbeSim):
         self.spindle_max = 75.0
         self.temp_at = time.monotonic()
         self.halt_code = None
+        self.config = {"coordinate.anchor1_x": "-190.69", "coordinate.anchor1_y": "-194.58"}   # config-get / config-set sd
 
     # --- G-code -------------------------------------------------------------------------
     def line(self, text: str) -> list[str]:
@@ -106,9 +121,15 @@ class Machine(ProbeSim):
                 return self.play(text.strip()[4:].strip())
             if t.startswith("CONFIG-GET"):
                 key = text.split()[-1]
-                v = {"coordinate.anchor1_x": "-190.69", "coordinate.anchor1_y": "-194.58",
-                     "wifi.machine_name": self.name, "temperature_control.spindle.max_temp": f"{self.spindle_max:.1f}"}.get(key)
+                v = {"wifi.machine_name": self.name,
+                     "temperature_control.spindle.max_temp": f"{self.spindle_max:.1f}",
+                     **self.config}.get(key)
+                # The trailing ok is NOT sent by the real firmware: the sim is deliberately more permissive.
                 return [f"sd: {key} is set to {v}\r\n" if v else f"sd: {key} is not in config\r\n", "ok\r\n"]
+            if t.startswith("CONFIG-SET"):
+                _, _, key, value = text.strip().split(maxsplit=3)
+                self.config[key] = value
+                return [f"sd: {key} has been set to {value}\r\n"]
             if t.startswith("BUFFER"):
                 self.buffered = text.strip()[6:].strip()
                 return [f"Command buffered: {self.buffered}\n\r\n", "ok\r\n"]

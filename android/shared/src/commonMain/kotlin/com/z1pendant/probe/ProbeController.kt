@@ -284,7 +284,7 @@ class ProbeController(
 
     // ---- runs ---------------------------------------------------------------------------------
     /** Machine − work, per axis: the active work offset including the tool length offset on Z. */
-    private fun offsets(st: MachineStatus) = st.mpos.indices.map { st.mpos[it] - (st.wpos.getOrNull(it) ?: 0.0) }
+    internal fun offsets(st: MachineStatus) = st.mpos.indices.map { st.mpos[it] - (st.wpos.getOrNull(it) ?: 0.0) }
 
     fun start() {
         if (runJob?.isActive == true) return
@@ -326,35 +326,15 @@ class ProbeController(
         val cmd = s.makeraCommand()!!
         val labels = s.stepLabels()
         var idx = 0
-        val touches = mutableListOf<Touch>()
+        var seen = 0
         fun show(i: Int) {
             idx = maxOf(idx, i)
-            run.value = RunState.Running(labels[idx], idx, labels, true, s.touchesInStep(idx, touches.size))
+            run.value = RunState.Running(labels[idx], idx, labels, true, s.touchesInStep(idx, seen))
         }
         show(0)
-        onSend(); link.sendLine(cmd)
-        val t0 = nowMs()
-        var moved = false
-        while (true) {
-            val line = withTimeoutOrNull(250) { runLines.receive() }
-            val st = link.status.value
-            if (link.conn.value != ConnState.Connected) throw ProbeStop("The link to the machine dropped.")
-            if (st != null && !st.isIdle) moved = true
-            if (line != null) {
-                parsePrb(line)?.let { (t, ok) ->
-                    if (!ok) throw ProbeStop("The probe didn't touch anything.")
-                    touches += t; show(s.stepAfterTouches(touches.size))
-                }
-                stepFromEcho(line)?.let { l -> labels.indexOf(l).takeIf { it >= 0 }?.let { show(it) } }
-                if (line.startsWith("Done ATC")) break
-                if (line.startsWith("Abort")) throw ProbeStop("Probing was aborted.")
-                if (isStop(line)) throw ProbeStop(friendly(line))
-            }
-            if (st?.isAlarm == true) throw ProbeStop("The machine stopped (Alarm).")
-            // Makera's routine silently does nothing when the machine isn't homed.
-            if (!moved && touches.isEmpty() && nowMs() - t0 > 4000)
-                throw ProbeStop("Nothing happened. Makera's routine needs the machine homed.")
-        }
+        val touches = runMakeraCommand(cmd, runLines, link, onSend,
+            onTouch = { seen++; show(s.stepAfterTouches(seen)) },
+            onEcho = { line -> stepFromEcho(line)?.let { l -> labels.indexOf(l).takeIf { it >= 0 }?.let { show(it) } } })
         val after = freshOffsets()
         // The axes Makera's routine writes (even when the new zero lands where the old one was).
         val changed = buildSet {

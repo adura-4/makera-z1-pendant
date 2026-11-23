@@ -36,6 +36,8 @@ enum class BuiltIn(val label: String) {
     SPINDLE_TOGGLE("Spindle on/off"),
     /** Opens Files to pick a job to run (the Run flow). */
     RUN_JOB("Run a job"),
+    /** Opens the anchor 1 calibration screen; never moves the machine by itself. */
+    CAL_ANCHOR("Calibrate anchor 1"),
 }
 
 sealed class Step {
@@ -142,9 +144,18 @@ data class Hotkey(
             Hotkey(label = "Vacuum", icon = "mi:Air", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.VACUUM_TOGGLE)), onlyIdle = false),
             Hotkey(label = "Spindle", icon = "mi:Cyclone", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.SPINDLE_TOGGLE)), onlyIdle = false),
             Hotkey(label = "Next axis", icon = "mi:SwapHoriz", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.NEXT_AXIS)), onlyIdle = false, showOnMain = false),
+            Hotkey(label = "Cal Anchor", icon = "mi:CalAnchor", kind = Kind.BUILTIN, steps = listOf(Step.Builtin(BuiltIn.CAL_ANCHOR)), showOnMain = false),
         )
+
+        /** [l] with the Cal Anchor tile appended if it has none; the tile is found by its step, not its position. */
+        fun withCalAnchor(l: List<Hotkey>, defaults: List<Hotkey> = defaults()): List<Hotkey> =
+            if (l.any(::isCalAnchor)) l else l + defaults.first(::isCalAnchor)
     }
 }
+
+/** The one Cal Anchor test: a tap on it opens the wizard, so both the UI and the injection use this. */
+fun isCalAnchor(h: Hotkey) = h.steps.size == 1 &&
+    (h.steps[0] as? Step.Builtin)?.action == BuiltIn.CAL_ANCHOR
 
 /**
  * hotkeys.json / exported hotkey files: `{"format": "z1pendant-hotkeys", "version": 1, "hotkeys": [...]}`,

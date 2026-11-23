@@ -376,8 +376,26 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
         onSend = { ownMotion.sent(nowMs()) },
         setJogEnabled = { on -> jog.enabled = on; if (!on) jog.cancelPending() })
 
+    /** One config reader/writer (and anchor cache) shared by the Run flow and anchor calibration. */
+    val machineConfig = com.z1pendant.link.MachineConfig(link, viewModelScope)
+
+    /** Calibrating anchor 1: shares the probe controller for the tool change and the config reader/writer. */
+    val anchor = com.z1pendant.probe.AnchorController(link, probe, machineConfig, viewModelScope, prefs,
+        onSend = { ownMotion.sent(nowMs()) },
+        setJogEnabled = { on -> jog.enabled = on; if (!on) jog.cancelPending() })
+    /** The anchor calibration screen is open. */
+    val anchorOpen = MutableStateFlow(false)
+    /** The screen opens on the settings page rather than the per-run page. */
+    val anchorSetupFirst = MutableStateFlow(false)
+
+    /** Opens the screen; an unconfigured machine always lands on the settings, never a run. */
+    fun openAnchor(settings: Boolean) {
+        anchorSetupFirst.value = settings || !anchor.isConfigured()
+        anchorOpen.value = true
+    }
+
     /** Running a job: origin, laser probe checks, assist modes, start (the Run flow). */
-    val run = com.z1pendant.run.RunController(link, viewModelScope, prefs, probe,
+    val run = com.z1pendant.run.RunController(link, viewModelScope, prefs, probe, machineConfig,
         onSend = { ownMotion.sent(nowMs()) }, log = { log(it) })
     /** Files is open to pick a job to run (the Run tile). */
     val runPick = MutableStateFlow(false)
@@ -753,6 +771,7 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
             BuiltIn.VACUUM_TOGGLE -> toggleOutput("vacuum") { d.vacuum(it) }
             BuiltIn.SPINDLE_TOGGLE -> spindleToggle()
             BuiltIn.RUN_JOB -> { runPick.value = true; null }
+            BuiltIn.CAL_ANCHOR -> { openAnchor(settings = false); null }
         }
     }
 
@@ -765,9 +784,18 @@ class AppViewModel(private val platform: Platform) : ViewModel() {
     }
 
     // ---- hotkeys ------------------------------------------------------------------------------
-    private fun loadHotkeys(): List<Hotkey> = shownFirst(addRunTile(try {
+    private fun loadHotkeys(): List<Hotkey> = shownFirst(addCalAnchorTile(addRunTile(try {
         if (hotkeyFile.exists()) migrate(HotkeyJson.import(hotkeyFile.readText())) else Hotkey.defaults()
-    } catch (_: Exception) { Hotkey.defaults() }))
+    } catch (_: Exception) { Hotkey.defaults() })))
+
+    /** Cal Anchor arrived after people had their own hotkeys: add it once, hidden, last. */
+    private fun addCalAnchorTile(l: List<Hotkey>): List<Hotkey> {
+        if (prefs.getBoolean("calAnchorTileAdded", false)) return l
+        prefs.edit { putBoolean("calAnchorTileAdded", true) }
+        val out = Hotkey.withCalAnchor(l)
+        if (out != l && hotkeyFile.exists()) hotkeyFile.writeText(HotkeyJson.export(out))
+        return out
+    }
 
     /** The Run tile arrived after people had their own hotkeys: add it once, first in the grid. */
     private fun addRunTile(l: List<Hotkey>): List<Hotkey> {

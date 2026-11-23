@@ -1,6 +1,7 @@
 package com.z1pendant.run
 
 import com.z1pendant.link.ConnState
+import com.z1pendant.link.MachineConfig
 import com.z1pendant.link.MachineLink
 import com.z1pendant.link.MachineStatus
 import com.z1pendant.platform.PLog
@@ -33,6 +34,7 @@ class RunController(
     private val scope: CoroutineScope,
     private val prefs: Prefs,
     private val probe: ProbeController,
+    private val config: MachineConfig,
     /** Something that may move the machine was sent (own-motion tracking). */
     private val onSend: () -> Unit = {},
     private val log: (String) -> Unit = {},
@@ -79,7 +81,7 @@ class RunController(
     val load = MutableStateFlow<Load>(Load.Loading(0, 0))
     val camOffset = MutableStateFlow<CamOffset?>(null)
     /** Anchor 1 in machine coordinates, read from the machine's config (`coordinate.anchor1_x/y`). */
-    val anchor = MutableStateFlow<Pair<Double, Double>?>(null)
+    val anchor: kotlinx.coroutines.flow.StateFlow<Pair<Double, Double>?> get() = config.anchorFlow
     /** The setup whose origin was last sent (null = none sent this run). */
     val applied = MutableStateFlow<RunSetup?>(null)
     /** The 3D probe wizard ran from here. */
@@ -110,7 +112,7 @@ class RunController(
                 if (laser.value.phase == LaserPhase.OK && st?.tool != null && st.tool != 0) laser.value = Laser(LaserPhase.NONE)
             }
         }
-        scope.launch { link.conn.collect { if (it != ConnState.Connected) { anchor.value = null; if (laser.value.phase == LaserPhase.OK) laser.value = Laser(LaserPhase.NONE) } } }
+        scope.launch { link.conn.collect { if (it != ConnState.Connected) { if (laser.value.phase == LaserPhase.OK) laser.value = Laser(LaserPhase.NONE) } } }
     }
 
     // ---- open / close ---------------------------------------------------------------------------
@@ -141,7 +143,7 @@ class RunController(
             load.value = Load.Ready(ext, Toolpath.cutsBeforeToolChange(text), tools?.time, tools)
             PLog.i("run", "$file: extents $ext")
         }
-        scope.launch { readAnchor(); readConfig("zprobe.max_z")?.let { probeMaxZ = it } }
+        scope.launch { readAnchor(); config.get("zprobe.max_z")?.let { probeMaxZ = it } }
     }
 
     /** Settings: the deepest a leveling touch may go below the stock top, mm. */
@@ -176,23 +178,10 @@ class RunController(
 
     // ---- origin ---------------------------------------------------------------------------------
     /** Anchor 1 from the machine's config: "sd: coordinate.anchor1_x is set to -190.69". */
-    private suspend fun readAnchor(): Pair<Double, Double>? {
-        anchor.value?.let { return it }
-        if (link.conn.value != ConnState.Connected) return null
-        val x = readConfig("coordinate.anchor1_x") ?: return null
-        val y = readConfig("coordinate.anchor1_y") ?: return null
-        return (x to y).also { anchor.value = it }
-    }
-
-    private val configWait = HashMap<String, CompletableDeferred<Double>>()
+    private suspend fun readAnchor(): Pair<Double, Double>? = config.anchor()
 
     /** A number from the SD config (`config-get sd <key>`), or null if it isn't there (4 s timeout). */
-    suspend fun readConfig(key: String): Double? {
-        val d = CompletableDeferred<Double>()
-        configWait[key] = d                 // main thread only, like onMessage
-        link.sendLine("config-get sd $key")
-        return withTimeoutOrNull(4000) { d.await() }.also { configWait.remove(key) }
-    }
+    suspend fun readConfig(key: String): Double? = config.get(key)
 
     /** Where the work zero will be, in machine X/Y, for the map. */
     fun plannedOrigin(st: MachineStatus?): Pair<Double, Double>? {
@@ -377,12 +366,7 @@ class RunController(
     }
 
     // ---- machine messages -----------------------------------------------------------------------
-    private val configRe = Regex("""(\S+) is set to\s+([-+]?[\d.]+)""")
-
     private fun onMessage(m: String) {
-        configRe.find(m)?.let { r ->
-            configWait[r.groupValues[1]]?.complete(r.groupValues[2].toDouble())
-        }
         if (scan.value.phase == ScanPhase.RUNNING) {
             when {
                 m.startsWith("Auto scan margin") || m.startsWith("M494.1") || m.startsWith("G90 G1") -> scanSawStart = true

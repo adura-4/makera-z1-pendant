@@ -90,15 +90,13 @@ import com.z1pendant.probe.RunState
 import com.z1pendant.probe.ToolAction
 import com.z1pendant.util.Fmt
 
-private val TileBg = Color(0xFF1E293B)
+internal val TileBg = Color(0xFF1E293B)
 private val TileOn = Color(0xFF132A3E)
-private val Muted = Color(0xFF94A3B8)
-private val Green = Color(0xFF22C55E)
-private val Amber = Color(0xFFF59E0B)
-private val ErrBg = Color(0xFF3B1D22)
-private val ErrFg = Color(0xFFF87171)
-private val WarnBg = Color(0xFF3A2A0B)
-private val WarnFg = Color(0xFFFDE68A)
+internal val Muted = Color(0xFF94A3B8)
+internal val Green = Color(0xFF22C55E)
+internal val Amber = Color(0xFFF59E0B)
+internal val ErrBg = Color(0xFF3B1D22)
+internal val ErrFg = Color(0xFFF87171)
 
 /**
  * Full-screen 3D probe wizard (mockups/probe_mock.html): 1 what, 2 settings, 3 probe in and
@@ -306,12 +304,12 @@ private fun StepSettings(s: ProbeSetup, onChange: (ProbeSetup) -> Unit) {
 
 /** A setting with its drawing in a tile; [decimals] = how it's shown once you leave the box (0 = as typed). */
 @Composable
-private fun NumField(art: FieldArt, tool: ProbeTool, label: String, value: Double, decimals: Int,
-                     kind: ProbeKind = ProbeKind.OUTSIDE, onValue: (Double) -> Unit) {
+internal fun NumField(art: FieldArt?, tool: ProbeTool, label: String, value: Double, decimals: Int,
+                      kind: ProbeKind = ProbeKind.OUTSIDE, onValue: (Double) -> Unit) {
     fun show(v: Double) = if (decimals > 0) Fmt.fixed(v, decimals) else mmText(v)
     var text by remember { mutableStateOf(show(value)) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.size(width = 98.dp, height = 78.dp).clip(RoundedCornerShape(10.dp)).background(TileBg)
+        if (art != null) Box(Modifier.size(width = 98.dp, height = 78.dp).clip(RoundedCornerShape(10.dp)).background(TileBg)
             .border(1.dp, Color(0xFF334155), RoundedCornerShape(10.dp)).padding(5.dp)) {
             FieldArtImage(art, Modifier.fillMaxSize(), tool, kind)
         }
@@ -344,180 +342,6 @@ private fun NumField(art: FieldArt, tool: ProbeTool, label: String, value: Doubl
                     }
                 }
             })
-    }
-}
-
-// ---- step 3: probe in, calibrated ------------------------------------------------------------
-@Composable
-private fun CheckRow(state: Int, title: String, sub: String?, dim: Boolean = false, body: @Composable ColumnScope.() -> Unit = {}) {
-    // state: 0 waiting, 1 now, 2 done, 3 warning
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(TileBg).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
-            val (ic, tint) = when (state) {
-                2 -> Icons.Filled.CheckCircle to Green
-                1 -> Icons.Filled.RadioButtonChecked to MaterialTheme.colorScheme.primary
-                3 -> Icons.Filled.Warning to Amber
-                else -> Icons.Filled.RadioButtonUnchecked to Color(0xFF475569)
-            }
-            Icon(ic, null, tint = tint, modifier = Modifier.size(22.dp)); Spacer(Modifier.width(10.dp))
-            Column {
-                Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = if (dim) Color(0xFF64748B) else Color.Unspecified)
-                sub?.let { Text(it, fontSize = 12.5.sp, color = Muted, lineHeight = 17.sp) }
-            }
-        }
-        body()
-    }
-}
-
-@Composable
-private fun SmallButton(text: String, icon: (@Composable () -> Unit)?, outlined: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
-    val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-        icon?.let { it(); Spacer(Modifier.width(6.dp)) }; Text(text, fontSize = 15.sp)
-    }
-    if (outlined) PendantOutlinedButton(onClick, Modifier.fillMaxWidth().height(42.dp), enabled = enabled, content = content)
-    else Button(onClick, Modifier.fillMaxWidth().height(42.dp), enabled = enabled, content = content)
-}
-
-@Composable
-private fun StepCheck(vm: AppViewModel) {
-    val p = vm.probe
-    val st by vm.link.status.collectAsState()
-    val conn by vm.link.conn.collectAsState()
-    val confirmed by p.confirmed.collectAsState()
-    val calibrated by p.calibrated.collectAsState()
-    val action by p.toolAction.collectAsState()
-    val len by p.lengthCheck.collectAsState()
-    val setup by p.setup.collectAsState()
-    val name = setup.tool.label
-    val tool = st?.tool
-    val connected = conn == ConnState.Connected
-    val idle = st?.isIdle == true
-    val acting = action?.let { it.stage != ToolAction.Stage.DONE && it.error == null } == true
-    val primary = MaterialTheme.colorScheme.primary
-    val onPrimary = MaterialTheme.colorScheme.onPrimary
-
-    action?.error?.let { e ->
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(ErrBg).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Error, null, tint = ErrFg); Spacer(Modifier.width(8.dp))
-            Text(e, fontSize = 14.sp, modifier = Modifier.weight(1f))
-            TextButton(onClick = { p.dismissToolError() }) { Text("OK") }
-        }
-        if (st?.isAlarm == true) SmallButton("Unlock", { Icon(Icons.Filled.LockOpen, null) }) { vm.link.dialect.unlock().forEach { vm.link.sendLine(it) } }
-    }
-
-    // Why the buttons below are off (2026-11-18: the Pixel had left the machine's Wi-Fi, and the panel
-    // only said "The spindle is empty" next to a greyed Load button).
-    if (!acting && action?.error == null && (!connected || !idle)) {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(WarnBg).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Error, null, tint = WarnFg); Spacer(Modifier.width(8.dp))
-            Text(when {
-                !connected -> "Not connected to the machine (${conn.name.lowercase()}). Loading and calibrating need the link; check the phone is on the machine's Wi-Fi."
-                else -> "The machine is ${st?.state ?: "busy"}, not Idle. Loading and calibrating wait until it's Idle."
-            }, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        }
-    }
-
-    // Row 1: the probe is in the spindle.
-    when {
-        action?.load == true && acting -> CheckRow(1, "$name in the spindle", "Loading…") {
-            Progress(action!!.stage, load = true, setup.tool.noun)
-            if (action!!.stage == ToolAction.Stage.WAITING) SmallButton("I've swapped it · continue", null, outlined = true) { p.continueToolChange() }
-        }
-        tool == PROBE_TOOL && confirmed -> CheckRow(2, "$name in the spindle", "T$PROBE_TOOL")
-        tool == PROBE_TOOL -> CheckRow(1, "$name in the spindle", "The machine says a probe (T$PROBE_TOOL) is in. The number can be left over from last time: is the ${setup.tool.noun} in?") {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { p.confirmed.value = true }, modifier = Modifier.weight(1f).height(42.dp)) { Text("Yes, it's in") }
-                PendantOutlinedButton(onClick = {
-                    // M6 T9999 does nothing while the machine already says T9999: mark the spindle empty first.
-                    vm.link.sendLine("M493.2 T-1"); p.loadProbe()
-                }, enabled = connected && idle, modifier = Modifier.weight(1f).height(42.dp)) { Text("No, load it") }
-            }
-        }
-        else -> CheckRow(3, "$name in the spindle", if (tool == null) "The machine hasn't reported a tool." else if (tool < 0) "The spindle is empty." else "The machine has T$tool in.") {
-            SmallButton("Load the ${setup.tool.noun}", { Icon(Icons.Filled.SwapHoriz, null) }, enabled = connected && idle) { p.loadProbe() }
-            Text("Moves to the tool change spot and waits while you swap. Then it calibrates the probe on the tool setter and checks it triggers.",
-                fontSize = 11.5.sp, color = Muted, lineHeight = 15.sp)
-        }
-    }
-
-    // Row 2: calibrated on the tool setter.
-    val probeIn = tool == PROBE_TOOL && confirmed
-    when {
-        action?.load == false && acting -> CheckRow(1, "Calibrated on the tool setter", "Calibrating…") { Progress(action!!.stage, load = false) }
-        !probeIn -> CheckRow(0, "Calibrated on the tool setter", null, dim = true)
-        calibrated -> CheckRow(2, "Calibrated on the tool setter", "Probe triggered on the setter") {
-            SmallButton("Calibrate again", { CalibrateIcon(primary) }, outlined = true, enabled = connected && idle) { p.calibrate() }
-        }
-        else -> CheckRow(1, "Calibrated on the tool setter", "Every time you probe: it checks the probe triggers and which probe is in.") {
-            SmallButton("Calibrate now", { CalibrateIcon(onPrimary) }, enabled = connected && idle) { p.calibrate() }
-            Text("The machine moves over the tool setter and lowers the probe onto it.", fontSize = 11.5.sp, color = Muted)
-        }
-    }
-    // Row 3: it's the probe you picked, going by where it trips the setter.
-    if (calibrated && !acting) len?.let { LengthRow(it, p, setup.kind, connected && idle) }
-}
-
-private fun lenName(t: ProbeTool) = t.noun
-/** "3D Probe", "Probe Rod", "Laser Probe": for status lines like "3D Probe Confirmed". */
-private fun titleName(t: ProbeTool) = t.label.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
-
-/** Which probe the setter says is in: each probe trips it at its own Z (learned on its first calibration). */
-@Composable
-private fun LengthRow(c: ProbeLength.Check, p: com.z1pendant.probe.ProbeController, kind: ProbeKind, canMove: Boolean) {
-    val z = Fmt.fixed(c.z, 3)
-    val exp = c.expected?.let { Fmt.fixed(it, 3) }
-    val load: @Composable () -> Unit = {
-        SmallButton("Load the ${lenName(c.tool)}", { Icon(Icons.Filled.SwapHoriz, null) }, enabled = canMove) { p.reloadProbe() }
-    }
-    when (c.result) {
-        ProbeLength.Result.MATCH -> CheckRow(2, "${titleName(c.tool)} Confirmed", "Setter Z $z, learned $exp")
-        ProbeLength.Result.LEARNED -> CheckRow(2, "${c.tool.label} length learned",
-            "It tripped the setter at Z $z. From now on the app checks the ${lenName(c.tool)} reads the same, so a wrong probe gets caught.")
-        // The reading is another probe's: swap in the one you picked, or use the one that's in if it
-        // can do this operation (all three can do Top only; the laser probe nothing else).
-        ProbeLength.Result.LOOKS_LIKE -> CheckRow(3, "${titleName(c.other!!)} Detected",
-            "It tripped the setter at Z $z, like the ${lenName(c.other)} (${Fmt.fixed(p.learned()[c.other] ?: c.z, 3)}). " +
-                "You picked the ${lenName(c.tool)}.") {
-            load()
-            if (c.other.canDo(kind)) SmallButton("Use the ${lenName(c.other)} instead", null, outlined = true) { p.switchToMatch() }
-            else Text("The ${lenName(c.other)} can't do ${kind.label.lowercase()}: swap in the ${lenName(c.tool)}.", fontSize = 11.5.sp, color = Muted)
-        }
-        ProbeLength.Result.UNKNOWN -> CheckRow(3, "Doesn't match the ${lenName(c.tool)}",
-            "Setter Z $z, learned $exp (${Fmt.fixed(kotlin.math.abs(c.z - (c.expected ?: c.z)), 2)} mm off). " +
-                "A different probe, or it's not seated the same way in the collet.") {
-            load()
-            SmallButton("Confirm ${titleName(c.tool)}", null, outlined = true) { p.rememberLength() }
-        }
-        ProbeLength.Result.NEW -> CheckRow(3, "${c.tool.label} not learned yet", "It tripped the setter at Z $z.") {
-            load()
-            SmallButton("Remember this length for the ${lenName(c.tool)}", null, outlined = true) { p.rememberLength() }
-        }
-    }
-}
-
-@Composable
-private fun Progress(stage: ToolAction.Stage, load: Boolean, name: String = "probe") {
-    val steps = buildList {
-        if (load) { add(ToolAction.Stage.MOVING to "Moving to the tool change spot"); add(ToolAction.Stage.WAITING to "Swap in the $name and plug in its cable, then press the button on the machine") }
-        else add(ToolAction.Stage.MOVING to "Moving over the tool setter")
-        add(ToolAction.Stage.CALIBRATING to "Calibrate on the tool setter")
-        add(ToolAction.Stage.CHECKING to "Check the probe triggers")
-    }
-    Column(Modifier.padding(start = 32.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        steps.forEach { (s, t) ->
-            val done = s.ordinal < stage.ordinal; val now = s == stage
-            Row(verticalAlignment = Alignment.Top) {
-                when {
-                    done -> Icon(Icons.Filled.CheckCircle, null, tint = Green, modifier = Modifier.size(16.dp))
-                    now -> Box(Modifier.padding(3.dp).size(10.dp).clip(RoundedCornerShape(5.dp)).background(MaterialTheme.colorScheme.primary))
-                    else -> Box(Modifier.size(16.dp))
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(t, fontSize = 12.5.sp, lineHeight = 16.sp, color = when { now -> Color.Unspecified; done -> Muted; else -> Color(0xFF64748B) },
-                    fontWeight = if (now) FontWeight.Medium else FontWeight.Normal)
-            }
-        }
     }
 }
 
@@ -658,24 +482,7 @@ private fun StepResult(vm: AppViewModel, run: RunState, doneLabel: String, requi
                 Text(if (run.setMode) "Set work zero" else "Measure only", fontSize = 13.sp, color = Muted)
             }
             ProbeRunArt(setup, run.labels, run.index, Modifier.fillMaxWidth().height(240.dp), stepTouch = run.touch)
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(TileBg).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                run.labels.forEachIndexed { i, label ->
-                    val done = i < run.index; val now = i == run.index
-                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        when {
-                            done -> Icon(Icons.Filled.CheckCircle, null, tint = Green, modifier = Modifier.size(22.dp))
-                            now -> Box(Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) {
-                                Box(Modifier.size(9.dp).clip(RoundedCornerShape(5.dp)).background(MaterialTheme.colorScheme.primary))
-                            }
-                            else -> Box(Modifier.size(22.dp).clip(RoundedCornerShape(11.dp)).border(2.dp, Color(0xFF334155), RoundedCornerShape(11.dp)))
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Text(label, fontSize = 15.sp, fontWeight = if (now) FontWeight.Medium else FontWeight.Normal,
-                            color = when { now -> Color.Unspecified; done -> Muted; else -> Color(0xFF64748B) }, modifier = Modifier.weight(1f))
-                        if (done) doneNote(label, run.setMode)?.let { Text(it, fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = Muted) }
-                    }
-                }
-            }
+            StepChecklist(run.labels, run.index, note = { doneNote(it, run.setMode) })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
                 listOf('X', 'Y', 'Z').forEachIndexed { i, a ->
                     Row(Modifier.clip(RoundedCornerShape(50)).background(TileBg).padding(horizontal = 11.dp, vertical = 5.dp)) {
@@ -706,7 +513,7 @@ private fun StepResult(vm: AppViewModel, run: RunState, doneLabel: String, requi
 }
 
 @Composable
-private fun CheckRowIcon(icon: ImageVector, title: String, text: String) {
+internal fun CheckRowIcon(icon: ImageVector, title: String, text: String) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(TileBg).padding(12.dp), verticalAlignment = Alignment.Top) {
         Icon(icon, null, tint = Muted, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
         Column { Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Medium); Text(text, fontSize = 13.sp, color = Muted, lineHeight = 17.sp) }
